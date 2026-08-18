@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+backend/teachtrace.sqlite
+backend/teachtrace.sqlite-journal
+frontend/.vite/
+coverage/
+*.log
+*.docx
+*.pdf
