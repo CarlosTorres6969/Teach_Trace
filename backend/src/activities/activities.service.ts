@@ -56,9 +56,11 @@ export class ActivitiesService {
         subject: academicClass.subject,
         dueDate: input.dueDate,
         activityType: input.activityType.trim(),
+        evaluationPhase: input.evaluationPhase,
         learningOutcomes: [],
         teacher,
         academicClass,
+        manualEvaluationRequired: false,
         rubric: null,
       }),
     );
@@ -81,5 +83,10 @@ export class ActivitiesService {
     });
     if (!activity) throw new NotFoundException('La actividad no existe o no pertenece al docente');
     return activity;
+  }
+
+  async setManualEvaluationRequired(activity: Activity, required: boolean) {
+    activity.manualEvaluationRequired = required;
+    return this.activities.save(activity);
   }
 }

@@ -86,6 +86,8 @@ export class TeacherService {
       subject: activity.subject,
       dueDate: activity.dueDate,
       activityType: activity.activityType,
+      evaluationPhase: activity.evaluationPhase,
+      manualEvaluationRequired: activity.manualEvaluationRequired,
       learningOutcomes: activity.learningOutcomes,
       academicClass: activity.academicClass
         ? {

@@ -3,11 +3,13 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsEnum,
   IsInt,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { ActivityPhase } from '../entities/activity.entity';
 
 export class CreateActivityDto {
   @IsString()
@@ -24,6 +26,9 @@ export class CreateActivityDto {
   @IsString()
   @MaxLength(80)
   activityType: string;
+
+  @IsEnum(ActivityPhase)
+  evaluationPhase: ActivityPhase;
 }
 
 export class UpdateLearningOutcomesDto {

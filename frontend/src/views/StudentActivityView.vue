@@ -19,6 +19,8 @@ const submission = reactive({
   productText: '',
   productUrl: '',
   fileName: null as string | null,
+  evaluationStatus: 'not_requested',
+  manualReviewRequired: false,
 });
 const selectedFile = ref<File | null>(null);
 
@@ -137,6 +139,7 @@ onMounted(load);
           <small class="muted">Tamaño máximo: 10 MB.</small>
         </label>
         <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
+        <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
         <h3>Declaración de uso de IA</h3>
         <label>Herramienta utilizada<input v-model="declaration.toolName" maxlength="120" required /></label>
         <label>Nivel declarado

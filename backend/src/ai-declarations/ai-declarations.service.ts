@@ -23,6 +23,7 @@ export class AiDeclarationsService {
       toolName: declaration?.toolName ?? '',
       usageLevel: declaration?.usageLevel ?? 1,
       detectedUsageLevel: declaration?.detectedUsageLevel ?? null,
+      usageDiscrepancy: declaration?.usageDiscrepancy ?? false,
       purpose: declaration?.purpose ?? '',
       promptSummary: declaration?.promptSummary ?? '',
       updatedAt: declaration?.updatedAt ?? null,
@@ -35,9 +36,17 @@ export class AiDeclarationsService {
       where: { student: { id: student.id }, activity: { id: activityId } },
     });
     if (!declaration) {
-      declaration = this.declarations.create({ student, activity, detectedUsageLevel: null });
+      declaration = this.declarations.create({
+        student,
+        activity,
+        detectedUsageLevel: null,
+        usageDiscrepancy: false,
+      });
     }
     Object.assign(declaration, input);
+    declaration.usageDiscrepancy =
+      declaration.detectedUsageLevel !== null &&
+      declaration.detectedUsageLevel !== declaration.usageLevel;
     await this.declarations.save(declaration);
     return this.getForStudent(student.id, activityId);
   }

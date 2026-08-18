@@ -26,6 +26,7 @@ export class StudentService {
           id: activity.id,
           title: activity.title,
           subject: activity.subject,
+          evaluationPhase: activity.evaluationPhase,
           academicClass: activity.academicClass
             ? {
                 id: activity.academicClass.id,

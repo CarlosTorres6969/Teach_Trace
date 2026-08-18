@@ -3,6 +3,11 @@ import { Rubric } from './rubric.entity';
 import { AcademicClass } from './class.entity';
 import { User } from './user.entity';
 
+export enum ActivityPhase {
+  BASELINE = 'baseline',
+  PILOT = 'pilot',
+}
+
 @Entity('activities')
 export class Activity {
   @PrimaryGeneratedColumn()
@@ -20,6 +25,9 @@ export class Activity {
   @Column()
   activityType: string;
 
+  @Column({ type: 'simple-enum', enum: ActivityPhase, default: ActivityPhase.PILOT })
+  evaluationPhase: ActivityPhase;
+
   @Column({ type: 'simple-json', default: '[]' })
   learningOutcomes: string[];
 
@@ -28,10 +36,13 @@ export class Activity {
 
   @ManyToOne(() => AcademicClass, (academicClass) => academicClass.activities, {
     eager: true,
-    nullable: true,
+    nullable: false,
     onDelete: 'CASCADE',
   })
-  academicClass: AcademicClass | null;
+  academicClass: AcademicClass;
+
+  @Column({ default: false })
+  manualEvaluationRequired: boolean;
 
   @OneToOne(() => Rubric, (rubric) => rubric.activity, { nullable: true })
   rubric: Rubric | null;

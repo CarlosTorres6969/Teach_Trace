@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
@@ -43,12 +43,20 @@ const entities = [
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../.env', '.env'] }),
-    TypeOrmModule.forRoot({
-      type: 'sqljs',
-      location: 'teachtrace.sqlite',
-      autoSave: true,
-      entities,
-      synchronize: true,
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const databasePath = config.get<string>('DATABASE_PATH', 'teachtrace.sqlite');
+        const inMemory = databasePath === ':memory:';
+        return {
+          type: 'sqljs' as const,
+          ...(inMemory ? {} : { location: databasePath }),
+          autoSave: !inMemory && config.get<string>('DATABASE_AUTOSAVE', 'true') === 'true',
+          entities,
+          synchronize: config.get<string>('DATABASE_SYNCHRONIZE', 'true') === 'true',
+        };
+      },
     }),
     TypeOrmModule.forFeature([
       User,

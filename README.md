@@ -52,6 +52,9 @@ El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` ya recorre las e
 el contrato del motor. Mientras el proveedor no esté implementado no persiste valoraciones falsas
 y marca las entregas para revisión manual.
 
+El modelo, sus relaciones y restricciones están descritos en
+[docs/MODELO_DATOS.md](docs/MODELO_DATOS.md).
+
 ## Comandos
 
 ```bash
@@ -61,3 +64,6 @@ npm test        # pruebas automatizadas del backend
 ```
 
 Copie `.env.example` como `.env` y cambie `JWT_SECRET` antes de desplegar. El inicio rápido funciona con los valores de desarrollo sin crear ese archivo.
+
+Para pruebas, `DATABASE_PATH=:memory:` permite ejecutar la aplicación con SQLite en memoria sin
+crear ni modificar el archivo local.

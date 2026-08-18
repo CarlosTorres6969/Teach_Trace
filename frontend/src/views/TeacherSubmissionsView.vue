@@ -3,12 +3,26 @@ import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
 
-type SubmissionSummary = { id: number; student: { name: string; email: string }; status: string; submittedAt: string };
+type SubmissionSummary = {
+  id: number;
+  student: { name: string; email: string };
+  status: string;
+  evaluationStatus: string;
+  manualReviewRequired: boolean;
+  submittedAt: string;
+};
 type SubmissionDetail = SubmissionSummary & {
   activity: { title: string }; productText: string; productUrl: string;
   fileName: string | null;
   logbook: null | Record<string, string>;
-  aiDeclaration: null | { toolName: string; usageLevel: number; purpose: string; promptSummary: string };
+  aiDeclaration: null | {
+    toolName: string;
+    usageLevel: number;
+    detectedUsageLevel: number | null;
+    usageDiscrepancy: boolean;
+    purpose: string;
+    promptSummary: string;
+  };
 };
 
 const route = useRoute();
@@ -59,6 +73,7 @@ onMounted(load);
       </div>
       <article v-if="selected" class="panel evidence">
         <span class="eyebrow">{{ selected.activity.title }}</span><h2>{{ selected.student.name }}</h2>
+        <p v-if="selected.manualReviewRequired" class="alert error">Esta entrega requiere revisión manual.</p>
         <h3>Producto final</h3><p class="evidence-text">{{ selected.productText || 'Sin contenido de texto.' }}</p>
         <a v-if="selected.productUrl" :href="selected.productUrl" target="_blank" rel="noopener">Abrir enlace del producto ↗</a>
         <button v-if="selected.fileName" class="button secondary" type="button" @click="downloadFile">
@@ -70,7 +85,8 @@ onMounted(load);
         </template>
         <template v-if="selected.aiDeclaration">
           <h3>Declaración de IA</h3>
-          <dl><dt>Herramienta</dt><dd>{{ selected.aiDeclaration.toolName }}</dd><dt>Nivel declarado</dt><dd>{{ selected.aiDeclaration.usageLevel }}</dd><dt>Propósito</dt><dd>{{ selected.aiDeclaration.purpose }}</dd><dt>Resumen de prompts</dt><dd>{{ selected.aiDeclaration.promptSummary }}</dd></dl>
+          <p v-if="selected.aiDeclaration.usageDiscrepancy" class="alert error">El nivel detectado difiere del nivel declarado.</p>
+          <dl><dt>Herramienta</dt><dd>{{ selected.aiDeclaration.toolName }}</dd><dt>Nivel declarado</dt><dd>{{ selected.aiDeclaration.usageLevel }}</dd><dt>Nivel detectado</dt><dd>{{ selected.aiDeclaration.detectedUsageLevel ?? 'Pendiente' }}</dd><dt>Propósito</dt><dd>{{ selected.aiDeclaration.purpose }}</dd><dt>Resumen de prompts</dt><dd>{{ selected.aiDeclaration.promptSummary }}</dd></dl>
         </template>
       </article>
       <div v-else class="empty-state panel">Selecciona una entrega para consultar su evidencia.</div>

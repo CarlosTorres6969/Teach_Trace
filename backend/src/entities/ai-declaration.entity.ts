@@ -1,9 +1,21 @@
-import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  BeforeInsert,
+  BeforeUpdate,
+  Check,
+  Column,
+  Entity,
+  Index,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Activity } from './activity.entity';
 import { User } from './user.entity';
 
 @Entity('ai_declarations')
 @Index(['student', 'activity'], { unique: true })
+@Check(`"usageLevel" BETWEEN 1 AND 3`)
+@Check(`"detectedUsageLevel" IS NULL OR "detectedUsageLevel" BETWEEN 1 AND 3`)
 export class AiDeclaration {
   @PrimaryGeneratedColumn()
   id: number;
@@ -23,6 +35,9 @@ export class AiDeclaration {
   @Column({ type: 'integer', nullable: true })
   detectedUsageLevel: number | null;
 
+  @Column({ default: false })
+  usageDiscrepancy: boolean;
+
   @Column({ type: 'text', default: '' })
   purpose: string;
 
@@ -31,4 +46,11 @@ export class AiDeclaration {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  updateUsageDiscrepancy() {
+    this.usageDiscrepancy =
+      this.detectedUsageLevel !== null && this.detectedUsageLevel !== this.usageLevel;
+  }
 }

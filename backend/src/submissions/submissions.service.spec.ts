@@ -18,6 +18,7 @@ describe('SubmissionsService', () => {
     };
     const submissions = {
       findOne: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(storedSubmission),
+      count: jest.fn().mockResolvedValue(0),
     };
     const submissionRepository = {
       findOne: jest.fn().mockResolvedValue(null),
@@ -35,7 +36,10 @@ describe('SubmissionsService', () => {
       ),
     };
     const dataSource = { transaction: jest.fn(async (work) => work(manager)) };
-    const activitiesService = { getForStudent: jest.fn().mockResolvedValue(activity) };
+    const activitiesService = {
+      getForStudent: jest.fn().mockResolvedValue(activity),
+      setManualEvaluationRequired: jest.fn().mockResolvedValue(activity),
+    };
     const service = new SubmissionsService(
       submissions as never,
       {} as never,
@@ -57,6 +61,7 @@ describe('SubmissionsService', () => {
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(submissionRepository.save).toHaveBeenCalledTimes(1);
     expect(declarationRepository.save).toHaveBeenCalledTimes(1);
+    expect(activitiesService.setManualEvaluationRequired).toHaveBeenCalledWith(activity, false);
     expect(result.status).toBe(SubmissionStatus.SUBMITTED);
   });
 });

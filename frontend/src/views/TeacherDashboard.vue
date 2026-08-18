@@ -12,7 +12,13 @@ const message = ref('');
 const section = ref<'classes' | 'activities' | 'rubrics'>('classes');
 const classForm = reactive({ name: '', subject: '', code: '', period: '' });
 const enrollmentEmails = reactive<Record<number, string>>({});
-const activityForm = reactive({ title: '', classId: 0, dueDate: '', activityType: '' });
+const activityForm = reactive({
+  title: '',
+  classId: 0,
+  dueDate: '',
+  activityType: '',
+  evaluationPhase: 'pilot' as 'baseline' | 'pilot',
+});
 const outcomes = reactive<Record<number, string>>({});
 const selectedRubrics = reactive<Record<number, number | undefined>>({});
 const rubricName = ref('');
@@ -64,7 +70,13 @@ async function enrollStudent(classId: number) {
 async function createActivity() {
   await act('Actividad creada', async () => {
     await api('/teacher/activities', { method: 'POST', body: JSON.stringify(activityForm) });
-    Object.assign(activityForm, { title: '', classId: 0, dueDate: '', activityType: '' });
+    Object.assign(activityForm, {
+      title: '',
+      classId: 0,
+      dueDate: '',
+      activityType: '',
+      evaluationPhase: 'pilot',
+    });
     await load();
   });
 }
@@ -169,6 +181,12 @@ onMounted(load);
         </label>
         <label>Fecha de entrega<input v-model="activityForm.dueDate" type="date" required /></label>
         <label>Tipo<input v-model="activityForm.activityType" placeholder="Ensayo, proyecto…" required maxlength="80" /></label>
+        <label>Fase de evaluación
+          <select v-model="activityForm.evaluationPhase" required>
+            <option value="baseline">Línea base interna</option>
+            <option value="pilot">Piloto</option>
+          </select>
+        </label>
         <button class="button primary span-2">Crear actividad</button>
       </form>
 
@@ -176,10 +194,11 @@ onMounted(load);
         <div class="section-title"><h2>Actividades configuradas</h2><span>{{ activities.length }}</span></div>
         <article v-for="activity in activities" :key="activity.id" class="panel activity-editor">
           <div class="card-topline">
-            <div><span class="eyebrow">{{ activity.academicClass?.code }} · {{ activity.activityType }}</span><h3>{{ activity.title }}</h3></div>
+            <div><span class="eyebrow">{{ activity.academicClass?.code }} · {{ activity.activityType }} · {{ activity.evaluationPhase === 'baseline' ? 'Línea base' : 'Piloto' }}</span><h3>{{ activity.title }}</h3></div>
             <RouterLink class="button secondary" :to="`/teacher/activities/${activity.id}/submissions`">Ver entregas</RouterLink>
           </div>
           <p class="muted">Fecha: {{ activity.dueDate }}</p>
+          <p v-if="activity.manualEvaluationRequired" class="alert error">Esta actividad requiere evaluación manual.</p>
           <label>Resultados de aprendizaje — uno por línea
             <textarea v-model="outcomes[activity.id]" rows="3" />
           </label>

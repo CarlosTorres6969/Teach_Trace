@@ -45,3 +45,13 @@
 - Producto y declaración de IA guardados en una única transacción.
 - Archivos almacenados en SQLite y limitados a 10 MB por entrega.
 - El stub del motor de IA nunca persiste valoraciones simuladas.
+- La fase de cada actividad distingue línea base interna y piloto.
+- Los niveles declarados/detectados están restringidos a 1–3 y las valoraciones a 1–4.
+- La caída del motor deja persistidos los estados de revisión manual en actividad y entrega.
+
+## Cobertura automatizada
+
+Las pruebas incluyen unidades por dominio y una aplicación NestJS real sobre SQLite en memoria.
+La integración verifica autenticación, roles, aislamiento entre estudiantes, matrícula, rúbrica de
+siete dimensiones, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
+separación entre valor IA y docente, referencia de línea base y degradación a revisión manual.

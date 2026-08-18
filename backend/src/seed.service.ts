@@ -2,13 +2,13 @@ import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthService } from './auth/auth.service';
-import { Activity } from './entities/activity.entity';
+import { Activity, ActivityPhase } from './entities/activity.entity';
 import { AiDeclaration } from './entities/ai-declaration.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { Logbook } from './entities/logbook.entity';
 import { Rubric, RubricCriterion } from './entities/rubric.entity';
-import { Submission, SubmissionStatus } from './entities/submission.entity';
+import { EvaluationStatus, Submission, SubmissionStatus } from './entities/submission.entity';
 import { User, UserRole } from './entities/user.entity';
 
 @Injectable()
@@ -70,9 +70,11 @@ export class SeedService implements OnApplicationBootstrap {
           subject: academicClass.subject,
           dueDate: '2026-09-15',
           activityType: 'Ensayo',
+          evaluationPhase: ActivityPhase.PILOT,
           learningOutcomes: ['Argumenta decisiones éticas sobre el uso académico de IA.'],
           teacher,
           academicClass,
+          manualEvaluationRequired: false,
           rubric: null,
         }),
       );
@@ -122,6 +124,8 @@ export class SeedService implements OnApplicationBootstrap {
           student,
           activity,
           status: SubmissionStatus.SUBMITTED,
+          evaluationStatus: EvaluationStatus.NOT_REQUESTED,
+          manualReviewRequired: false,
           submittedAt: new Date(),
           productText: 'Borrador de demostración del ensayo sobre ética e inteligencia artificial.',
           productUrl: '',
@@ -143,6 +147,7 @@ export class SeedService implements OnApplicationBootstrap {
           toolName: 'ChatGPT',
           usageLevel: 2,
           detectedUsageLevel: null,
+          usageDiscrepancy: false,
           purpose: 'Organizar ideas y contrastar perspectivas.',
           promptSummary: 'Consultas sobre argumentos éticos y posibles contraargumentos.',
         }),

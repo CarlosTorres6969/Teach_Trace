@@ -9,6 +9,14 @@ export enum SubmissionStatus {
   EVALUATED = 'evaluated',
 }
 
+export enum EvaluationStatus {
+  NOT_REQUESTED = 'not_requested',
+  PENDING = 'pending',
+  MANUAL_REQUIRED = 'manual_required',
+  ANALYZED = 'analyzed',
+  VALIDATED = 'validated',
+}
+
 @Entity('submissions')
 @Index(['student', 'activity'], { unique: true })
 export class Submission {
@@ -23,6 +31,12 @@ export class Submission {
 
   @Column({ type: 'simple-enum', enum: SubmissionStatus, default: SubmissionStatus.NOT_SUBMITTED })
   status: SubmissionStatus;
+
+  @Column({ type: 'simple-enum', enum: EvaluationStatus, default: EvaluationStatus.NOT_REQUESTED })
+  evaluationStatus: EvaluationStatus;
+
+  @Column({ default: false })
+  manualReviewRequired: boolean;
 
   @Column({ type: 'datetime', nullable: true })
   submittedAt: Date | null;

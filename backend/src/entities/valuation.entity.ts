@@ -1,9 +1,11 @@
-import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Check, Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Activity } from './activity.entity';
 import { Submission } from './submission.entity';
 
 @Entity('valuations')
-@Index(['submission', 'dimension'], { unique: true })
+@Index(['submission', 'criterion'], { unique: true })
+@Check(`"aiValue" IS NULL OR "aiValue" BETWEEN 1 AND 4`)
+@Check(`"teacherValue" IS NULL OR "teacherValue" BETWEEN 1 AND 4`)
 export class Valuation {
   @PrimaryGeneratedColumn()
   id: number;
@@ -16,6 +18,9 @@ export class Valuation {
 
   @Column()
   dimension: string;
+
+  @Column()
+  criterion: string;
 
   @Column({ type: 'integer', nullable: true })
   aiValue: number | null;

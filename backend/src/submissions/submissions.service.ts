@@ -5,7 +5,11 @@ import { ActivitiesService } from '../activities/activities.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Logbook } from '../entities/logbook.entity';
-import { Submission, SubmissionStatus } from '../entities/submission.entity';
+import {
+  EvaluationStatus,
+  Submission,
+  SubmissionStatus,
+} from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 
@@ -39,6 +43,8 @@ export class SubmissionsService {
       productText: submission?.productText ?? '',
       productUrl: submission?.productUrl ?? '',
       fileName: submission?.fileName ?? null,
+      evaluationStatus: submission?.evaluationStatus ?? EvaluationStatus.NOT_REQUESTED,
+      manualReviewRequired: submission?.manualReviewRequired ?? false,
     };
   }
 
@@ -71,11 +77,15 @@ export class SubmissionsService {
           fileName: null,
           fileMimeType: null,
           fileBase64: null,
+          evaluationStatus: EvaluationStatus.NOT_REQUESTED,
+          manualReviewRequired: false,
         });
       }
       submission.productText = productText;
       submission.productUrl = productUrl;
       submission.status = SubmissionStatus.SUBMITTED;
+      submission.evaluationStatus = EvaluationStatus.NOT_REQUESTED;
+      submission.manualReviewRequired = false;
       submission.submittedAt = new Date();
       if (file) {
         submission.fileName = file.originalname;
@@ -92,14 +102,26 @@ export class SubmissionsService {
           student,
           activity,
           detectedUsageLevel: null,
+          usageDiscrepancy: false,
         });
       }
       declaration.toolName = input.toolName.trim();
       declaration.usageLevel = input.usageLevel;
       declaration.purpose = input.purpose.trim();
       declaration.promptSummary = input.promptSummary.trim();
+      declaration.usageDiscrepancy =
+        declaration.detectedUsageLevel !== null &&
+        declaration.detectedUsageLevel !== declaration.usageLevel;
       await declarationRepository.save(declaration);
     });
+
+    const remainingManualReviews = await this.submissions.count({
+      where: { activity: { id: activityId }, manualReviewRequired: true },
+    });
+    await this.activitiesService.setManualEvaluationRequired(
+      activity,
+      remainingManualReviews > 0,
+    );
 
     return this.getStatus(student.id, activityId);
   }
@@ -118,6 +140,8 @@ export class SubmissionsService {
         email: submission.student.email,
       },
       status: submission.status,
+      evaluationStatus: submission.evaluationStatus,
+      manualReviewRequired: submission.manualReviewRequired,
       submittedAt: submission.submittedAt,
     }));
   }
@@ -143,6 +167,8 @@ export class SubmissionsService {
         email: submission.student.email,
       },
       status: submission.status,
+      evaluationStatus: submission.evaluationStatus,
+      manualReviewRequired: submission.manualReviewRequired,
       submittedAt: submission.submittedAt,
       productText: submission.productText,
       productUrl: submission.productUrl,
@@ -160,6 +186,7 @@ export class SubmissionsService {
             toolName: declaration.toolName,
             usageLevel: declaration.usageLevel,
             detectedUsageLevel: declaration.detectedUsageLevel,
+            usageDiscrepancy: declaration.usageDiscrepancy,
             purpose: declaration.purpose,
             promptSummary: declaration.promptSummary,
           }
@@ -191,6 +218,10 @@ export class SubmissionsService {
     const submissions = await this.submissions.find({ where: { activity: { id: activityId } } });
     let pendingManualReview = 0;
     for (const submission of submissions) {
+      submission.status = SubmissionStatus.UNDER_REVIEW;
+      submission.evaluationStatus = EvaluationStatus.PENDING;
+      submission.manualReviewRequired = false;
+      await this.submissions.save(submission);
       const [logbook, declaration] = await Promise.all([
         this.logbooks.findOne({
           where: { student: { id: submission.student.id }, activity: { id: activityId } },
@@ -223,8 +254,19 @@ export class SubmissionsService {
         },
         rubric: activity.rubric?.criteria ?? [],
       });
-      if (!result.implemented) pendingManualReview += 1;
+      if (!result.implemented) {
+        pendingManualReview += 1;
+        submission.evaluationStatus = EvaluationStatus.MANUAL_REQUIRED;
+        submission.manualReviewRequired = true;
+      } else {
+        submission.evaluationStatus = EvaluationStatus.ANALYZED;
+      }
+      await this.submissions.save(submission);
     }
+    await this.activitiesService.setManualEvaluationRequired(
+      activity,
+      pendingManualReview > 0,
+    );
     return {
       activityId,
       processed: submissions.length,
