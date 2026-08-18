@@ -5,6 +5,9 @@ backend/teachtrace.sqlite
 backend/teachtrace.sqlite-journal
 frontend/.vite/
 coverage/
+*.tsbuildinfo
+frontend/src/*.js
+frontend/src/**/*.js
 *.log
 *.docx
 *.pdf

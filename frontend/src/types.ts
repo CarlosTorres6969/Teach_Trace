@@ -7,10 +7,21 @@ export type User = {
   role: Role;
 };
 
+export type AcademicClass = {
+  id: number;
+  name: string;
+  subject: string;
+  code: string;
+  period: string;
+  studentCount: number;
+  students: Array<{ id: number; name: string; email: string }>;
+};
+
 export type Activity = {
   id: number;
   title: string;
   subject: string;
+  academicClass?: Pick<AcademicClass, 'id' | 'name' | 'code'> | null;
   dueDate?: string;
   activityType?: string;
   learningOutcomes?: string[];

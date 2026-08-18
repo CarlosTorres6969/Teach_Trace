@@ -36,7 +36,7 @@ onMounted(async () => {
     <p v-else-if="error" class="alert error">{{ error }}</p>
     <section v-else class="card-grid">
       <article v-for="activity in activities" :key="activity.id" class="activity-card">
-        <div class="card-topline"><span>{{ activity.subject }}</span><span class="status" :data-status="activity.submissionStatus">{{ statusText[activity.submissionStatus ?? 'not_submitted'] }}</span></div>
+        <div class="card-topline"><span>{{ activity.academicClass?.code ?? activity.subject }}</span><span class="status" :data-status="activity.submissionStatus">{{ statusText[activity.submissionStatus ?? 'not_submitted'] }}</span></div>
         <h2>{{ activity.title }}</h2>
         <p>Registra tu bitácora, declara el uso de IA y consulta tu entrega.</p>
         <RouterLink class="button primary" :to="`/student/activities/${activity.id}`">Abrir actividad</RouterLink>

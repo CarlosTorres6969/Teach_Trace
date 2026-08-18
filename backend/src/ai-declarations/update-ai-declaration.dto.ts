@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsInt, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateAiDeclarationDto {
@@ -5,6 +6,7 @@ export class UpdateAiDeclarationDto {
   @MaxLength(120)
   toolName: string;
 
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(3)

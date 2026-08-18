@@ -20,6 +20,9 @@ export class AiDeclaration {
   @Column({ type: 'integer', default: 1 })
   usageLevel: number;
 
+  @Column({ type: 'integer', nullable: true })
+  detectedUsageLevel: number | null;
+
   @Column({ type: 'text', default: '' })
   purpose: string;
 

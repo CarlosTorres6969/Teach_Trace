@@ -10,7 +10,9 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  if (options.body) headers.set('Content-Type', 'application/json');
+  if (options.body && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`);
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!response.ok) {
@@ -20,4 +22,15 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     throw new ApiError(message ?? 'No fue posible completar la solicitud', response.status);
   }
   return response.json() as Promise<T>;
+}
+
+export async function apiBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  if (auth.token) headers.set('Authorization', `Bearer ${auth.token}`);
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    if (response.status === 401) clearSession();
+    throw new ApiError('No fue posible descargar el archivo', response.status);
+  }
+  return response.blob();
 }

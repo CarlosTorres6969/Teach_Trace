@@ -1,1 +1,0 @@
-{"root":["./src/api.ts","./src/auth.ts","./src/main.ts","./src/router.ts","./src/types.ts","./src/app.vue","./src/views/loginview.vue","./src/views/studentactivityview.vue","./src/views/studentdashboard.vue","./src/views/teacherdashboard.vue","./src/views/teachersubmissionsview.vue"],"version":"5.9.3"}

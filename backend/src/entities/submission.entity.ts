@@ -32,4 +32,13 @@ export class Submission {
 
   @Column({ default: '' })
   productUrl: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  fileName: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  fileMimeType: string | null;
+
+  @Column({ type: 'text', nullable: true, select: false })
+  fileBase64: string | null;
 }

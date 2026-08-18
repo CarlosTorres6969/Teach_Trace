@@ -1,134 +1,78 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable } from '@nestjs/common';
+import { ActivitiesService } from '../activities/activities.service';
+import { CreateActivityDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
+import { ClassesService } from '../classes/classes.service';
+import { CreateClassDto } from '../classes/classes.dto';
 import { Activity } from '../entities/activity.entity';
-import { AiDeclaration } from '../entities/ai-declaration.entity';
-import { Logbook } from '../entities/logbook.entity';
 import { Rubric } from '../entities/rubric.entity';
-import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
-import { AssociateRubricDto, CreateActivityDto, CreateRubricDto, UpdateLearningOutcomesDto } from './teacher.dto';
+import { RubricsService } from '../rubrics/rubrics.service';
+import { AssociateRubricDto, CreateRubricDto } from '../rubrics/rubrics.dto';
+import { SubmissionsService } from '../submissions/submissions.service';
 
 @Injectable()
 export class TeacherService {
   constructor(
-    @InjectRepository(Activity) private readonly activities: Repository<Activity>,
-    @InjectRepository(Rubric) private readonly rubrics: Repository<Rubric>,
-    @InjectRepository(Submission) private readonly submissions: Repository<Submission>,
-    @InjectRepository(Logbook) private readonly logbooks: Repository<Logbook>,
-    @InjectRepository(AiDeclaration) private readonly declarations: Repository<AiDeclaration>,
+    private readonly classesService: ClassesService,
+    private readonly activitiesService: ActivitiesService,
+    private readonly rubricsService: RubricsService,
+    private readonly submissionsService: SubmissionsService,
   ) {}
 
+  listClasses(teacherId: number) {
+    return this.classesService.listForTeacher(teacherId);
+  }
+
+  createClass(teacher: User, input: CreateClassDto) {
+    return this.classesService.create(teacher, input);
+  }
+
+  enrollStudent(teacherId: number, classId: number, email: string) {
+    return this.classesService.enrollStudent(teacherId, classId, email);
+  }
+
+  listEnrollments(teacherId: number, classId: number) {
+    return this.classesService.listEnrollments(teacherId, classId);
+  }
+
   async listActivities(teacherId: number) {
-    const activities = await this.activities.find({
-      where: { teacher: { id: teacherId } },
-      relations: { rubric: true },
-      order: { id: 'DESC' },
-    });
+    const activities = await this.activitiesService.listForTeacher(teacherId);
     return activities.map((activity) => this.activityResponse(activity));
   }
 
   async createActivity(teacher: User, input: CreateActivityDto) {
-    const activity = await this.activities.save(
-      this.activities.create({ ...input, learningOutcomes: [], teacher, rubric: null }),
-    );
+    const activity = await this.activitiesService.create(teacher, input);
     return this.activityResponse(activity);
   }
 
   async updateLearningOutcomes(teacherId: number, activityId: number, input: UpdateLearningOutcomesDto) {
-    const activity = await this.ownedActivity(teacherId, activityId);
-    activity.learningOutcomes = input.learningOutcomes.map((outcome) => outcome.trim()).filter(Boolean);
-    return this.activityResponse(await this.activities.save(activity));
+    return this.activityResponse(
+      await this.activitiesService.updateLearningOutcomes(teacherId, activityId, input),
+    );
   }
 
   async listRubrics(teacherId: number) {
-    const rubrics = await this.rubrics.find({ where: { teacher: { id: teacherId } }, order: { id: 'DESC' } });
+    const rubrics = await this.rubricsService.listForTeacher(teacherId);
     return rubrics.map((rubric) => this.rubricResponse(rubric));
   }
 
   async createRubric(teacher: User, input: CreateRubricDto) {
-    const rubric = await this.rubrics.save(
-      this.rubrics.create({ name: input.name, criteria: input.criteria, teacher, activity: null }),
-    );
+    const rubric = await this.rubricsService.create(teacher, input);
     return this.rubricResponse(rubric);
   }
 
   async associateRubric(teacherId: number, activityId: number, input: AssociateRubricDto) {
-    const activity = await this.ownedActivity(teacherId, activityId);
-    const rubric = await this.rubrics.findOne({
-      where: { id: input.rubricId, teacher: { id: teacherId } },
-    });
-    if (!rubric) throw new NotFoundException('La rúbrica no existe o no pertenece al docente');
-    const alreadyAssigned = await this.rubrics.findOne({ where: { activity: { id: activityId } } });
-    if (alreadyAssigned && alreadyAssigned.id !== rubric.id) {
-      alreadyAssigned.activity = null;
-      await this.rubrics.save(alreadyAssigned);
-    }
-    rubric.activity = activity;
-    await this.rubrics.save(rubric);
-    return this.activityResponse(await this.ownedActivity(teacherId, activityId, true));
+    return this.activityResponse(
+      await this.rubricsService.associate(teacherId, activityId, input),
+    );
   }
 
   async listSubmissions(teacherId: number, activityId: number) {
-    await this.ownedActivity(teacherId, activityId);
-    const submissions = await this.submissions.find({
-      where: { activity: { id: activityId } },
-      order: { submittedAt: 'DESC' },
-    });
-    return submissions.map((submission) => ({
-      id: submission.id,
-      student: { id: submission.student.id, name: submission.student.name, email: submission.student.email },
-      status: submission.status,
-      submittedAt: submission.submittedAt,
-    }));
+    return this.submissionsService.listForTeacher(teacherId, activityId);
   }
 
   async getSubmission(teacherId: number, submissionId: number) {
-    const submission = await this.submissions.findOne({ where: { id: submissionId } });
-    if (!submission) throw new NotFoundException('La entrega no existe');
-    await this.ownedActivity(teacherId, submission.activity.id);
-    const [logbook, declaration] = await Promise.all([
-      this.logbooks.findOne({
-        where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
-      }),
-      this.declarations.findOne({
-        where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
-      }),
-    ]);
-    return {
-      id: submission.id,
-      activity: { id: submission.activity.id, title: submission.activity.title },
-      student: { id: submission.student.id, name: submission.student.name, email: submission.student.email },
-      status: submission.status,
-      submittedAt: submission.submittedAt,
-      productText: submission.productText,
-      productUrl: submission.productUrl,
-      logbook: logbook
-        ? {
-            initialIdeas: logbook.initialIdeas,
-            prompts: logbook.prompts,
-            validationsAndDecisions: logbook.validationsAndDecisions,
-            finalReflection: logbook.finalReflection,
-          }
-        : null,
-      aiDeclaration: declaration
-        ? {
-            toolName: declaration.toolName,
-            usageLevel: declaration.usageLevel,
-            purpose: declaration.purpose,
-            promptSummary: declaration.promptSummary,
-          }
-        : null,
-    };
-  }
-
-  private async ownedActivity(teacherId: number, activityId: number, includeRubric = false) {
-    const activity = await this.activities.findOne({
-      where: { id: activityId, teacher: { id: teacherId } },
-      relations: includeRubric ? { rubric: true } : undefined,
-    });
-    if (!activity) throw new NotFoundException('La actividad no existe o no pertenece al docente');
-    return activity;
+    return this.submissionsService.getForTeacher(teacherId, submissionId);
   }
 
   private rubricResponse(rubric: Rubric) {
@@ -143,6 +87,13 @@ export class TeacherService {
       dueDate: activity.dueDate,
       activityType: activity.activityType,
       learningOutcomes: activity.learningOutcomes,
+      academicClass: activity.academicClass
+        ? {
+            id: activity.academicClass.id,
+            name: activity.academicClass.name,
+            code: activity.academicClass.code,
+          }
+        : null,
       rubric: activity.rubric ? this.rubricResponse(activity.rubric) : null,
     };
   }

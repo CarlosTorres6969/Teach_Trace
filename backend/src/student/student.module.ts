@@ -1,15 +1,20 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ActivitiesModule } from '../activities/activities.module';
+import { AiDeclarationsModule } from '../ai-declarations/ai-declarations.module';
 import { AuthModule } from '../auth/auth.module';
-import { Activity } from '../entities/activity.entity';
-import { Logbook } from '../entities/logbook.entity';
-import { Submission } from '../entities/submission.entity';
-import { AiDeclaration } from '../entities/ai-declaration.entity';
+import { LogbooksModule } from '../logbooks/logbooks.module';
+import { SubmissionsModule } from '../submissions/submissions.module';
 import { StudentController } from './student.controller';
 import { StudentService } from './student.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Activity, Logbook, Submission, AiDeclaration]), AuthModule],
+  imports: [
+    AuthModule,
+    ActivitiesModule,
+    LogbooksModule,
+    AiDeclarationsModule,
+    SubmissionsModule,
+  ],
   controllers: [StudentController],
   providers: [StudentService],
 })
