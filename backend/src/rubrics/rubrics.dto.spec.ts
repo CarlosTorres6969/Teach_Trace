@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateRubricDto } from './rubrics.dto';
+import { AssociateRubricDto, CreateRubricDto } from './rubrics.dto';
 
 function criterion(index: number) {
   return {
@@ -32,5 +32,19 @@ describe('CreateRubricDto', () => {
     });
 
     expect(await validate(dto)).not.toHaveLength(0);
+  });
+});
+
+describe('AssociateRubricDto', () => {
+  it('acepta solamente identificadores enteros positivos', async () => {
+    await expect(
+      validate(plainToInstance(AssociateRubricDto, { rubricId: 1 })),
+    ).resolves.toHaveLength(0);
+
+    for (const rubricId of [0, -1, 1.5, '1', null]) {
+      await expect(
+        validate(plainToInstance(AssociateRubricDto, { rubricId })),
+      ).resolves.not.toHaveLength(0);
+    }
   });
 });

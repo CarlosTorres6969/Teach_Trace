@@ -64,4 +64,53 @@ describe('SubmissionsService', () => {
     expect(activitiesService.setManualEvaluationRequired).toHaveBeenCalledWith(activity, false);
     expect(result.status).toBe(SubmissionStatus.SUBMITTED);
   });
+
+  it('envía al motor los criterios de la rúbrica asociada', async () => {
+    const criteria = [
+      {
+        name: 'Argumentación',
+        dimension: 'Argumentación',
+        descriptors: {
+          level1: 'Inicial',
+          level2: 'Básico',
+          level3: 'Competente',
+          level4: 'Avanzado',
+        },
+      },
+    ];
+    const activity = { id: 4, rubric: { id: 6, criteria } };
+    const submission = {
+      id: 8,
+      student: { id: 2 },
+      productText: 'Producto',
+      productUrl: '',
+      fileName: null,
+    };
+    const submissions = {
+      find: jest.fn().mockResolvedValue([submission]),
+      save: jest.fn(async (value) => value),
+    };
+    const activitiesService = {
+      ownedActivity: jest.fn().mockResolvedValue(activity),
+      setManualEvaluationRequired: jest.fn().mockResolvedValue(activity),
+    };
+    const aiEngine = {
+      analyzeEvidence: jest.fn().mockResolvedValue({ implemented: false, reason: 'Stub' }),
+    };
+    const service = new SubmissionsService(
+      submissions as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      {} as never,
+      activitiesService as never,
+      aiEngine as never,
+    );
+
+    await service.evaluateActivity(3, 4);
+
+    expect(activitiesService.ownedActivity).toHaveBeenCalledWith(3, 4, true);
+    expect(aiEngine.analyzeEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({ rubric: criteria }),
+    );
+  });
 });

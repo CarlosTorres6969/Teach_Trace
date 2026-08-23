@@ -75,8 +75,13 @@ export class TeacherService {
     return this.submissionsService.getForTeacher(teacherId, submissionId);
   }
 
-  private rubricResponse(rubric: Rubric) {
-    return { id: rubric.id, name: rubric.name, criteria: rubric.criteria };
+  private rubricResponse(rubric: Rubric, activityId = rubric.activity?.id ?? null) {
+    return {
+      id: rubric.id,
+      name: rubric.name,
+      criteria: rubric.criteria,
+      activityId,
+    };
   }
 
   private activityResponse(activity: Activity) {
@@ -96,7 +101,7 @@ export class TeacherService {
             code: activity.academicClass.code,
           }
         : null,
-      rubric: activity.rubric ? this.rubricResponse(activity.rubric) : null,
+      rubric: activity.rubric ? this.rubricResponse(activity.rubric, activity.id) : null,
     };
   }
 }

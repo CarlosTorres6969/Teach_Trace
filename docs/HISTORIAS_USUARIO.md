@@ -9,7 +9,7 @@
 | HU-05 | Formulario y API para crear actividades dentro de una clase, con fecha y tipo. |
 | HU-06 | Asociación de 1 a 20 resultados de aprendizaje, uno por línea y con un máximo de 500 caracteres cada uno. |
 | HU-07, HU-08 | Creación obligatoria de siete dimensiones y descriptores para niveles 1–4. |
-| HU-09 | Asociación de una rúbrica existente con una actividad. |
+| HU-09 | Asociación exclusiva de una rúbrica existente con una actividad, con sustitución e idempotencia controladas. |
 | HU-10 a HU-14 | Consulta y actualización de ideas, prompts, validaciones, decisiones y reflexión final. |
 | HU-15 a HU-18 | Declaración de herramienta, nivel 1–3, propósito y prompts, guardada junto al producto. |
 | HU-19, HU-20 | Entrega de texto, enlace o archivo y visualización del estado y fecha. |

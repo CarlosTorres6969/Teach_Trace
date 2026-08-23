@@ -37,4 +37,9 @@ export type Criterion = {
   descriptors: { level1: string; level2: string; level3: string; level4: string };
 };
 
-export type Rubric = { id: number; name: string; criteria: Criterion[] };
+export type Rubric = {
+  id: number;
+  name: string;
+  criteria: Criterion[];
+  activityId?: number | null;
+};

@@ -29,6 +29,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - El nivel declarado y detectado de IA está restringido a 1–3.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
 - Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
+- Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la
+  misma actividad, pero no trasladarse implícitamente ni reutilizarse en dos actividades.
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión
   manual sin crear valoraciones simuladas.
 

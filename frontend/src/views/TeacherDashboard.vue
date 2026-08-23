@@ -239,7 +239,14 @@ onMounted(load);
             <label>Rúbrica asociada
               <select v-model="selectedRubrics[activity.id]">
                 <option :value="undefined">Selecciona una rúbrica</option>
-                <option v-for="rubric in rubrics" :key="rubric.id" :value="rubric.id">{{ rubric.name }}</option>
+                <option
+                  v-for="rubric in rubrics"
+                  :key="rubric.id"
+                  :value="rubric.id"
+                  :disabled="rubric.activityId != null && rubric.activityId !== activity.id"
+                >
+                  {{ rubric.name }}{{ rubric.activityId != null && rubric.activityId !== activity.id ? ' — asociada a otra actividad' : '' }}
+                </option>
               </select>
             </label>
             <button class="button secondary" type="button" @click="associateRubric(activity.id)">Asociar</button>

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
@@ -16,7 +16,11 @@ export class RubricsService {
   ) {}
 
   listForTeacher(teacherId: number) {
-    return this.rubrics.find({ where: { teacher: { id: teacherId } }, order: { id: 'DESC' } });
+    return this.rubrics.find({
+      where: { teacher: { id: teacherId } },
+      relations: { activity: true },
+      order: { id: 'DESC' },
+    });
   }
 
   create(teacher: User, input: CreateRubricDto) {
@@ -29,16 +33,25 @@ export class RubricsService {
     const activity = await this.activitiesService.ownedActivity(teacherId, activityId);
     const rubric = await this.rubrics.findOne({
       where: { id: input.rubricId, teacher: { id: teacherId } },
+      relations: { activity: true },
     });
     if (!rubric) throw new NotFoundException('La rúbrica no existe o no pertenece al docente');
 
+    if (rubric.activity?.id === activityId) {
+      return this.activitiesService.ownedActivity(teacherId, activityId, true);
+    }
+    if (rubric.activity) {
+      throw new ConflictException('La rúbrica ya está asociada a otra actividad');
+    }
+
     const alreadyAssigned = await this.rubrics.findOne({ where: { activity: { id: activityId } } });
+    const rubricsToSave = [rubric];
     if (alreadyAssigned && alreadyAssigned.id !== rubric.id) {
       alreadyAssigned.activity = null;
-      await this.rubrics.save(alreadyAssigned);
+      rubricsToSave.unshift(alreadyAssigned);
     }
     rubric.activity = activity;
-    await this.rubrics.save(rubric);
+    await this.rubrics.save(rubricsToSave);
     return this.activitiesService.ownedActivity(teacherId, activityId, true);
   }
 }

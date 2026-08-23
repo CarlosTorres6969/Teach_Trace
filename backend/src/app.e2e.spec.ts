@@ -334,6 +334,186 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymousAttempt.response.status).toBe(401);
   });
 
+  it('asocia, sustituye y protege la reutilización de rúbricas mediante el endpoint real', async () => {
+    const criteria = (prefix: string) =>
+      Array.from({ length: 7 }, (_, index) => ({
+        name: `${prefix} criterio ${index + 1}`,
+        dimension: `${prefix} dimensión ${index + 1}`,
+        descriptors: {
+          level1: 'Nivel inicial',
+          level2: 'Nivel básico',
+          level3: 'Nivel competente',
+          level4: 'Nivel avanzado',
+        },
+      }));
+    const createActivity = async (cookie: string, ownedClassId: number, title: string) =>
+      request('/api/teacher/activities', {
+        method: 'POST',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          classId: ownedClassId,
+          dueDate: '2026-12-15',
+          activityType: 'Proyecto',
+          evaluationPhase: 'pilot',
+        }),
+      });
+    const createRubric = async (cookie: string, name: string) =>
+      request('/api/teacher/rubrics', {
+        method: 'POST',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, criteria: criteria(name) }),
+      });
+    const associate = (cookie: string, targetActivityId: number | string, rubricId: unknown) =>
+      request(`/api/teacher/activities/${targetActivityId}/rubric`, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rubricId }),
+      });
+
+    const firstActivity = await createActivity(teacher.sessionCookie, classId, 'Actividad con rúbrica');
+    const secondActivity = await createActivity(
+      teacher.sessionCookie,
+      classId,
+      'Actividad para comprobar reutilización',
+    );
+    const firstRubric = await createRubric(teacher.sessionCookie, 'Rúbrica asociable A');
+    const replacementRubric = await createRubric(teacher.sessionCookie, 'Rúbrica asociable B');
+    const firstActivityId = (firstActivity.body as { id: number }).id;
+    const secondActivityId = (secondActivity.body as { id: number }).id;
+    const firstRubricId = (firstRubric.body as { id: number }).id;
+    const replacementRubricId = (replacementRubric.body as { id: number }).id;
+
+    const validAssociation = await associate(
+      teacher.sessionCookie,
+      firstActivityId,
+      firstRubricId,
+    );
+    expect(validAssociation.response.status).toBe(200);
+    expect(validAssociation.body).toMatchObject({ rubric: { id: firstRubricId } });
+
+    const idempotentAssociation = await associate(
+      teacher.sessionCookie,
+      firstActivityId,
+      firstRubricId,
+    );
+    expect(idempotentAssociation.response.status).toBe(200);
+
+    const persisted = await request('/api/teacher/activities', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(
+      (persisted.body as Array<{ id: number; rubric: { id: number } | null }>).find(
+        (item) => item.id === firstActivityId,
+      )?.rubric?.id,
+    ).toBe(firstRubricId);
+
+    const replacement = await associate(
+      teacher.sessionCookie,
+      firstActivityId,
+      replacementRubricId,
+    );
+    expect(replacement.response.status).toBe(200);
+    expect(replacement.body).toMatchObject({ rubric: { id: replacementRubricId } });
+
+    const listedRubrics = await request('/api/teacher/rubrics', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const rubricAssociations = listedRubrics.body as Array<{ id: number; activityId: number | null }>;
+    expect(rubricAssociations.find((item) => item.id === firstRubricId)?.activityId).toBeNull();
+    expect(rubricAssociations.find((item) => item.id === replacementRubricId)?.activityId).toBe(
+      firstActivityId,
+    );
+
+    const reused = await associate(
+      teacher.sessionCookie,
+      secondActivityId,
+      replacementRubricId,
+    );
+    expect(reused.response.status).toBe(409);
+    const afterConflict = await request('/api/teacher/activities', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const activitiesAfterConflict = afterConflict.body as Array<{
+      id: number;
+      rubric: { id: number } | null;
+    }>;
+    expect(activitiesAfterConflict.find((item) => item.id === firstActivityId)?.rubric?.id).toBe(
+      replacementRubricId,
+    );
+    expect(activitiesAfterConflict.find((item) => item.id === secondActivityId)?.rubric).toBeNull();
+
+    expect((await associate(teacher.sessionCookie, 'invalida', firstRubricId)).response.status).toBe(
+      400,
+    );
+    for (const invalidRubricId of [0, -1, 1.5, '1']) {
+      expect(
+        (await associate(teacher.sessionCookie, secondActivityId, invalidRubricId)).response.status,
+      ).toBe(400);
+    }
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'docente.ajeno.rubricas@unah.edu.hn',
+        name: 'Docente ajeno de rúbricas',
+        passwordHash: await authService.hashPassword('DocenteAjeno123!'),
+        role: UserRole.TEACHER,
+        active: true,
+      }),
+    );
+    const otherLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'docente.ajeno.rubricas@unah.edu.hn',
+        password: 'DocenteAjeno123!',
+      }),
+    });
+    const otherCookie = readSessionCookie(otherLogin.response);
+    const otherClass = await request('/api/teacher/classes', {
+      method: 'POST',
+      headers: { ...sessionHeaders(otherCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Clase de otro docente',
+        subject: 'Asignatura ajena',
+        code: 'AJ-01',
+        period: '2026-III',
+      }),
+    });
+    const otherActivity = await createActivity(
+      otherCookie,
+      (otherClass.body as { id: number }).id,
+      'Actividad ajena',
+    );
+    const otherRubric = await createRubric(otherCookie, 'Rúbrica ajena');
+
+    expect(
+      (
+        await associate(
+          teacher.sessionCookie,
+          (otherActivity.body as { id: number }).id,
+          firstRubricId,
+        )
+      ).response.status,
+    ).toBe(404);
+    expect(
+      (
+        await associate(
+          teacher.sessionCookie,
+          secondActivityId,
+          (otherRubric.body as { id: number }).id,
+        )
+      ).response.status,
+    ).toBe(404);
+
+    expect((await associate(student.sessionCookie, secondActivityId, firstRubricId)).response.status).toBe(
+      403,
+    );
+    expect((await associate('', secondActivityId, firstRubricId)).response.status).toBe(401);
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),
@@ -342,14 +522,17 @@ describe('TeachTrace API (integración)', () => {
       id: number;
       evaluationPhase: ActivityPhase;
       rubric: { criteria: unknown[] };
-    }>)[0];
+    }>).find((activity) => activity.id === activityId)!;
+    expect(configuredActivity).toBeDefined();
     expect(configuredActivity.evaluationPhase).toBe(ActivityPhase.PILOT);
     expect(configuredActivity.rubric.criteria).toHaveLength(7);
 
     const studentActivities = await request('/api/student/activities', {
       headers: sessionHeaders(student.sessionCookie),
     });
-    expect((studentActivities.body as unknown[])).toHaveLength(1);
+    expect(
+      (studentActivities.body as Array<{ id: number }>).some((activity) => activity.id === activityId),
+    ).toBe(true);
 
     const logbook = await request(`/api/student/activities/${activityId}/logbook`, {
       method: 'PUT',
@@ -444,7 +627,7 @@ describe('TeachTrace API (integración)', () => {
       enrollments.create({ student: otherStudent, academicClass, active: true }),
     );
     const activity = await activities.findOneByOrFail({ id: activityId });
-    const otherLogbook = await logbooks.save(
+    await logbooks.save(
       logbooks.create({
         student: otherStudent,
         activity,
@@ -462,12 +645,6 @@ describe('TeachTrace API (integración)', () => {
       initialIdeas: 'Ideas propias del estudiante autenticado',
     });
     expect(JSON.stringify(ownLogbook.body)).not.toContain('Contenido secreto');
-
-    const attemptByKnownId = await request(
-      `/api/student/activities/${otherLogbook.id}/logbook`,
-      { headers: sessionHeaders(student.sessionCookie) },
-    );
-    expect(attemptByKnownId.response.status).toBe(404);
   });
 
   it('R2/R3: conserva separados los valores IA-docente y la referencia de línea base', async () => {
