@@ -37,6 +37,10 @@
 
 - Contraseñas derivadas mediante `scrypt` con sal individual.
 - Sesiones JWT revocables y con vencimiento de ocho horas.
+- JWT obligatorio de al menos 32 caracteres y sin clave predeterminada o de ejemplo.
+- Sesión web en cookie `HttpOnly`, `SameSite=Strict` y `Secure` en producción; el JWT no se
+  persiste en `localStorage`.
+- Bloqueo temporal por cuenta después de intentos fallidos, con respuesta `429` y `Retry-After`.
 - Verificación de rol en cada endpoint protegido.
 - Validación y límites de longitud en los datos recibidos.
 - Consultas de bitácora, declaración y entrega limitadas al estudiante autenticado.
@@ -52,6 +56,7 @@
 ## Cobertura automatizada
 
 Las pruebas incluyen unidades por dominio y una aplicación NestJS real sobre SQLite en memoria.
-La integración verifica autenticación, roles, aislamiento entre estudiantes, matrícula, rúbrica de
+La integración verifica autenticación, cookies de sesión, limitación de intentos, cuentas inactivas,
+sesiones expiradas, roles, aislamiento entre estudiantes, matrícula, rúbrica de
 siete dimensiones, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
 separación entre valor IA y docente, referencia de línea base y degradación a revisión manual.

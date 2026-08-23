@@ -14,11 +14,11 @@ async function login() {
   error.value = '';
   loading.value = true;
   try {
-    const result = await api<{ accessToken: string; user: User }>('/auth/login', {
+    const result = await api<{ user: User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(form),
     });
-    setSession(result.accessToken, result.user);
+    setSession(result.user);
     await router.push(result.user.role === 'student' ? '/student' : '/teacher');
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No fue posible iniciar sesión';

@@ -16,6 +16,10 @@ El flujo base implementa:
 
 ## Inicio rápido
 
+Antes de iniciar, copie `.env.example` como `.env` y sustituya `JWT_SECRET` por un valor aleatorio
+propio de al menos 32 caracteres. La API rechaza el arranque si falta el secreto, si es demasiado
+corto o si conserva el valor de ejemplo.
+
 ```bash
 npm install
 npm run dev
@@ -48,6 +52,18 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
 
+## Seguridad de la sesión
+
+- El navegador recibe la sesión en una cookie `HttpOnly` y `SameSite=Strict`; con
+  `NODE_ENV=production` también se activa `Secure`, por lo que producción requiere HTTPS.
+- El frontend no almacena el JWT ni el usuario en `localStorage`: restaura la identidad mediante
+  `GET /api/auth/me` y sincroniza el cierre de sesión entre pestañas.
+- Después de cinco credenciales incorrectas para una cuenta, el login responde `429` durante la
+  ventana configurada. Los valores se ajustan con `LOGIN_MAX_ATTEMPTS` y `LOGIN_WINDOW_MS`.
+- Las sesiones revocadas o vencidas y las cuentas desactivadas son rechazadas en cada endpoint.
+- El limitador se conserva en memoria, apropiado para el monolito del piloto. Si se despliegan
+  varias instancias deberá moverse a un almacén compartido.
+
 El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` ya recorre las entregas e invoca
 el contrato del motor. Mientras el proveedor no esté implementado no persiste valoraciones falsas
 y marca las entregas para revisión manual.
@@ -62,8 +78,6 @@ npm run dev     # API y frontend en modo desarrollo
 npm run build   # compilación de producción
 npm test        # pruebas automatizadas del backend
 ```
-
-Copie `.env.example` como `.env` y cambie `JWT_SECRET` antes de desplegar. El inicio rápido funciona con los valores de desarrollo sin crear ese archivo.
 
 Para pruebas, `DATABASE_PATH=:memory:` permite ejecutar la aplicación con SQLite en memoria sin
 crear ni modificar el archivo local.

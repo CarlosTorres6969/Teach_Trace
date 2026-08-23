@@ -1,11 +1,14 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import type { AddressInfo } from 'net';
 import { DataSource } from 'typeorm';
 import { configureApp } from './app.setup';
+import { AuthService } from './auth/auth.service';
 import { Activity, ActivityPhase } from './entities/activity.entity';
 import { AiDeclaration } from './entities/ai-declaration.entity';
+import { AuthSession } from './entities/auth-session.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { Indicator } from './entities/indicator.entity';
@@ -17,7 +20,7 @@ import { Valuation } from './entities/valuation.entity';
 jest.setTimeout(180000);
 
 type LoginResponse = {
-  accessToken: string;
+  sessionCookie: string;
   user: { id: number; role: UserRole };
 };
 
@@ -53,8 +56,14 @@ describe('TeachTrace API (integración)', () => {
     return { response, body };
   }
 
-  function authorization(token: string) {
-    return { Authorization: `Bearer ${token}` };
+  function sessionHeaders(cookie: string) {
+    return { Cookie: cookie };
+  }
+
+  function readSessionCookie(response: Response) {
+    const cookie = response.headers.get('set-cookie');
+    if (!cookie) throw new Error('El login no devolvió la cookie de sesión');
+    return cookie.split(';')[0];
   }
 
   beforeAll(async () => {
@@ -82,15 +91,21 @@ describe('TeachTrace API (integración)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'estudiante@unah.edu.hn', password: 'Estudiante123!' }),
     });
-    teacher = teacherLogin.body as LoginResponse;
-    student = studentLogin.body as LoginResponse;
+    teacher = {
+      ...(teacherLogin.body as Omit<LoginResponse, 'sessionCookie'>),
+      sessionCookie: readSessionCookie(teacherLogin.response),
+    };
+    student = {
+      ...(studentLogin.body as Omit<LoginResponse, 'sessionCookie'>),
+      sessionCookie: readSessionCookie(studentLogin.response),
+    };
 
     const classes = await request('/api/teacher/classes', {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     classId = (classes.body as Array<{ id: number }>)[0].id;
     const activities = await request('/api/teacher/activities', {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     activityId = (activities.body as Array<{ id: number }>)[0].id;
   });
@@ -113,14 +128,14 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymous.response.status).toBe(401);
 
     const studentOnTeacherRoute = await request('/api/teacher/classes', {
-      headers: authorization(student.accessToken),
+      headers: sessionHeaders(student.sessionCookie),
     });
     expect(studentOnTeacherRoute.response.status).toBe(403);
 
     const invalidPhase = await request('/api/teacher/activities', {
       method: 'POST',
       headers: {
-        ...authorization(teacher.accessToken),
+        ...sessionHeaders(teacher.sessionCookie),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -134,9 +149,91 @@ describe('TeachTrace API (integración)', () => {
     expect(invalidPhase.response.status).toBe(400);
   });
 
+  it('entrega la sesión web en una cookie HttpOnly sin exponer el JWT en el cuerpo', async () => {
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'docente@unah.edu.hn', password: 'Docente123!' }),
+    });
+
+    expect(login.response.status).toBe(201);
+    expect(login.body).not.toHaveProperty('accessToken');
+    expect(login.response.headers.get('set-cookie')).toEqual(
+      expect.stringContaining('teachtrace_session='),
+    );
+    expect(login.response.headers.get('set-cookie')).toEqual(expect.stringContaining('HttpOnly'));
+    expect(login.response.headers.get('set-cookie')).toEqual(
+      expect.stringContaining('SameSite=Strict'),
+    );
+    expect(login.response.headers.get('set-cookie')).toEqual(expect.stringContaining('Path=/api'));
+  });
+
+  it('rechaza el inicio de sesión de un docente inactivo', async () => {
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'docente.inactivo@unah.edu.hn',
+        name: 'Docente inactivo',
+        passwordHash: await authService.hashPassword('DocenteInactivo123!'),
+        role: UserRole.TEACHER,
+        active: false,
+      }),
+    );
+
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'docente.inactivo@unah.edu.hn',
+        password: 'DocenteInactivo123!',
+      }),
+    });
+    expect(login.response.status).toBe(401);
+  });
+
+  it('rechaza y elimina la cookie de una sesión expirada', async () => {
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'docente@unah.edu.hn', password: 'Docente123!' }),
+    });
+    const cookie = readSessionCookie(login.response);
+    const token = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1));
+    const payload = await app.get(JwtService).verifyAsync<{ sid: string }>(token);
+    await dataSource
+      .getRepository(AuthSession)
+      .update(payload.sid, { expiresAt: new Date(Date.now() - 1000) });
+
+    const me = await request('/api/auth/me', { headers: sessionHeaders(cookie) });
+    expect(me.response.status).toBe(401);
+    expect(me.response.headers.get('set-cookie')).toEqual(
+      expect.stringContaining('teachtrace_session='),
+    );
+  });
+
+  it('limita ataques repetidos y responde 429 con Retry-After', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const invalid = await request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'ataque@unah.edu.hn', password: 'Incorrecta123!' }),
+      });
+      expect(invalid.response.status).toBe(401);
+    }
+
+    const blocked = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'ataque@unah.edu.hn', password: 'Incorrecta123!' }),
+    });
+    expect(blocked.response.status).toBe(429);
+    expect(Number(blocked.response.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     const configuredActivity = (teacherActivities.body as Array<{
       id: number;
@@ -147,14 +244,14 @@ describe('TeachTrace API (integración)', () => {
     expect(configuredActivity.rubric.criteria).toHaveLength(7);
 
     const studentActivities = await request('/api/student/activities', {
-      headers: authorization(student.accessToken),
+      headers: sessionHeaders(student.sessionCookie),
     });
     expect((studentActivities.body as unknown[])).toHaveLength(1);
 
     const logbook = await request(`/api/student/activities/${activityId}/logbook`, {
       method: 'PUT',
       headers: {
-        ...authorization(student.accessToken),
+        ...sessionHeaders(student.sessionCookie),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -176,17 +273,17 @@ describe('TeachTrace API (integración)', () => {
     form.set('file', new Blob(['evidencia académica'], { type: 'text/plain' }), 'evidencia.txt');
     const submitted = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
-      headers: authorization(student.accessToken),
+      headers: sessionHeaders(student.sessionCookie),
       body: form,
     });
     expect(submitted.response.status).toBe(200);
 
     const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     submissionId = (submissions.body as Array<{ id: number }>)[0].id;
     const detail = await request(`/api/teacher/submissions/${submissionId}`, {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     expect(detail.body).toMatchObject({
       fileName: 'evidencia.txt',
@@ -194,13 +291,13 @@ describe('TeachTrace API (integración)', () => {
     });
 
     const downloaded = await request(`/api/teacher/submissions/${submissionId}/file`, {
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     expect(downloaded.response.status).toBe(200);
     expect(downloaded.body).toBe('evidencia académica');
 
     const studentDownload = await request(`/api/teacher/submissions/${submissionId}/file`, {
-      headers: authorization(student.accessToken),
+      headers: sessionHeaders(student.sessionCookie),
     });
     expect(studentDownload.response.status).toBe(403);
   });
@@ -208,7 +305,7 @@ describe('TeachTrace API (integración)', () => {
   it('R1: persiste la degradación manual cuando el motor todavía no está disponible', async () => {
     const evaluation = await request(`/api/entregas/actividad/${activityId}/evaluar`, {
       method: 'POST',
-      headers: authorization(teacher.accessToken),
+      headers: sessionHeaders(teacher.sessionCookie),
     });
     expect(evaluation.body).toMatchObject({
       processed: 1,
@@ -256,7 +353,7 @@ describe('TeachTrace API (integración)', () => {
     );
 
     const ownLogbook = await request(`/api/student/activities/${activityId}/logbook`, {
-      headers: authorization(student.accessToken),
+      headers: sessionHeaders(student.sessionCookie),
     });
     expect(ownLogbook.body).toMatchObject({
       initialIdeas: 'Ideas propias del estudiante autenticado',
@@ -265,7 +362,7 @@ describe('TeachTrace API (integración)', () => {
 
     const attemptByKnownId = await request(
       `/api/student/activities/${otherLogbook.id}/logbook`,
-      { headers: authorization(student.accessToken) },
+      { headers: sessionHeaders(student.sessionCookie) },
     );
     expect(attemptByKnownId.response.status).toBe(404);
   });

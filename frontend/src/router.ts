@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { auth } from './auth';
+import { auth, restoreSession } from './auth';
 import LoginView from './views/LoginView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
 import StudentActivityView from './views/StudentActivityView.vue';
@@ -23,12 +23,13 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  await restoreSession();
   if (to.meta.public) {
     if (auth.user) return auth.user.role === 'student' ? '/student' : '/teacher';
     return true;
   }
-  if (!auth.token || !auth.user) return '/login';
+  if (!auth.user) return '/login';
   if (to.meta.role && to.meta.role !== auth.user.role) {
     return auth.user.role === 'student' ? '/student' : '/teacher';
   }

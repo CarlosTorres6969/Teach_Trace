@@ -6,6 +6,7 @@ export function configureApp(app: INestApplication, config: ConfigService) {
   app.enableCors({
     origin: config.get<string>('FRONTEND_ORIGIN', 'http://localhost:5173'),
     methods: ['GET', 'POST', 'PUT'],
+    credentials: true,
   });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

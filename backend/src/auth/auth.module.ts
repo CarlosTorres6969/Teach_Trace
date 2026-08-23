@@ -8,6 +8,8 @@ import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { AuthService } from './auth.service';
+import { LoginAttemptService } from './login-attempt.service';
+import { requiredJwtSecret } from './security.config';
 
 @Module({
   imports: [
@@ -16,13 +18,13 @@ import { AuthService } from './auth.service';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'solo-desarrollo-cambie-esta-clave'),
+        secret: requiredJwtSecret(config),
         signOptions: { expiresIn: '8h' },
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
+  providers: [AuthService, LoginAttemptService, JwtAuthGuard, RolesGuard],
   exports: [AuthService, JwtAuthGuard, RolesGuard, JwtModule, TypeOrmModule],
 })
 export class AuthModule {}
