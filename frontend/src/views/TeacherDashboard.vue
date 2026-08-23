@@ -23,6 +23,10 @@ const outcomes = reactive<Record<number, string>>({});
 const selectedRubrics = reactive<Record<number, number | undefined>>({});
 const rubricName = ref('');
 const criteria = ref<Criterion[]>(emptyRubric());
+const MAX_LEARNING_OUTCOMES = 20;
+const MAX_LEARNING_OUTCOME_LENGTH = 500;
+const MAX_LEARNING_OUTCOMES_TEXT_LENGTH =
+  MAX_LEARNING_OUTCOMES * MAX_LEARNING_OUTCOME_LENGTH + MAX_LEARNING_OUTCOMES - 1;
 
 function emptyCriterion(): Criterion {
   return { name: '', dimension: '', descriptors: { level1: '', level2: '', level3: '', level4: '' } };
@@ -82,10 +86,29 @@ async function createActivity() {
 }
 
 async function saveOutcomes(activityId: number) {
-  const learningOutcomes = outcomes[activityId].split('\n').map((item) => item.trim()).filter(Boolean);
-  await act('Resultados de aprendizaje actualizados', () => api(`/teacher/activities/${activityId}/learning-outcomes`, {
-    method: 'PUT', body: JSON.stringify({ learningOutcomes }),
-  }));
+  await act('Resultados de aprendizaje actualizados', () => {
+    const learningOutcomes = (outcomes[activityId] ?? '')
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!learningOutcomes.length) {
+      throw new Error('Agrega al menos un resultado de aprendizaje válido.');
+    }
+    if (learningOutcomes.length > MAX_LEARNING_OUTCOMES) {
+      throw new Error(`Solo puedes registrar hasta ${MAX_LEARNING_OUTCOMES} resultados.`);
+    }
+    const invalidIndex = learningOutcomes.findIndex(
+      (outcome) => outcome.length > MAX_LEARNING_OUTCOME_LENGTH,
+    );
+    if (invalidIndex >= 0) {
+      throw new Error(
+        `El resultado ${invalidIndex + 1} supera los ${MAX_LEARNING_OUTCOME_LENGTH} caracteres.`,
+      );
+    }
+    return api(`/teacher/activities/${activityId}/learning-outcomes`, {
+      method: 'PUT', body: JSON.stringify({ learningOutcomes }),
+    });
+  });
 }
 
 async function associateRubric(activityId: number) {
@@ -200,7 +223,16 @@ onMounted(load);
           <p class="muted">Fecha: {{ activity.dueDate }}</p>
           <p v-if="activity.manualEvaluationRequired" class="alert error">Esta actividad requiere evaluación manual.</p>
           <label>Resultados de aprendizaje — uno por línea
-            <textarea v-model="outcomes[activity.id]" rows="3" />
+            <textarea
+              v-model="outcomes[activity.id]"
+              rows="3"
+              :maxlength="MAX_LEARNING_OUTCOMES_TEXT_LENGTH"
+              required
+            />
+            <small class="muted">
+              Hasta {{ MAX_LEARNING_OUTCOMES }} resultados y
+              {{ MAX_LEARNING_OUTCOME_LENGTH }} caracteres por resultado.
+            </small>
           </label>
           <button class="button secondary" type="button" @click="saveOutcomes(activity.id)">Guardar resultados</button>
           <div class="association-row">

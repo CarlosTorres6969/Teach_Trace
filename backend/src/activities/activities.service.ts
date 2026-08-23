@@ -1,11 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ClassesService } from '../classes/classes.service';
 import { Activity } from '../entities/activity.entity';
 import { Enrollment } from '../entities/enrollment.entity';
 import { User } from '../entities/user.entity';
-import { CreateActivityDto, UpdateLearningOutcomesDto } from './activities.dto';
+import {
+  CreateActivityDto,
+  MAX_LEARNING_OUTCOMES,
+  MAX_LEARNING_OUTCOME_LENGTH,
+  UpdateLearningOutcomesDto,
+} from './activities.dto';
 
 @Injectable()
 export class ActivitiesService {
@@ -72,7 +77,17 @@ export class ActivitiesService {
     input: UpdateLearningOutcomesDto,
   ) {
     const activity = await this.ownedActivity(teacherId, activityId);
-    activity.learningOutcomes = input.learningOutcomes.map((outcome) => outcome.trim()).filter(Boolean);
+    const learningOutcomes = input.learningOutcomes.map((outcome) => outcome.trim());
+    if (
+      learningOutcomes.length < 1 ||
+      learningOutcomes.length > MAX_LEARNING_OUTCOMES ||
+      learningOutcomes.some(
+        (outcome) => !outcome || outcome.length > MAX_LEARNING_OUTCOME_LENGTH,
+      )
+    ) {
+      throw new BadRequestException('Los resultados de aprendizaje no son válidos');
+    }
+    activity.learningOutcomes = learningOutcomes;
     return this.activities.save(activity);
   }
 

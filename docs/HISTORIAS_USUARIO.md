@@ -7,7 +7,7 @@
 | HU-04 | Guardas de backend y navegación de frontend separadas por rol. |
 | Flujo de clases | Creación de clases y matrícula de estudiantes mediante correo autorizado. |
 | HU-05 | Formulario y API para crear actividades dentro de una clase, con fecha y tipo. |
-| HU-06 | Edición de resultados de aprendizaje, uno por línea. |
+| HU-06 | Asociación de 1 a 20 resultados de aprendizaje, uno por línea y con un máximo de 500 caracteres cada uno. |
 | HU-07, HU-08 | Creación obligatoria de siete dimensiones y descriptores para niveles 1–4. |
 | HU-09 | Asociación de una rúbrica existente con una actividad. |
 | HU-10 a HU-14 | Consulta y actualización de ideas, prompts, validaciones, decisiones y reflexión final. |

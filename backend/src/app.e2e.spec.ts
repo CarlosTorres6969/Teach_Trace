@@ -231,6 +231,109 @@ describe('TeachTrace API (integración)', () => {
     expect(Number(blocked.response.headers.get('retry-after'))).toBeGreaterThan(0);
   });
 
+  it('asocia resultados de aprendizaje con validación, persistencia y permisos', async () => {
+    const endpoint = `/api/teacher/activities/${activityId}/learning-outcomes`;
+    const update = await request(endpoint, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        learningOutcomes: ['  Analiza evidencia académica  ', 'Argumenta decisiones'],
+      }),
+    });
+    expect(update.response.status).toBe(200);
+    expect(update.body).toMatchObject({
+      learningOutcomes: ['Analiza evidencia académica', 'Argumenta decisiones'],
+    });
+
+    const persisted = await request('/api/teacher/activities', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const persistedActivity = (persisted.body as Array<{ id: number; learningOutcomes: string[] }>).find(
+      (activity) => activity.id === activityId,
+    );
+    expect(persistedActivity?.learningOutcomes).toEqual([
+      'Analiza evidencia académica',
+      'Argumenta decisiones',
+    ]);
+
+    for (const learningOutcomes of [
+      [],
+      ['   '],
+      Array.from({ length: 21 }, (_, index) => `Resultado ${index}`),
+      ['a'.repeat(501)],
+    ]) {
+      const invalid = await request(endpoint, {
+        method: 'PUT',
+        headers: {
+          ...sessionHeaders(teacher.sessionCookie),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ learningOutcomes }),
+      });
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const maximum = await request(endpoint, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ learningOutcomes: ['a'.repeat(500)] }),
+    });
+    expect(maximum.response.status).toBe(200);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'otro.docente.resultados@unah.edu.hn',
+        name: 'Otro docente',
+        passwordHash: await authService.hashPassword('OtroDocente123!'),
+        role: UserRole.TEACHER,
+        active: true,
+      }),
+    );
+    const otherTeacherLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'otro.docente.resultados@unah.edu.hn',
+        password: 'OtroDocente123!',
+      }),
+    });
+    const otherTeacherCookie = readSessionCookie(otherTeacherLogin.response);
+    const otherTeacher = await request(endpoint, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(otherTeacherCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ learningOutcomes: ['Intento no autorizado'] }),
+    });
+    expect(otherTeacher.response.status).toBe(404);
+
+    const studentAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ learningOutcomes: ['Intento de estudiante'] }),
+    });
+    expect(studentAttempt.response.status).toBe(403);
+
+    const anonymousAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learningOutcomes: ['Intento anónimo'] }),
+    });
+    expect(anonymousAttempt.response.status).toBe(401);
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),

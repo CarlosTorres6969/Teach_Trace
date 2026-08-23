@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ActivityPhase } from '../entities/activity.entity';
 import { ActivitiesService } from './activities.service';
 
@@ -50,5 +50,41 @@ describe('ActivitiesService', () => {
     expect(result.evaluationPhase).toBe(ActivityPhase.PILOT);
     expect(result.academicClass).toBe(academicClass);
     expect(result.manualEvaluationRequired).toBe(false);
+  });
+
+  it('asocia, normaliza y persiste resultados de aprendizaje en una actividad propia', async () => {
+    const activity = { id: 8, learningOutcomes: [] as string[] };
+    const activities = {
+      findOne: jest.fn().mockResolvedValue(activity),
+      save: jest.fn(async (value) => value),
+    };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+
+    const result = await service.updateLearningOutcomes(2, 8, {
+      learningOutcomes: ['  Analiza evidencia académica  ', 'Argumenta sus decisiones'],
+    });
+
+    expect(activities.findOne).toHaveBeenCalledWith({
+      where: { id: 8, teacher: { id: 2 } },
+      relations: undefined,
+    });
+    expect(result.learningOutcomes).toEqual([
+      'Analiza evidencia académica',
+      'Argumenta sus decisiones',
+    ]);
+    expect(activities.save).toHaveBeenCalledWith(activity);
+  });
+
+  it('rechaza resultados vacíos después de normalizarlos', async () => {
+    const activities = {
+      findOne: jest.fn().mockResolvedValue({ id: 8, learningOutcomes: [] }),
+      save: jest.fn(),
+    };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+
+    await expect(
+      service.updateLearningOutcomes(2, 8, { learningOutcomes: ['   '] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(activities.save).not.toHaveBeenCalled();
   });
 });
