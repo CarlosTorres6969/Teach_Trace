@@ -12,6 +12,60 @@ const message = ref('');
 const error = ref('');
 
 const logbook = reactive({ initialIdeas: '', prompts: '', validationsAndDecisions: '', finalReflection: '' });
+type LogbookField = keyof typeof logbook;
+const logbookSteps: Array<{
+  key: LogbookField;
+  shortTitle: string;
+  title: string;
+  description: string;
+  placeholder: string;
+  maxLength: number;
+}> = [
+  {
+    key: 'initialIdeas',
+    shortTitle: 'Inicio',
+    title: 'Ideas iniciales',
+    description: 'Describe cómo entiendes la actividad y qué camino piensas seguir antes de comenzar.',
+    placeholder: 'Escribe tus primeras ideas, preguntas o posibles enfoques…',
+    maxLength: 10000,
+  },
+  {
+    key: 'prompts',
+    shortTitle: 'Prompts',
+    title: 'Prompts utilizados',
+    description: 'Registra las instrucciones o preguntas que utilizaste al interactuar con herramientas de IA.',
+    placeholder: 'Anota los prompts relevantes y el contexto en que los utilizaste…',
+    maxLength: 20000,
+  },
+  {
+    key: 'validationsAndDecisions',
+    shortTitle: 'Validación',
+    title: 'Validaciones y decisiones',
+    description: 'Explica qué comprobaste, qué descartaste y por qué tomaste cada decisión importante.',
+    placeholder: 'Describe tus comprobaciones, fuentes consultadas y decisiones…',
+    maxLength: 20000,
+  },
+  {
+    key: 'finalReflection',
+    shortTitle: 'Reflexión',
+    title: 'Reflexión final',
+    description: 'Resume qué aprendiste, qué cambiarías y cómo evolucionó tu solución.',
+    placeholder: 'Reflexiona sobre tu aprendizaje y el proceso que seguiste…',
+    maxLength: 10000,
+  },
+];
+const currentLogbookStep = ref(0);
+const savingLogbook = ref(false);
+const activeLogbookStep = computed(() => logbookSteps[currentLogbookStep.value]);
+const completedLogbookSteps = computed(() =>
+  logbookSteps.map((step) => logbook[step.key].trim().length > 0),
+);
+const completedLogbookStepCount = computed(
+  () => completedLogbookSteps.value.filter(Boolean).length,
+);
+const isLastLogbookStep = computed(
+  () => currentLogbookStep.value === logbookSteps.length - 1,
+);
 const declaration = reactive({ toolName: '', usageLevel: 1, purpose: '', promptSummary: '' });
 const submission = reactive({
   status: 'not_submitted',
@@ -36,7 +90,12 @@ async function load() {
       api<Record<string, string> & { activity: { title: string } }>(`/student/activities/${activityId}/submission-status`),
     ]);
     title.value = logbookData.activity.title;
-    Object.assign(logbook, logbookData);
+    Object.assign(logbook, {
+      initialIdeas: logbookData.initialIdeas ?? '',
+      prompts: logbookData.prompts ?? '',
+      validationsAndDecisions: logbookData.validationsAndDecisions ?? '',
+      finalReflection: logbookData.finalReflection ?? '',
+    });
     Object.assign(declaration, declarationData);
     Object.assign(submission, submissionData);
   } catch (cause) {
@@ -46,8 +105,37 @@ async function load() {
   }
 }
 
-async function saveLogbook() {
-  await runSave('Bitácora actualizada', `/student/activities/${activityId}/logbook`, logbook);
+function openLogbookStep(index: number) {
+  currentLogbookStep.value = index;
+  message.value = '';
+  error.value = '';
+}
+
+async function saveLogbookProgress(success: string) {
+  savingLogbook.value = true;
+  try {
+    return (
+      (await runSave(success, `/student/activities/${activityId}/logbook`, {
+        initialIdeas: logbook.initialIdeas,
+        prompts: logbook.prompts,
+        validationsAndDecisions: logbook.validationsAndDecisions,
+        finalReflection: logbook.finalReflection,
+      })) !== null
+    );
+  } finally {
+    savingLogbook.value = false;
+  }
+}
+
+async function submitLogbookStep() {
+  const saved = await saveLogbookProgress(
+    isLastLogbookStep.value ? 'Bitácora actualizada' : 'Paso guardado correctamente',
+  );
+  if (saved && !isLastLogbookStep.value) currentLogbookStep.value += 1;
+}
+
+async function saveWithoutAdvancing() {
+  await saveLogbookProgress('Progreso de la bitácora guardado');
 }
 
 function selectFile(event: Event) {
@@ -120,13 +208,104 @@ onMounted(load);
       <p v-if="message" class="alert success">{{ message }}</p>
       <p v-if="error" class="alert error">{{ error }}</p>
 
-      <form v-if="tab === 'logbook'" class="panel form-stack" @submit.prevent="saveLogbook">
-        <div><h2>Bitácora del proceso</h2><p class="muted">Puedes regresar y actualizarla mientras desarrollas la actividad.</p></div>
-        <label>Ideas iniciales<textarea v-model="logbook.initialIdeas" rows="4" maxlength="10000" /></label>
-        <label>Prompts utilizados<textarea v-model="logbook.prompts" rows="5" maxlength="20000" /></label>
-        <label>Validaciones y decisiones<textarea v-model="logbook.validationsAndDecisions" rows="5" maxlength="20000" /></label>
-        <label>Reflexión final<textarea v-model="logbook.finalReflection" rows="5" maxlength="10000" /></label>
-        <button class="button primary">Guardar bitácora</button>
+      <form v-if="tab === 'logbook'" class="panel logbook-wizard" @submit.prevent="submitLogbookStep">
+        <div class="logbook-heading">
+          <div>
+            <span class="eyebrow">Proceso guiado</span>
+            <h2>Bitácora del proceso</h2>
+            <p class="muted">Avanza paso a paso. Puedes regresar y actualizar cualquier sección.</p>
+          </div>
+          <span class="logbook-progress-label">
+            {{ completedLogbookStepCount }} de {{ logbookSteps.length }} con contenido
+          </span>
+        </div>
+
+        <div
+          class="logbook-progress"
+          role="progressbar"
+          :aria-valuenow="currentLogbookStep + 1"
+          aria-valuemin="1"
+          :aria-valuemax="logbookSteps.length"
+          :aria-label="`Paso ${currentLogbookStep + 1} de ${logbookSteps.length}`"
+        >
+          <span :style="{ width: `${((currentLogbookStep + 1) / logbookSteps.length) * 100}%` }" />
+        </div>
+
+        <ol class="logbook-steps" aria-label="Pasos de la bitácora">
+          <li v-for="(step, index) in logbookSteps" :key="step.key">
+            <button
+              type="button"
+              class="logbook-step-button"
+              :class="{
+                active: currentLogbookStep === index,
+                completed: completedLogbookSteps[index],
+              }"
+              :aria-current="currentLogbookStep === index ? 'step' : undefined"
+              @click="openLogbookStep(index)"
+            >
+              <span class="logbook-step-number">
+                {{ completedLogbookSteps[index] ? '✓' : index + 1 }}
+              </span>
+              <span>
+                <small>Paso {{ index + 1 }}</small>
+                <strong>{{ step.shortTitle }}</strong>
+              </span>
+            </button>
+          </li>
+        </ol>
+
+        <section class="logbook-step-content">
+          <span class="eyebrow">Paso {{ currentLogbookStep + 1 }} de {{ logbookSteps.length }}</span>
+          <h3>{{ activeLogbookStep.title }}</h3>
+          <p class="muted">{{ activeLogbookStep.description }}</p>
+          <label>
+            Tu registro
+            <textarea
+              :key="activeLogbookStep.key"
+              v-model="logbook[activeLogbookStep.key]"
+              rows="9"
+              :maxlength="activeLogbookStep.maxLength"
+              :placeholder="activeLogbookStep.placeholder"
+              autofocus
+            />
+            <small class="character-count">
+              {{ logbook[activeLogbookStep.key].length.toLocaleString() }} /
+              {{ activeLogbookStep.maxLength.toLocaleString() }} caracteres
+            </small>
+          </label>
+        </section>
+
+        <div class="logbook-actions">
+          <button
+            v-if="currentLogbookStep > 0"
+            class="button secondary"
+            type="button"
+            :disabled="savingLogbook"
+            @click="openLogbookStep(currentLogbookStep - 1)"
+          >
+            ← Anterior
+          </button>
+          <span v-else />
+          <div>
+            <button
+              class="button secondary"
+              type="button"
+              :disabled="savingLogbook"
+              @click="saveWithoutAdvancing"
+            >
+              Guardar progreso
+            </button>
+            <button class="button primary" :disabled="savingLogbook">
+              {{
+                savingLogbook
+                  ? 'Guardando…'
+                  : isLastLogbookStep
+                    ? 'Guardar bitácora'
+                    : 'Guardar y continuar →'
+              }}
+            </button>
+          </div>
+        </div>
       </form>
 
       <form v-else class="panel form-stack" @submit.prevent="submitEvidence">

@@ -1,4 +1,13 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsEmail,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateClassDto {
   @IsString()
@@ -25,4 +34,17 @@ export class CreateClassDto {
 export class EnrollStudentDto {
   @IsEmail()
   email: string;
+}
+
+export class EnrollStudentsDto {
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value)
+      ? value.map((email) => (typeof email === 'string' ? email.trim().toLowerCase() : email))
+      : value,
+  )
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsEmail({}, { each: true })
+  emails: string[];
 }

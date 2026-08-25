@@ -31,6 +31,10 @@ export class TeacherService {
     return this.classesService.enrollStudent(teacherId, classId, email);
   }
 
+  enrollStudents(teacherId: number, classId: number, emails: string[]) {
+    return this.classesService.enrollStudents(teacherId, classId, emails);
+  }
+
   listEnrollments(teacherId: number, classId: number) {
     return this.classesService.listEnrollments(teacherId, classId);
   }

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AcademicClass } from '../entities/class.entity';
 import { Enrollment } from '../entities/enrollment.entity';
 import { User, UserRole } from '../entities/user.entity';
@@ -54,6 +54,56 @@ export class ClassesService {
     enrollment.active = true;
     await this.enrollments.save(enrollment);
     return this.enrollmentResponse(enrollment);
+  }
+
+  async enrollStudents(teacherId: number, classId: number, emails: string[]) {
+    const academicClass = await this.ownedClass(teacherId, classId);
+    const normalizedEmails = [
+      ...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
+    ];
+    const students = await this.users.find({
+      where: {
+        email: In(normalizedEmails),
+        role: UserRole.STUDENT,
+        active: true,
+      },
+    });
+    const studentsByEmail = new Map(students.map((student) => [student.email, student]));
+    const existingEnrollments = students.length
+      ? await this.enrollments.find({
+          where: {
+            academicClass: { id: classId },
+            student: { id: In(students.map((student) => student.id)) },
+          },
+        })
+      : [];
+    const enrollmentsByStudent = new Map(
+      existingEnrollments.map((enrollment) => [enrollment.student.id, enrollment]),
+    );
+    const enrollmentsToSave: Enrollment[] = [];
+    let enrolledCount = 0;
+    let alreadyEnrolledCount = 0;
+
+    for (const student of students) {
+      const existing = enrollmentsByStudent.get(student.id);
+      if (existing?.active) {
+        alreadyEnrolledCount += 1;
+        continue;
+      }
+      const enrollment = existing ?? this.enrollments.create({ student, academicClass });
+      enrollment.active = true;
+      enrollmentsToSave.push(enrollment);
+      enrolledCount += 1;
+    }
+
+    if (enrollmentsToSave.length) await this.enrollments.save(enrollmentsToSave);
+
+    return {
+      processedCount: normalizedEmails.length,
+      enrolledCount,
+      alreadyEnrolledCount,
+      notFoundEmails: normalizedEmails.filter((email) => !studentsByEmail.has(email)),
+    };
   }
 
   async listEnrollments(teacherId: number, classId: number) {

@@ -231,6 +231,85 @@ describe('TeachTrace API (integración)', () => {
     expect(Number(blocked.response.headers.get('retry-after'))).toBeGreaterThan(0);
   });
 
+  it('matricula estudiantes en lote con deduplicación, reporte y control de acceso', async () => {
+    const users = dataSource.getRepository(User);
+    await users.save(
+      users.create({
+        email: 'estudiante.lote@unah.edu.hn',
+        name: 'Estudiante de lote',
+        passwordHash: 'no-utilizada-en-esta-prueba',
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const endpoint = `/api/teacher/classes/${classId}/enrollments/bulk`;
+    const imported = await request(endpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        emails: [
+          ' ESTUDIANTE.LOTE@UNAH.EDU.HN ',
+          'estudiante.lote@unah.edu.hn',
+          'estudiante@unah.edu.hn',
+          'cuenta.inexistente@unah.edu.hn',
+        ],
+      }),
+    });
+
+    expect(imported.response.status).toBe(201);
+    expect(imported.body).toEqual({
+      processedCount: 3,
+      enrolledCount: 1,
+      alreadyEnrolledCount: 1,
+      notFoundEmails: ['cuenta.inexistente@unah.edu.hn'],
+    });
+
+    const listed = await request('/api/teacher/classes', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const updatedClass = (listed.body as Array<{
+      id: number;
+      students: Array<{ email: string }>;
+    }>).find((academicClass) => academicClass.id === classId);
+    expect(updatedClass?.students).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ email: 'estudiante.lote@unah.edu.hn' }),
+      ]),
+    );
+
+    for (const emails of [[], Array.from({ length: 501 }, (_, index) => `lote${index}@unah.edu.hn`)]) {
+      const invalid = await request(endpoint, {
+        method: 'POST',
+        headers: {
+          ...sessionHeaders(teacher.sessionCookie),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ emails }),
+      });
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const studentAttempt = await request(endpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ emails: ['estudiante.lote@unah.edu.hn'] }),
+    });
+    expect(studentAttempt.response.status).toBe(403);
+
+    const anonymousAttempt = await request(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: ['estudiante.lote@unah.edu.hn'] }),
+    });
+    expect(anonymousAttempt.response.status).toBe(401);
+  });
+
   it('asocia resultados de aprendizaje con validación, persistencia y permisos', async () => {
     const endpoint = `/api/teacher/activities/${activityId}/learning-outcomes`;
     const update = await request(endpoint, {

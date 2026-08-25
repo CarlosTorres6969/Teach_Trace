@@ -15,7 +15,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { CreateClassDto, EnrollStudentDto } from '../classes/classes.dto';
+import { CreateClassDto, EnrollStudentDto, EnrollStudentsDto } from '../classes/classes.dto';
 import { User, UserRole } from '../entities/user.entity';
 import { AssociateRubricDto, CreateRubricDto } from '../rubrics/rubrics.dto';
 import { SubmissionsService } from '../submissions/submissions.service';
@@ -55,6 +55,15 @@ export class TeacherController {
     @Body() input: EnrollStudentDto,
   ) {
     return this.teacherService.enrollStudent(user.id, classId, input.email);
+  }
+
+  @Post('classes/:classId/enrollments/bulk')
+  enrollStudents(
+    @CurrentUser() user: User,
+    @Param('classId', ParseIntPipe) classId: number,
+    @Body() input: EnrollStudentsDto,
+  ) {
+    return this.teacherService.enrollStudents(user.id, classId, input.emails);
   }
 
   @Get('activities')
