@@ -5,7 +5,6 @@ import { api } from '../api';
 
 const route = useRoute();
 const activityId = Number(route.params.id);
-const tab = ref<'logbook' | 'submission'>('logbook');
 const title = ref('Actividad');
 const loading = ref(true);
 const message = ref('');
@@ -54,18 +53,7 @@ const logbookSteps: Array<{
     maxLength: 10000,
   },
 ];
-const currentLogbookStep = ref(0);
-const savingLogbook = ref(false);
-const activeLogbookStep = computed(() => logbookSteps[currentLogbookStep.value]);
-const completedLogbookSteps = computed(() =>
-  logbookSteps.map((step) => logbook[step.key].trim().length > 0),
-);
-const completedLogbookStepCount = computed(
-  () => completedLogbookSteps.value.filter(Boolean).length,
-);
-const isLastLogbookStep = computed(
-  () => currentLogbookStep.value === logbookSteps.length - 1,
-);
+
 const declaration = reactive({ toolName: '', usageLevel: 1, purpose: '', promptSummary: '' });
 const submission = reactive({
   status: 'not_submitted',
@@ -77,6 +65,20 @@ const submission = reactive({
   manualReviewRequired: false,
 });
 const selectedFile = ref<File | null>(null);
+
+const totalSteps = logbookSteps.length + 1;
+const currentStep = ref(0);
+const savingLogbook = ref(false);
+const submittingEvidence = ref(false);
+const isSubmissionStep = computed(() => currentStep.value === logbookSteps.length);
+const activeStep = computed(() => logbookSteps[currentStep.value]);
+
+const stepCompletion = computed<boolean[]>(() => [
+  ...logbookSteps.map((step) => logbook[step.key].trim().length > 0),
+  submission.status !== 'not_submitted',
+]);
+const completedStepCount = computed(() => stepCompletion.value.filter(Boolean).length);
+const isLastStep = computed(() => currentStep.value === totalSteps - 1);
 
 const statusText = computed(() => ({
   not_submitted: 'Sin entregar', submitted: 'Entregado', under_review: 'En revisión', evaluated: 'Evaluado',
@@ -105,8 +107,8 @@ async function load() {
   }
 }
 
-function openLogbookStep(index: number) {
-  currentLogbookStep.value = index;
+function openStep(index: number) {
+  currentStep.value = index;
   message.value = '';
   error.value = '';
 }
@@ -128,10 +130,8 @@ async function saveLogbookProgress(success: string) {
 }
 
 async function submitLogbookStep() {
-  const saved = await saveLogbookProgress(
-    isLastLogbookStep.value ? 'Bitácora actualizada' : 'Paso guardado correctamente',
-  );
-  if (saved && !isLastLogbookStep.value) currentLogbookStep.value += 1;
+  const saved = await saveLogbookProgress('Paso guardado correctamente');
+  if (saved && !isLastStep.value) currentStep.value += 1;
 }
 
 async function saveWithoutAdvancing() {
@@ -158,6 +158,7 @@ async function submitEvidence() {
   }
   message.value = '';
   error.value = '';
+  submittingEvidence.value = true;
   const form = new FormData();
   form.set('productText', submission.productText);
   form.set('productUrl', submission.productUrl);
@@ -173,10 +174,20 @@ async function submitEvidence() {
     );
     Object.assign(submission, result);
     selectedFile.value = null;
-    message.value = 'Entrega y declaración de IA guardadas correctamente';
+    message.value = '¡Entrega completada! Producto y declaración de IA guardados correctamente.';
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No fue posible guardar la entrega';
+  } finally {
+    submittingEvidence.value = false;
   }
+}
+
+async function onWizardSubmit() {
+  if (isSubmissionStep.value) {
+    await submitEvidence();
+    return;
+  }
+  await submitLogbookStep();
 }
 
 async function runSave<T = unknown>(success: string, path: string, data: object): Promise<T | null> {
@@ -201,93 +212,133 @@ onMounted(load);
     <section class="page-heading compact"><div><span class="eyebrow">Actividad</span><h1>{{ title }}</h1></div></section>
     <p v-if="loading" class="muted">Cargando…</p>
     <template v-else>
-      <nav class="tabs" aria-label="Secciones de la actividad">
-        <button :class="{ active: tab === 'logbook' }" @click="tab = 'logbook'">Bitácora</button>
-        <button :class="{ active: tab === 'submission' }" @click="tab = 'submission'">Entrega y declaración de IA</button>
-      </nav>
       <p v-if="message" class="alert success">{{ message }}</p>
       <p v-if="error" class="alert error">{{ error }}</p>
 
-      <form v-if="tab === 'logbook'" class="panel logbook-wizard" @submit.prevent="submitLogbookStep">
+      <form class="panel logbook-wizard" @submit.prevent="onWizardSubmit">
         <div class="logbook-heading">
           <div>
             <span class="eyebrow">Proceso guiado</span>
-            <h2>Bitácora del proceso</h2>
-            <p class="muted">Avanza paso a paso. Puedes regresar y actualizar cualquier sección.</p>
+            <h2>Bitácora y entrega</h2>
+            <p class="muted">Un solo proceso paso a paso: registra tu bitácora y finaliza con tu entrega.</p>
           </div>
           <span class="logbook-progress-label">
-            {{ completedLogbookStepCount }} de {{ logbookSteps.length }} con contenido
+            {{ completedStepCount }} de {{ totalSteps }} pasos completados
           </span>
         </div>
 
         <div
           class="logbook-progress"
           role="progressbar"
-          :aria-valuenow="currentLogbookStep + 1"
+          :aria-valuenow="currentStep + 1"
           aria-valuemin="1"
-          :aria-valuemax="logbookSteps.length"
-          :aria-label="`Paso ${currentLogbookStep + 1} de ${logbookSteps.length}`"
+          :aria-valuemax="totalSteps"
+          :aria-label="`Paso ${currentStep + 1} de ${totalSteps}`"
         >
-          <span :style="{ width: `${((currentLogbookStep + 1) / logbookSteps.length) * 100}%` }" />
+          <span :style="{ width: `${((currentStep + 1) / totalSteps) * 100}%` }" />
         </div>
 
-        <ol class="logbook-steps" aria-label="Pasos de la bitácora">
+        <ol class="logbook-steps" aria-label="Pasos del proceso de entrega">
           <li v-for="(step, index) in logbookSteps" :key="step.key">
             <button
               type="button"
               class="logbook-step-button"
-              :class="{
-                active: currentLogbookStep === index,
-                completed: completedLogbookSteps[index],
-              }"
-              :aria-current="currentLogbookStep === index ? 'step' : undefined"
-              @click="openLogbookStep(index)"
+              :class="{ active: currentStep === index, completed: stepCompletion[index] }"
+              :aria-current="currentStep === index ? 'step' : undefined"
+              @click="openStep(index)"
             >
-              <span class="logbook-step-number">
-                {{ completedLogbookSteps[index] ? '✓' : index + 1 }}
-              </span>
+              <span class="logbook-step-number">{{ stepCompletion[index] ? '✓' : index + 1 }}</span>
               <span>
                 <small>Paso {{ index + 1 }}</small>
                 <strong>{{ step.shortTitle }}</strong>
               </span>
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="logbook-step-button submission-step-button"
+              :class="{ active: isSubmissionStep, completed: stepCompletion[totalSteps - 1] }"
+              :aria-current="isSubmissionStep ? 'step' : undefined"
+              @click="openStep(logbookSteps.length)"
+            >
+              <span class="logbook-step-number">
+                {{ stepCompletion[totalSteps - 1] ? '✓' : totalSteps }}
+              </span>
+              <span>
+                <small>Paso {{ totalSteps }}</small>
+                <strong>Entrega</strong>
+              </span>
+            </button>
+          </li>
         </ol>
 
-        <section class="logbook-step-content">
-          <span class="eyebrow">Paso {{ currentLogbookStep + 1 }} de {{ logbookSteps.length }}</span>
-          <h3>{{ activeLogbookStep.title }}</h3>
-          <p class="muted">{{ activeLogbookStep.description }}</p>
+        <section v-if="!isSubmissionStep" class="logbook-step-content">
+          <span class="eyebrow">Paso {{ currentStep + 1 }} de {{ totalSteps }}</span>
+          <h3>{{ activeStep.title }}</h3>
+          <p class="muted">{{ activeStep.description }}</p>
           <label>
             Tu registro
             <textarea
-              :key="activeLogbookStep.key"
-              v-model="logbook[activeLogbookStep.key]"
+              :key="activeStep.key"
+              v-model="logbook[activeStep.key]"
               rows="9"
-              :maxlength="activeLogbookStep.maxLength"
-              :placeholder="activeLogbookStep.placeholder"
+              :maxlength="activeStep.maxLength"
+              :placeholder="activeStep.placeholder"
               autofocus
             />
             <small class="character-count">
-              {{ logbook[activeLogbookStep.key].length.toLocaleString() }} /
-              {{ activeLogbookStep.maxLength.toLocaleString() }} caracteres
+              {{ logbook[activeStep.key].length.toLocaleString() }} /
+              {{ activeStep.maxLength.toLocaleString() }} caracteres
             </small>
           </label>
         </section>
 
+        <section v-else class="logbook-step-content">
+          <div class="card-topline">
+            <div>
+              <span class="eyebrow">Paso {{ totalSteps }} de {{ totalSteps }}</span>
+              <h3>Producto final y declaración de IA</h3>
+            </div>
+            <span class="status" :data-status="submission.status">{{ statusText }}</span>
+          </div>
+          <p class="muted">Cierra tu proceso entregando el producto académico junto a tu declaración de uso de IA.</p>
+          <div class="form-stack submission-fields">
+            <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" /></label>
+            <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" /></label>
+            <label>Archivo complementario
+              <input type="file" @change="selectFile" />
+              <small class="muted">Tamaño máximo: 10 MB.</small>
+            </label>
+            <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
+            <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
+            <h3>Declaración de uso de IA</h3>
+            <label>Herramienta utilizada<input v-model="declaration.toolName" maxlength="120" required /></label>
+            <label>Nivel declarado
+              <select v-model.number="declaration.usageLevel" required>
+                <option :value="1">Nivel 1 — apoyo mínimo</option><option :value="2">Nivel 2 — apoyo moderado</option><option :value="3">Nivel 3 — apoyo significativo</option>
+              </select>
+            </label>
+            <label>Propósito<textarea v-model="declaration.purpose" rows="3" maxlength="5000" required /></label>
+            <label>Resumen de prompts<textarea v-model="declaration.promptSummary" rows="4" maxlength="10000" required /></label>
+            <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
+          </div>
+        </section>
+
         <div class="logbook-actions">
           <button
-            v-if="currentLogbookStep > 0"
+            v-if="currentStep > 0"
             class="button secondary"
             type="button"
-            :disabled="savingLogbook"
-            @click="openLogbookStep(currentLogbookStep - 1)"
+            :disabled="savingLogbook || submittingEvidence"
+            @click="openStep(currentStep - 1)"
           >
             ← Anterior
           </button>
           <span v-else />
           <div>
             <button
+              v-if="!isSubmissionStep"
               class="button secondary"
               type="button"
               :disabled="savingLogbook"
@@ -295,42 +346,26 @@ onMounted(load);
             >
               Guardar progreso
             </button>
-            <button class="button primary" :disabled="savingLogbook">
+            <button class="button primary" :disabled="savingLogbook || submittingEvidence">
               {{
-                savingLogbook
-                  ? 'Guardando…'
-                  : isLastLogbookStep
-                    ? 'Guardar bitácora'
-                    : 'Guardar y continuar →'
+                isSubmissionStep
+                  ? (submittingEvidence
+                      ? 'Enviando…'
+                      : submission.status === 'not_submitted'
+                        ? 'Realizar entrega'
+                        : 'Actualizar entrega')
+                  : (savingLogbook ? 'Guardando…' : 'Guardar y continuar →')
               }}
             </button>
           </div>
         </div>
       </form>
-
-      <form v-else class="panel form-stack" @submit.prevent="submitEvidence">
-        <div class="card-topline"><div><h2>Producto final y declaración de IA</h2><p class="muted">Ambos se guardan juntos como una sola entrega trazable.</p></div><span class="status" :data-status="submission.status">{{ statusText }}</span></div>
-        <h3>Producto académico</h3>
-        <label>Contenido del producto<textarea v-model="submission.productText" rows="10" maxlength="50000" /></label>
-        <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" /></label>
-        <label>Archivo complementario
-          <input type="file" @change="selectFile" />
-          <small class="muted">Tamaño máximo: 10 MB.</small>
-        </label>
-        <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
-        <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
-        <h3>Declaración de uso de IA</h3>
-        <label>Herramienta utilizada<input v-model="declaration.toolName" maxlength="120" required /></label>
-        <label>Nivel declarado
-          <select v-model.number="declaration.usageLevel" required>
-            <option :value="1">Nivel 1 — apoyo mínimo</option><option :value="2">Nivel 2 — apoyo moderado</option><option :value="3">Nivel 3 — apoyo significativo</option>
-          </select>
-        </label>
-        <label>Propósito<textarea v-model="declaration.purpose" rows="4" maxlength="5000" required /></label>
-        <label>Resumen de prompts<textarea v-model="declaration.promptSummary" rows="5" maxlength="10000" required /></label>
-        <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
-        <button class="button primary">{{ submission.status === 'not_submitted' ? 'Realizar entrega' : 'Actualizar entrega' }}</button>
-      </form>
     </template>
   </main>
 </template>
+
+<style scoped>
+.submission-step-button strong { color: inherit; }
+.submission-fields h3 { margin-top: .5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.logbook-step-content .form-stack { margin-top: 1rem; }
+</style>
