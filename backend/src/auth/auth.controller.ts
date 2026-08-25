@@ -18,46 +18,33 @@ import { CurrentUser } from './current-user.decorator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto } from './login.dto';
-import { LoginAttemptService } from './login-attempt.service';
 import { SESSION_COOKIE_NAME, sessionCookieOptions } from './security.config';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly loginAttempts: LoginAttemptService,
     private readonly config: ConfigService,
   ) {}
 
   @Post('login')
   async login(
     @Body() input: LoginDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const retryAfterSeconds = this.loginAttempts.retryAfterSeconds(input.email);
-    if (retryAfterSeconds > 0) {
-      response.setHeader('Retry-After', retryAfterSeconds.toString());
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Demasiados intentos de inicio de sesión. Intente nuevamente más tarde.',
-          retryAfterSeconds,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
+    const ip = request.ip || request.socket.remoteAddress || 'unknown';
     try {
-      const { accessToken, ...session } = await this.authService.login(input);
-      this.loginAttempts.reset(input.email);
+      const { accessToken, ...session } = await this.authService.login(input, ip);
       response.cookie(SESSION_COOKIE_NAME, accessToken, {
         ...sessionCookieOptions(this.config),
         expires: session.expiresAt,
       });
       return session;
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        this.loginAttempts.recordFailure(input.email);
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) {
+        const retryAfter = (error.getResponse() as any).retryAfterSeconds;
+        response.setHeader('Retry-After', retryAfter.toString());
       }
       throw error;
     }

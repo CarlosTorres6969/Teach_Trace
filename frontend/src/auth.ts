@@ -3,6 +3,25 @@ import { API_URL } from './api-url';
 import type { User } from './types';
 
 const AUTH_EVENT_KEY = 'teachtrace_auth_event';
+const BROADCAST_CHANNEL_NAME = 'teachtrace-auth';
+
+let broadcastChannel: BroadcastChannel | null = null;
+
+function getBroadcastChannel(): BroadcastChannel {
+  if (!broadcastChannel) {
+    broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+    broadcastChannel.onmessage = (event) => {
+      const message = event.data as { type?: string; timestamp?: number };
+      if (message.type === 'logout') {
+        clearSession(false);
+        window.location.href = '/login';
+      } else if (message.type === 'login') {
+        void restoreSession(true);
+      }
+    };
+  }
+  return broadcastChannel;
+}
 
 export const auth = reactive<{ user: User | null; initialized: boolean }>({
   user: null,
@@ -46,7 +65,14 @@ export async function restoreSession(force = false) {
 }
 
 function broadcastAuthEvent(type: 'login' | 'logout') {
-  localStorage.setItem(AUTH_EVENT_KEY, JSON.stringify({ type, at: Date.now() }));
+  const message = { type, timestamp: Date.now() };
+  
+  try {
+    const channel = getBroadcastChannel();
+    channel.postMessage(message);
+  } catch {
+    localStorage.setItem(AUTH_EVENT_KEY, JSON.stringify(message));
+  }
 }
 
 localStorage.removeItem('teachtrace_token');
@@ -56,9 +82,20 @@ window.addEventListener('storage', (event) => {
   if (event.key !== AUTH_EVENT_KEY || !event.newValue) return;
   try {
     const message = JSON.parse(event.newValue) as { type?: string };
-    if (message.type === 'logout') clearSession(false);
+    if (message.type === 'logout') {
+      clearSession(false);
+      window.location.href = '/login';
+    }
     if (message.type === 'login') void restoreSession(true);
   } catch {
-    // Los eventos locales no válidos se ignoran sin afectar la sesión actual.
   }
 });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    if (broadcastChannel) {
+      broadcastChannel.close();
+      broadcastChannel = null;
+    }
+  });
+}

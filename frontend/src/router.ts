@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { auth, restoreSession } from './auth';
+import { auth, restoreSession, clearSession } from './auth';
 import LoginView from './views/LoginView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
 import StudentActivityView from './views/StudentActivityView.vue';
@@ -23,15 +23,34 @@ export const router = createRouter({
   ],
 });
 
+let isRedirecting = false;
+
 router.beforeEach(async (to) => {
+  if (isRedirecting) return true;
+  
   await restoreSession();
+  
   if (to.meta.public) {
     if (auth.user) return auth.user.role === 'student' ? '/student' : '/teacher';
     return true;
   }
-  if (!auth.user) return '/login';
+  
+  if (!auth.user) {
+    isRedirecting = true;
+    return '/login';
+  }
+  
   if (to.meta.role && to.meta.role !== auth.user.role) {
     return auth.user.role === 'student' ? '/student' : '/teacher';
   }
+  
   return true;
 });
+
+export function handleUnauthorized(): void {
+  if (!isRedirecting) {
+    isRedirecting = true;
+    clearSession(false);
+    router.push('/login');
+  }
+}

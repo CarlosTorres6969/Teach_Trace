@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, scrypt as nodeScrypt, timingSafeEqual } from 'crypto';
@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
 import { User } from '../entities/user.entity';
 import { LoginDto } from './login.dto';
+import { LoginAttemptService } from './login-attempt.service';
 
 const scrypt = promisify(nodeScrypt);
 const SESSION_HOURS = 8;
@@ -17,14 +18,28 @@ export class AuthService {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(AuthSession) private readonly sessions: Repository<AuthSession>,
     private readonly jwtService: JwtService,
+    private readonly loginAttempts: LoginAttemptService,
   ) {}
 
-  async login(input: LoginDto) {
+  async login(input: LoginDto, ip: string) {
     const email = input.email.trim().toLowerCase();
+    const timestamp = Date.now();
+    
+    const attemptCheck = this.loginAttempts.checkAttempts(email, timestamp);
+    if (!attemptCheck.allowed) {
+      throw new HttpException(
+        { message: 'Demasiados intentos fallidos. Intente más tarde.', retryAfterSeconds: attemptCheck.retryAfter },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const user = await this.users.findOne({ where: { email, active: true } });
     if (!user || !(await this.verifyPassword(input.password, user.passwordHash))) {
+      this.loginAttempts.recordFailure(email, timestamp);
       throw new UnauthorizedException('Correo o contraseña incorrectos');
     }
+
+    this.loginAttempts.recordSuccess(email);
 
     const expiresAt = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000);
     const session = await this.sessions.save(this.sessions.create({ user, expiresAt, revokedAt: null }));
