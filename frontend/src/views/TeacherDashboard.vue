@@ -389,7 +389,7 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <form class="panel form-stack" @submit.prevent="createRubric">
-        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4. Los nombres y dimensiones no pueden repetirse.</p></div>
+        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4. Los nombres, dimensiones y descriptores de cada nivel no pueden repetirse.</p></div>
         <label>Nombre de la rúbrica<input v-model.trim="rubricName" required maxlength="160" /></label>
         <fieldset v-for="(criterion, index) in criteria" :key="index" class="criterion-box">
           <legend>Criterio {{ index + 1 }}</legend>

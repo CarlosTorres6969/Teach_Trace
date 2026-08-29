@@ -67,18 +67,61 @@ describe('CreateRubricDto', () => {
     expect(await validate(plainToInstance(CreateRubricDto, input))).not.toHaveLength(0);
   });
 
-  it('rechaza descriptores faltantes o con más de 1000 caracteres', async () => {
-    const missingDescriptor = cloneInput();
-    Reflect.deleteProperty(missingDescriptor.criteria[0].descriptors, 'level4');
-    await expect(
-      validate(plainToInstance(CreateRubricDto, missingDescriptor)),
-    ).resolves.not.toHaveLength(0);
+  it.each(['level1', 'level2', 'level3', 'level4'] as const)(
+    'rechaza la ausencia individual de %s',
+    async (level) => {
+      const input = cloneInput();
+      Reflect.deleteProperty(input.criteria[0].descriptors, level);
 
-    const longDescriptor = cloneInput();
-    longDescriptor.criteria[0].descriptors.level1 = 'a'.repeat(1001);
+      expect(await validate(plainToInstance(CreateRubricDto, input))).not.toHaveLength(0);
+    },
+  );
+
+  it.each(['', '   '])('rechaza un descriptor vacío o con espacios: %j', async (value) => {
+    const input = cloneInput();
+    input.criteria[0].descriptors.level1 = value;
+
+    expect(await validate(plainToInstance(CreateRubricDto, input))).not.toHaveLength(0);
+  });
+
+  it.each([123, null, {}, []])('rechaza un descriptor con tipo incorrecto: %j', async (value) => {
+    const input = cloneInput();
+    const descriptors = input.criteria[0].descriptors as unknown as Record<string, unknown>;
+    descriptors.level1 = value;
+
+    expect(await validate(plainToInstance(CreateRubricDto, input))).not.toHaveLength(0);
+  });
+
+  it('acepta 1000 caracteres y rechaza 1001 en un descriptor', async () => {
+    const maximum = cloneInput();
+    maximum.criteria[0].descriptors.level1 = 'a'.repeat(1000);
     await expect(
-      validate(plainToInstance(CreateRubricDto, longDescriptor)),
+      validate(plainToInstance(CreateRubricDto, maximum)),
+    ).resolves.toHaveLength(0);
+
+    const tooLong = cloneInput();
+    tooLong.criteria[0].descriptors.level1 = 'a'.repeat(1001);
+    await expect(
+      validate(plainToInstance(CreateRubricDto, tooLong)),
     ).resolves.not.toHaveLength(0);
+  });
+
+  it('rechaza un nivel adicional no permitido', async () => {
+    const input = cloneInput();
+    const descriptors = input.criteria[0].descriptors as unknown as Record<string, unknown>;
+    descriptors.level5 = 'Nivel adicional';
+    const dto = plainToInstance(CreateRubricDto, input);
+
+    expect(
+      await validate(dto, { whitelist: true, forbidNonWhitelisted: true }),
+    ).not.toHaveLength(0);
+  });
+
+  it('rechaza descriptores duplicados ignorando espacios y mayúsculas', async () => {
+    const input = cloneInput();
+    input.criteria[0].descriptors.level2 = '  DESCRIPTOR 1  ';
+
+    expect(await validate(plainToInstance(CreateRubricDto, input))).not.toHaveLength(0);
   });
 
   it('normaliza espacios en nombre, criterios, dimensiones y descriptores', async () => {

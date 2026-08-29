@@ -490,6 +490,13 @@ describe('TeachTrace API (integración)', () => {
     delete (missingDescriptor.criteria[0].descriptors as { level4?: string }).level4;
     const longDescriptor = { name: 'Descriptor extenso', criteria: criteria() };
     longDescriptor.criteria[0].descriptors.level1 = 'a'.repeat(1001);
+    const duplicateDescriptors = { name: 'Descriptores duplicados', criteria: criteria() };
+    duplicateDescriptors.criteria[0].descriptors.level2 = '  NIVEL INICIAL  ';
+    const incorrectDescriptorType = { name: 'Descriptor con tipo inválido', criteria: criteria() };
+    (incorrectDescriptorType.criteria[0].descriptors as unknown as Record<string, unknown>).level1 = 1;
+    const additionalLevel = { name: 'Nivel adicional', criteria: criteria() };
+    (additionalLevel.criteria[0].descriptors as unknown as Record<string, unknown>).level5 =
+      'Nivel no permitido';
 
     for (const invalidInput of [
       eightCriteria,
@@ -498,6 +505,9 @@ describe('TeachTrace API (integración)', () => {
       whitespaceOnly,
       missingDescriptor,
       longDescriptor,
+      duplicateDescriptors,
+      incorrectDescriptorType,
+      additionalLevel,
     ]) {
       expect((await create(invalidInput)).response.status).toBe(400);
     }
