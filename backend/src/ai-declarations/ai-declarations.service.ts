@@ -5,7 +5,10 @@ import { ActivitiesService } from '../activities/activities.service';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
-import { UpdateAiDeclarationDto } from './update-ai-declaration.dto';
+import {
+  normalizeAiDeclarationText,
+  UpdateAiDeclarationDto,
+} from './update-ai-declaration.dto';
 
 @Injectable()
 export class AiDeclarationsService {
@@ -33,9 +36,13 @@ export class AiDeclarationsService {
   }
 
   async update(student: User, activityId: number, input: UpdateAiDeclarationDto) {
-    const toolName = input.toolName.trim();
+    const toolName = normalizeAiDeclarationText(input.toolName);
     if (!toolName) {
       throw new BadRequestException('El nombre de la herramienta de IA es obligatorio');
+    }
+    const purpose = normalizeAiDeclarationText(input.purpose);
+    if (!purpose) {
+      throw new BadRequestException('El propósito del uso de IA es obligatorio');
     }
     const activity = await this.activitiesService.getForStudent(student.id, activityId);
     const submission = await this.submissions.findOne({
@@ -59,8 +66,8 @@ export class AiDeclarationsService {
     }
     declaration.toolName = toolName;
     declaration.usageLevel = input.usageLevel;
-    declaration.purpose = input.purpose.trim();
-    declaration.promptSummary = input.promptSummary.trim();
+    declaration.purpose = purpose;
+    declaration.promptSummary = normalizeAiDeclarationText(input.promptSummary);
     declaration.usageDiscrepancy =
       declaration.detectedUsageLevel !== null &&
       declaration.detectedUsageLevel !== declaration.usageLevel;

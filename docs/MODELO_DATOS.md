@@ -29,6 +29,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
   declaración y exige seleccionar explícitamente un entero entre 1 y 3 antes de crearla.
 - El nivel declarado y detectado de IA está restringido a 1–3 en la API y en SQLite.
+- El propósito declarado exige contenido real y admite hasta 5 000 caracteres. Los extremos se
+  recortan y los saltos de línea se normalizan a `LF`, tanto en JSON como en entregas multipart.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
 - Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la

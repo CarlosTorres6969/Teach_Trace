@@ -907,6 +907,136 @@ describe('TeachTrace API (integración)', () => {
     }
   });
 
+  it('valida y muestra un propósito normalizado de forma consistente', async () => {
+    const draftActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para propósito de IA',
+        classId,
+        dueDate: '2026-12-22',
+        activityType: 'Investigación',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(draftActivity.response.status).toBe(201);
+    const draftActivityId = (draftActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
+    const declaration = {
+      toolName: 'Claude',
+      usageLevel: 2,
+      promptSummary: 'Consultas para contrastar argumentos',
+    };
+    const updatePurpose = (cookie: string, purpose: unknown) =>
+      request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, purpose }),
+      });
+
+    const paragraphs = 'Primer párrafo del propósito.\n\nSegundo párrafo con contexto.';
+    const created = await updatePurpose(student.sessionCookie, `  ${paragraphs}  `);
+    expect(created.response.status).toBe(200);
+    expect(created.body).toMatchObject({ purpose: paragraphs });
+
+    const updated = await updatePurpose(
+      student.sessionCookie,
+      'Propósito actualizado durante el trabajo',
+    );
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toMatchObject({ purpose: 'Propósito actualizado durante el trabajo' });
+
+    const maximumPurpose = 'a'.repeat(5000);
+    const maximum = await updatePurpose(student.sessionCookie, maximumPurpose);
+    expect(maximum.response.status).toBe(200);
+    expect((maximum.body as { purpose: string }).purpose).toHaveLength(5000);
+
+    for (const purpose of [undefined, null, '', '   ', 42, 'a'.repeat(5001)]) {
+      const invalid = await updatePurpose(student.sessionCookie, purpose);
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const unchanged = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+    });
+    expect(unchanged.purpose).toBe(maximumPurpose);
+
+    expect((await updatePurpose(teacher.sessionCookie, paragraphs)).response.status).toBe(403);
+    expect((await updatePurpose('', paragraphs)).response.status).toBe(401);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'estudiante.sin.matricula.proposito@unah.edu.hn',
+        name: 'Estudiante sin matrícula para propósito',
+        passwordHash: await authService.hashPassword('SinMatricula123!'),
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const unenrolledLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'estudiante.sin.matricula.proposito@unah.edu.hn',
+        password: 'SinMatricula123!',
+      }),
+    });
+    const unenrolledCookie = readSessionCookie(unenrolledLogin.response);
+    expect((await updatePurpose(unenrolledCookie, paragraphs)).response.status).toBe(404);
+
+    const independentPurpose = 'Propósito guardado antes de la entrega';
+    const independent = await updatePurpose(student.sessionCookie, `  ${independentPurpose}  `);
+    expect(independent.response.status).toBe(200);
+    const declarationBeforeSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+    expect(declarationBeforeSubmission.purpose).toBe(independentPurpose);
+
+    const submittedPurpose = 'Apoyar la comparación de fuentes.\n\nDocumentar contraargumentos.';
+    const form = new FormData();
+    form.set('productText', 'Producto académico con propósito declarado');
+    form.set('productUrl', '');
+    form.set('toolName', declaration.toolName);
+    form.set('usageLevel', String(declaration.usageLevel));
+    form.set('purpose', `  ${submittedPurpose}  `);
+    form.set('promptSummary', declaration.promptSummary);
+    const submitted = await request(
+      `/api/student/activities/${draftActivityId}/submission`,
+      {
+        method: 'PUT',
+        headers: sessionHeaders(student.sessionCookie),
+        body: form,
+      },
+    );
+    expect(submitted.response.status).toBe(200);
+
+    const declarationAfterSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+    expect(declarationAfterSubmission.id).toBe(declarationBeforeSubmission.id);
+    expect(declarationAfterSubmission.purpose).toBe(submittedPurpose);
+
+    const submissions = await request(
+      `/api/teacher/activities/${draftActivityId}/submissions`,
+      { headers: sessionHeaders(teacher.sessionCookie) },
+    );
+    expect(submissions.response.status).toBe(200);
+    const teacherSubmissionId = (submissions.body as Array<{ id: number }>)[0].id;
+    const detail = await request(`/api/teacher/submissions/${teacherSubmissionId}`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(detail.response.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      aiDeclaration: { purpose: submittedPurpose },
+    });
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),

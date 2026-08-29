@@ -86,4 +86,39 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     const form = submissionCall?.[1]?.body as FormData;
     expect(form.get('usageLevel')).toBe('2');
   });
+
+  it('rechaza un propósito con espacios y conserva los párrafos del propósito válido', async () => {
+    const wrapper = mount(StudentActivityView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-step-button').trigger('click');
+
+    await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico');
+    await wrapper.get('input[placeholder^="Ej."]').setValue('ChatGPT');
+    await wrapper.get('select').setValue('2');
+    await wrapper.get('textarea[maxlength="10000"]').setValue('Comparar argumentos');
+    const purpose = wrapper.get('textarea[maxlength="5000"]');
+    expect(purpose.attributes('required')).toBeDefined();
+    expect(purpose.attributes('maxlength')).toBe('5000');
+    await purpose.setValue('   ');
+    apiMock.mockClear();
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Describe el propósito para el cual utilizaste IA.');
+    expect(apiMock).not.toHaveBeenCalled();
+
+    await purpose.setValue('  Primer párrafo.\n\nSegundo párrafo.  ');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const submissionCall = apiMock.mock.calls.find(([path]) =>
+      String(path).endsWith('/submission'),
+    );
+    const form = submissionCall?.[1]?.body as FormData;
+    expect(form.get('purpose')).toBe('Primer párrafo.\n\nSegundo párrafo.');
+  });
 });

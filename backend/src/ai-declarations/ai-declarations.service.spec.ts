@@ -81,6 +81,47 @@ describe('AiDeclarationsService', () => {
     expect(dto.toolName).toBe('Claude');
   });
 
+  it('acepta párrafos y conserva sus saltos de línea al normalizar el propósito', async () => {
+    const dto = plainToInstance(UpdateAiDeclarationDto, {
+      ...validInput,
+      purpose: '  Primer párrafo.\n\nSegundo párrafo.  ',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.purpose).toBe('Primer párrafo.\n\nSegundo párrafo.');
+  });
+
+  it('acepta exactamente 5 000 caracteres en el propósito', async () => {
+    const dto = plainToInstance(UpdateAiDeclarationDto, {
+      ...validInput,
+      purpose: `  ${'a'.repeat(5000)}  `,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.purpose).toHaveLength(5000);
+  });
+
+  it.each([undefined, null, '', '   ', 42, 'a'.repeat(5001)])(
+    'rechaza un propósito vacío, inválido o demasiado extenso: %p',
+    async (purpose) => {
+      const dto = plainToInstance(UpdateAiDeclarationDto, { ...validInput, purpose });
+
+      expect(await validate(dto)).not.toHaveLength(0);
+    },
+  );
+
+  it('aplica la misma validación del propósito a la entrega multipart', async () => {
+    const dto = plainToInstance(SubmitEvidenceDto, {
+      ...validInput,
+      usageLevel: '2',
+      purpose: '   ',
+      productText: 'Producto académico',
+      productUrl: '',
+    });
+
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
   it('marca discrepancia cuando el nivel detectado difiere del declarado', async () => {
     const declaration = {
       usageLevel: 3,
@@ -125,14 +166,14 @@ describe('AiDeclarationsService', () => {
     await service.update({ id: 4 } as never, 9, {
       ...validInput,
       toolName: '  Gemini  ',
-      purpose: '  Contrastar fuentes  ',
+      purpose: '  Contrastar fuentes.\n\nDocumentar decisiones.  ',
       promptSummary: '  Comparar argumentos  ',
     });
 
     expect(declarations.save).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: 'Gemini',
-        purpose: 'Contrastar fuentes',
+        purpose: 'Contrastar fuentes.\n\nDocumentar decisiones.',
         promptSummary: 'Comparar argumentos',
       }),
     );
