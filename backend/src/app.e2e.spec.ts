@@ -413,6 +413,99 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymousAttempt.response.status).toBe(401);
   });
 
+  it('crea y normaliza rúbricas válidas y rechaza estructuras inválidas o no autorizadas', async () => {
+    const endpoint = '/api/teacher/rubrics';
+    const criteria = () =>
+      Array.from({ length: 7 }, (_, index) => ({
+        name: `  Criterio QA ${index + 1}  `,
+        dimension: `  Dimensión QA ${index + 1}  `,
+        descriptors: {
+          level1: '  Nivel inicial  ',
+          level2: '  Nivel básico  ',
+          level3: '  Nivel competente  ',
+          level4: '  Nivel avanzado  ',
+        },
+      }));
+    const validInput = { name: '  Rúbrica de validación QA  ', criteria: criteria() };
+    const create = (body: unknown, cookie = teacher.sessionCookie) =>
+      request(endpoint, {
+        method: 'POST',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const created = await create(validInput);
+    expect(created.response.status).toBe(201);
+    expect(created.body).toEqual(expect.objectContaining({
+      name: 'Rúbrica de validación QA',
+      criteria: expect.arrayContaining([
+        {
+          name: 'Criterio QA 1',
+          dimension: 'Dimensión QA 1',
+          descriptors: {
+            level1: 'Nivel inicial',
+            level2: 'Nivel básico',
+            level3: 'Nivel competente',
+            level4: 'Nivel avanzado',
+          },
+        },
+      ]),
+    }));
+
+    const persisted = await request(endpoint, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const persistedRubric = (persisted.body as Array<{
+      id: number;
+      name: string;
+      criteria: Array<{ name: string; dimension: string }>;
+    }>).find((rubric) => rubric.id === (created.body as { id: number }).id);
+    expect(persistedRubric).toEqual(expect.objectContaining({
+      name: 'Rúbrica de validación QA',
+      criteria: expect.arrayContaining([
+        expect.objectContaining({ name: 'Criterio QA 1', dimension: 'Dimensión QA 1' }),
+      ]),
+    }));
+
+    const eightCriteria = { name: 'Ocho dimensiones', criteria: [...criteria(), {
+      name: 'Criterio adicional',
+      dimension: 'Dimensión adicional',
+      descriptors: {
+        level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
+      },
+    }] };
+    const duplicateDimension = { name: 'Dimensión duplicada', criteria: criteria() };
+    duplicateDimension.criteria[1].dimension = '  DIMENSIÓN QA 1  ';
+    const duplicateCriterion = { name: 'Criterio duplicado', criteria: criteria() };
+    duplicateCriterion.criteria[1].name = '  CRITERIO QA 1  ';
+    const whitespaceOnly = {
+      name: '   ',
+      criteria: Array.from({ length: 7 }, () => ({
+        name: '   ',
+        dimension: '   ',
+        descriptors: { level1: '   ', level2: '   ', level3: '   ', level4: '   ' },
+      })),
+    };
+    const missingDescriptor = { name: 'Descriptor faltante', criteria: criteria() };
+    delete (missingDescriptor.criteria[0].descriptors as { level4?: string }).level4;
+    const longDescriptor = { name: 'Descriptor extenso', criteria: criteria() };
+    longDescriptor.criteria[0].descriptors.level1 = 'a'.repeat(1001);
+
+    for (const invalidInput of [
+      eightCriteria,
+      duplicateDimension,
+      duplicateCriterion,
+      whitespaceOnly,
+      missingDescriptor,
+      longDescriptor,
+    ]) {
+      expect((await create(invalidInput)).response.status).toBe(400);
+    }
+
+    expect((await create(validInput, student.sessionCookie)).response.status).toBe(403);
+    expect((await create(validInput, '')).response.status).toBe(401);
+  });
+
   it('asocia, sustituye y protege la reutilización de rúbricas mediante el endpoint real', async () => {
     const criteria = (prefix: string) =>
       Array.from({ length: 7 }, (_, index) => ({

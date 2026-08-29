@@ -24,8 +24,18 @@ export class RubricsService {
   }
 
   create(teacher: User, input: CreateRubricDto) {
+    const criteria = input.criteria.map((criterion) => ({
+      name: criterion.name.trim(),
+      dimension: criterion.dimension.trim(),
+      descriptors: {
+        level1: criterion.descriptors.level1.trim(),
+        level2: criterion.descriptors.level2.trim(),
+        level3: criterion.descriptors.level3.trim(),
+        level4: criterion.descriptors.level4.trim(),
+      },
+    }));
     return this.rubrics.save(
-      this.rubrics.create({ name: input.name.trim(), criteria: input.criteria, teacher, activity: null }),
+      this.rubrics.create({ name: input.name.trim(), criteria, teacher, activity: null }),
     );
   }
 

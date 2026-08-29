@@ -389,17 +389,17 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <form class="panel form-stack" @submit.prevent="createRubric">
-        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4.</p></div>
-        <label>Nombre de la rúbrica<input v-model="rubricName" required maxlength="160" /></label>
+        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4. Los nombres y dimensiones no pueden repetirse.</p></div>
+        <label>Nombre de la rúbrica<input v-model.trim="rubricName" required maxlength="160" /></label>
         <fieldset v-for="(criterion, index) in criteria" :key="index" class="criterion-box">
           <legend>Criterio {{ index + 1 }}</legend>
           <div class="form-grid">
-            <label>Nombre<input v-model="criterion.name" required maxlength="120" /></label>
-            <label>Dimensión<input v-model="criterion.dimension" required maxlength="120" /></label>
-            <label>Nivel 1<textarea v-model="criterion.descriptors.level1" rows="2" required /></label>
-            <label>Nivel 2<textarea v-model="criterion.descriptors.level2" rows="2" required /></label>
-            <label>Nivel 3<textarea v-model="criterion.descriptors.level3" rows="2" required /></label>
-            <label>Nivel 4<textarea v-model="criterion.descriptors.level4" rows="2" required /></label>
+            <label>Nombre<input v-model.trim="criterion.name" required maxlength="120" /></label>
+            <label>Dimensión<input v-model.trim="criterion.dimension" required maxlength="120" /></label>
+            <label>Nivel 1<textarea v-model.trim="criterion.descriptors.level1" rows="2" required maxlength="1000" /></label>
+            <label>Nivel 2<textarea v-model.trim="criterion.descriptors.level2" rows="2" required maxlength="1000" /></label>
+            <label>Nivel 3<textarea v-model.trim="criterion.descriptors.level3" rows="2" required maxlength="1000" /></label>
+            <label>Nivel 4<textarea v-model.trim="criterion.descriptors.level4" rows="2" required maxlength="1000" /></label>
           </div>
         </fieldset>
         <button class="button primary">Crear rúbrica</button>
