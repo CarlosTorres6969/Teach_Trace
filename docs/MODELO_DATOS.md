@@ -26,7 +26,9 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Una actividad no puede existir sin clase.
 - Una matrícula no puede repetirse para el mismo estudiante y clase.
 - Una bitácora, declaración o entrega no puede repetirse para estudiante y actividad.
-- El nivel declarado y detectado de IA está restringido a 1–3.
+- El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
+  declaración y exige seleccionar explícitamente un entero entre 1 y 3 antes de crearla.
+- El nivel declarado y detectado de IA está restringido a 1–3 en la API y en SQLite.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
 - Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la

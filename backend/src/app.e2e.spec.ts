@@ -786,6 +786,127 @@ describe('TeachTrace API (integración)', () => {
     expect(persisted.toolName).toBe('Claude');
   });
 
+  it('exige y persiste un nivel declarado válido sin coerciones inseguras', async () => {
+    const draftActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para niveles de IA',
+        classId,
+        dueDate: '2026-12-21',
+        activityType: 'Proyecto',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(draftActivity.response.status).toBe(201);
+    const draftActivityId = (draftActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
+    const declaration = {
+      toolName: 'Claude',
+      purpose: 'Contrastar fuentes',
+      promptSummary: 'Comparar argumentos',
+    };
+
+    const initial = await request(endpoint, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(initial.response.status).toBe(200);
+    expect(initial.body).toMatchObject({ usageLevel: null, updatedAt: null });
+
+    for (const usageLevel of [1, 2, 3]) {
+      const updated = await request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, usageLevel }),
+      });
+      expect(updated.response.status).toBe(200);
+      expect(updated.body).toMatchObject({ usageLevel });
+
+      const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+      expect(persisted.usageLevel).toBe(usageLevel);
+    }
+
+    for (const usageLevel of [undefined, null, 0, 4, 1.5, true, false, '2']) {
+      const invalid = await request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, usageLevel }),
+      });
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const unchanged = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+    });
+    expect(unchanged.usageLevel).toBe(3);
+
+    const teacherAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+    const anonymousAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(anonymousAttempt.response.status).toBe(401);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'estudiante.sin.matricula.nivel@unah.edu.hn',
+        name: 'Estudiante sin matrícula',
+        passwordHash: await authService.hashPassword('SinMatricula123!'),
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const unenrolledLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'estudiante.sin.matricula.nivel@unah.edu.hn',
+        password: 'SinMatricula123!',
+      }),
+    });
+    const unenrolledCookie = readSessionCookie(unenrolledLogin.response);
+    const unenrolledAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(unenrolledCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(unenrolledAttempt.response.status).toBe(404);
+
+    for (const usageLevel of ['1', '2', '3']) {
+      const form = new FormData();
+      form.set('productText', `Producto con nivel ${usageLevel}`);
+      form.set('productUrl', '');
+      form.set('toolName', declaration.toolName);
+      form.set('usageLevel', usageLevel);
+      form.set('purpose', declaration.purpose);
+      form.set('promptSummary', declaration.promptSummary);
+      const submitted = await request(
+        `/api/student/activities/${draftActivityId}/submission`,
+        {
+          method: 'PUT',
+          headers: sessionHeaders(student.sessionCookie),
+          body: form,
+        },
+      );
+      expect(submitted.response.status).toBe(200);
+
+      const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+      expect(persisted.usageLevel).toBe(Number(usageLevel));
+    }
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),

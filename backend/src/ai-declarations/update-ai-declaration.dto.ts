@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { IsInt, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 const trimString = ({ value }: { value: unknown }) =>
@@ -11,7 +11,6 @@ export class UpdateAiDeclarationDto {
   @MaxLength(120)
   toolName: string;
 
-  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(3)

@@ -23,7 +23,7 @@ export class AiDeclarationsService {
     return {
       activity: { id: activity.id, title: activity.title },
       toolName: declaration?.toolName ?? '',
-      usageLevel: declaration?.usageLevel ?? 1,
+      usageLevel: declaration?.usageLevel ?? null,
       detectedUsageLevel: declaration?.detectedUsageLevel ?? null,
       usageDiscrepancy: declaration?.usageDiscrepancy ?? false,
       purpose: declaration?.purpose ?? '',

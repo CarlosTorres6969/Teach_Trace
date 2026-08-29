@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
 import { AiDeclarationsService } from './ai-declarations.service';
 import { UpdateAiDeclarationDto } from './update-ai-declaration.dto';
 
@@ -12,15 +13,55 @@ describe('AiDeclarationsService', () => {
     promptSummary: 'Consulta',
   };
 
-  it('rechaza niveles declarados fuera del rango 1-3', async () => {
+  it.each([1, 2, 3])('acepta el nivel declarado %i', async (usageLevel) => {
     const dto = plainToInstance(UpdateAiDeclarationDto, {
       ...validInput,
-      usageLevel: 4,
+      usageLevel,
     });
 
-    expect(await validate(dto)).not.toHaveLength(0);
+    expect(await validate(dto)).toHaveLength(0);
   });
 
+  it.each([undefined, null, 0, 4, 1.5, true, false, '2'])(
+    'rechaza un nivel declarado inválido o de tipo incorrecto: %p',
+    async (usageLevel) => {
+      const dto = plainToInstance(UpdateAiDeclarationDto, {
+        ...validInput,
+        usageLevel,
+      });
+
+      expect(await validate(dto)).not.toHaveLength(0);
+    },
+  );
+
+  it.each(['1', '2', '3'])(
+    'acepta la cadena numérica %s recibida en una entrega multipart',
+    async (usageLevel) => {
+      const dto = plainToInstance(SubmitEvidenceDto, {
+        ...validInput,
+        usageLevel,
+        productText: 'Producto académico',
+        productUrl: '',
+      });
+
+      expect(await validate(dto)).toHaveLength(0);
+      expect(dto.usageLevel).toBe(Number(usageLevel));
+    },
+  );
+
+  it.each(['0', '4', '1.5', '', null, true, false])(
+    'rechaza el nivel multipart inválido: %p',
+    async (usageLevel) => {
+      const dto = plainToInstance(SubmitEvidenceDto, {
+        ...validInput,
+        usageLevel,
+        productText: 'Producto académico',
+        productUrl: '',
+      });
+
+      expect(await validate(dto)).not.toHaveLength(0);
+    },
+  );
   it.each([undefined, '', '   ', 42, 'a'.repeat(121)])(
     'rechaza un nombre de herramienta invalido: %p',
     async (toolName) => {
