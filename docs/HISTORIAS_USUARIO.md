@@ -47,6 +47,8 @@
 - Actividades, rúbricas y entregas docentes limitadas a su propietario.
 - Actividades estudiantiles limitadas a matrículas activas.
 - Producto y declaración de IA guardados en una única transacción.
+- Nombre real de la herramienta de IA obligatorio, normalizado y limitado a 120 caracteres.
+- Después de entregar, la declaración solo puede cambiarse al actualizar la entrega completa.
 - Archivos almacenados en SQLite y limitados a 10 MB por entrega.
 - El stub del motor de IA nunca persiste valoraciones simuladas.
 - La fase de cada actividad distingue línea base interna y piloto.
@@ -59,4 +61,5 @@ Las pruebas incluyen unidades por dominio y una aplicación NestJS real sobre SQ
 La integración verifica autenticación, cookies de sesión, limitación de intentos, cuentas inactivas,
 sesiones expiradas, roles, aislamiento entre estudiantes, matrícula, rúbrica de
 siete dimensiones, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
-separación entre valor IA y docente, referencia de línea base y degradación a revisión manual.
+declaraciones de IA inválidas, bloqueo de cambios aislados tras la entrega, separación entre valor
+IA y docente, referencia de línea base y degradación a revisión manual.

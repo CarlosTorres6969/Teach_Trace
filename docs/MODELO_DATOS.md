@@ -34,6 +34,18 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión
   manual sin crear valoraciones simuladas.
 
+## Declaración de IA y actualización de la entrega
+
+Durante el piloto, `AiDeclaration` y `Submission` representan la versión vigente de la evidencia;
+no constituyen un historial de versiones. La declaración puede guardarse por separado mientras la
+actividad no haya sido entregada. Después de la primera entrega, el endpoint independiente de la
+declaración rechaza modificaciones: cualquier cambio debe realizarse mediante la actualización de
+la entrega completa, que guarda producto y declaración en una sola transacción y renueva
+`submittedAt`.
+
+Si posteriormente se exige evidencia inmutable o trazabilidad de cada reentrega, se deberá agregar
+una entidad de versiones o una instantánea de la declaración asociada a cada versión de la entrega.
+
 ## Configuración
 
 - `DATABASE_PATH`: ubicación del archivo SQLite. El valor `:memory:` crea una base en memoria.

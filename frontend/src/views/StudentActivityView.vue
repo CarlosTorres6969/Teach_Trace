@@ -156,6 +156,10 @@ async function submitEvidence() {
     error.value = 'Entrega texto, un enlace o un archivo.';
     return;
   }
+  if (!declaration.toolName.trim()) {
+    error.value = 'Indica el nombre de la herramienta de IA utilizada.';
+    return;
+  }
   message.value = '';
   error.value = '';
   submittingEvidence.value = true;
@@ -313,7 +317,7 @@ onMounted(load);
             <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
             <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
             <h3>Declaración de uso de IA</h3>
-            <label>Herramienta utilizada<input v-model="declaration.toolName" maxlength="120" required /></label>
+            <label>Herramienta utilizada<input v-model.trim="declaration.toolName" maxlength="120" placeholder="Ej. ChatGPT, Gemini o Copilot" required /></label>
             <label>Nivel declarado
               <select v-model.number="declaration.usageLevel" required>
                 <option :value="1">Nivel 1 — apoyo mínimo</option><option :value="2">Nivel 2 — apoyo moderado</option><option :value="3">Nivel 3 — apoyo significativo</option>
