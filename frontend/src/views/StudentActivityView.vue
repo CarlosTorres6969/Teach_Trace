@@ -346,7 +346,14 @@ onMounted(load);
               </select>
             </label>
             <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" required /></label>
-            <label>Resumen de prompts<textarea v-model="declaration.promptSummary" rows="4" maxlength="10000" required /></label>
+            <label>
+              Resumen de prompts
+              <span class="field-hint muted">Opcional — registra los prompts más relevantes que usaste.</span>
+              <textarea v-model="declaration.promptSummary" rows="4" maxlength="10000" />
+              <small class="character-count">
+                {{ declaration.promptSummary.length.toLocaleString() }} / 10 000 caracteres
+              </small>
+            </label>
             <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
           </div>
         </section>

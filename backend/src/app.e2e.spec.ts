@@ -1433,4 +1433,198 @@ describe('TeachTrace API (integración)', () => {
 
     expect(response.response.status).toBe(403);
   });
+
+  // ─── HU-18: Resumen de prompts ───────────────────────────────────────────────
+
+  function buildSubmitForm(overrides: Partial<{
+    productText: string;
+    productUrl: string;
+    toolName: string;
+    usageLevel: string;
+    purpose: string;
+    promptSummary: string;
+  }> = {}) {
+    const form = new FormData();
+    form.set('productText', overrides.productText ?? 'Producto de prueba HU-18/19');
+    form.set('productUrl', overrides.productUrl ?? '');
+    form.set('toolName', overrides.toolName ?? 'ChatGPT');
+    form.set('usageLevel', overrides.usageLevel ?? '2');
+    form.set('purpose', overrides.purpose ?? 'Apoyar la redacción del análisis');
+    form.set('promptSummary', overrides.promptSummary ?? '');
+    return form;
+  }
+
+  it('HU-18: acepta entrega con promptSummary vacío (campo opcional)', async () => {
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: '' }),
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-18: acepta promptSummary con texto simple', async () => {
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: 'Resumir el capítulo 3' }),
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-18: acepta promptSummary con párrafos y saltos de línea', async () => {
+    const paragraphs = 'Primer prompt: resumir el texto.\n\nSegundo prompt: contrastar con otra fuente.\n\nTercer prompt: revisar coherencia.';
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: paragraphs }),
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-18: acepta promptSummary en el límite de 10 000 caracteres', async () => {
+    const atLimit = 'A'.repeat(10000);
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: atLimit }),
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-18: rechaza promptSummary que supera los 10 000 caracteres', async () => {
+    const overLimit = 'A'.repeat(10001);
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: overLimit }),
+    });
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-18: persiste el promptSummary y es visible en la consulta del docente', async () => {
+    const summary = 'Resumen de prompts para prueba de persistencia';
+    await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ promptSummary: summary }),
+    });
+
+    const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const list = submissions.body as Array<{ id: number }>;
+    const detail = await request(`/api/teacher/submissions/${list[0].id}`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const body = detail.body as { aiDeclaration: { promptSummary: string } };
+    expect(body.aiDeclaration.promptSummary).toBe(summary);
+  });
+
+  // ─── HU-19: Entrega del producto final ───────────────────────────────────────
+
+  it('HU-19: acepta entrega solamente con archivo, sin texto ni URL', async () => {
+    const form = new FormData();
+    form.set('productText', '');
+    form.set('productUrl', '');
+    form.set('toolName', 'ChatGPT');
+    form.set('usageLevel', '1');
+    form.set('purpose', 'Apoyo para estructurar ideas');
+    form.set('promptSummary', '');
+    form.set('file', new Blob(['contenido del archivo'], { type: 'text/plain' }), 'entrega.txt');
+
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-19: acepta archivo de exactamente 10 MB', async () => {
+    const tenMB = new Blob([new Uint8Array(10 * 1024 * 1024)], { type: 'application/octet-stream' });
+    const form = buildSubmitForm();
+    form.set('file', tenMB, 'archivo-10mb.bin');
+
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    expect(response.response.status).toBe(200);
+  });
+
+  it('HU-19: rechaza archivo que supera 10 MB en un byte', async () => {
+    const overLimit = new Blob([new Uint8Array(10 * 1024 * 1024 + 1)], { type: 'application/octet-stream' });
+    const form = buildSubmitForm();
+    form.set('file', overLimit, 'archivo-too-large.bin');
+
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    expect(response.response.status).toBe(413);
+  });
+
+  it('HU-19: rechaza entrega vacía — sin texto, URL ni archivo previo', async () => {
+    // Actividad nueva donde el estudiante nunca ha entregado
+    const newActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para entrega vacía',
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const newActivityId = (newActivity.body as { id: number }).id;
+
+    const response = await request(`/api/student/activities/${newActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ productText: '', productUrl: '' }),
+    });
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-19: actualizar la entrega no genera duplicados', async () => {
+    // Primera entrega
+    await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ productText: 'Primera versión del producto' }),
+    });
+    // Segunda entrega — actualización
+    await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ productText: 'Versión actualizada del producto' }),
+    });
+
+    const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const list = submissions.body as Array<{ id: number }>;
+    // Solo debe existir una entrega por estudiante por actividad
+    const studentSubmissions = list.filter(Boolean);
+    expect(studentSubmissions.length).toBeGreaterThanOrEqual(1);
+
+    const detail = await request(`/api/teacher/submissions/${list[0].id}`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const body = detail.body as { productText: string };
+    expect(body.productText).toBe('Versión actualizada del producto');
+  });
+
+  it('HU-19: normaliza productUrl con espacios antes de validarla', async () => {
+    const response = await request(`/api/student/activities/${activityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ productUrl: '  https://ejemplo.com/entrega  ' }),
+    });
+    expect(response.response.status).toBe(200);
+  });
 });

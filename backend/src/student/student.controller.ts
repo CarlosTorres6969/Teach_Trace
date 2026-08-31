@@ -75,7 +75,7 @@ export class StudentController {
   }
 
   @Put('activities/:activityId/submission')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 + 1 } }))
   submitEvidence(
     @CurrentUser() user: User,
     @Param('activityId', ParseIntPipe) activityId: number,

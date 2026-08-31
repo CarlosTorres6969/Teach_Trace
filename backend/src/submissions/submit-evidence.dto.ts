@@ -26,6 +26,7 @@ export class SubmitEvidenceDto extends UpdateAiDeclarationDto {
   @MaxLength(50000)
   productText: string;
 
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @ValidateIf((value: SubmitEvidenceDto) => value.productUrl !== '')
   @IsUrl({ require_protocol: true })
