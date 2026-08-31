@@ -4,6 +4,50 @@ import { RubricsService } from './rubrics.service';
 describe('RubricsService', () => {
   const activity = { id: 10, rubric: null };
 
+  it('normaliza todos los textos antes de persistir una rúbrica', async () => {
+    const rubrics = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const service = new RubricsService(rubrics as never, {} as never, {} as never);
+    const teacher = { id: 3 };
+
+    await service.create(teacher as never, {
+      name: '  Rúbrica normalizada  ',
+      criteria: [
+        {
+          name: '  Argumentación  ',
+          dimension: '  Calidad argumentativa  ',
+          descriptors: {
+            level1: '  Inicial  ',
+            level2: '  Básico  ',
+            level3: '  Competente  ',
+            level4: '  Avanzado  ',
+          },
+        },
+      ],
+    });
+
+    expect(rubrics.create).toHaveBeenCalledWith({
+      name: 'Rúbrica normalizada',
+      criteria: [
+        {
+          name: 'Argumentación',
+          dimension: 'Calidad argumentativa',
+          descriptors: {
+            level1: 'Inicial',
+            level2: 'Básico',
+            level3: 'Competente',
+            level4: 'Avanzado',
+          },
+        },
+      ],
+      teacher,
+      activity: null,
+    });
+    expect(rubrics.save).toHaveBeenCalled();
+  });
+
   it('asocia y persiste una rúbrica disponible', async () => {
     const rubric = { id: 20, activity: null };
     const associatedActivity = { ...activity, rubric };

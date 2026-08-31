@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
+import { normalizeAiDeclarationText } from '../ai-declarations/update-ai-declaration.dto';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Logbook } from '../entities/logbook.entity';
 import {
@@ -60,6 +61,10 @@ export class SubmissionsService {
     });
     const productText = input.productText.trim();
     const productUrl = input.productUrl?.trim() ?? '';
+    const purpose = normalizeAiDeclarationText(input.purpose);
+    if (!purpose) {
+      throw new BadRequestException('El propósito del uso de IA es obligatorio');
+    }
     if (!productText && !productUrl && !file && !existingSubmission?.fileName) {
       throw new BadRequestException('Debe entregar texto, un enlace o un archivo');
     }
@@ -105,10 +110,10 @@ export class SubmissionsService {
           usageDiscrepancy: false,
         });
       }
-      declaration.toolName = input.toolName.trim();
+      declaration.toolName = normalizeAiDeclarationText(input.toolName);
       declaration.usageLevel = input.usageLevel;
-      declaration.purpose = input.purpose.trim();
-      declaration.promptSummary = input.promptSummary.trim();
+      declaration.purpose = purpose;
+      declaration.promptSummary = normalizeAiDeclarationText(input.promptSummary);
       declaration.usageDiscrepancy =
         declaration.detectedUsageLevel !== null &&
         declaration.detectedUsageLevel !== declaration.usageLevel;

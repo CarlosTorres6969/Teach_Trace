@@ -54,7 +54,12 @@ const logbookSteps: Array<{
   },
 ];
 
-const declaration = reactive({ toolName: '', usageLevel: 1, purpose: '', promptSummary: '' });
+const declaration = reactive({
+  toolName: '',
+  usageLevel: '' as number | '',
+  purpose: '',
+  promptSummary: '',
+});
 const submission = reactive({
   status: 'not_submitted',
   submittedAt: '',
@@ -88,7 +93,7 @@ async function load() {
   try {
     const [logbookData, declarationData, submissionData] = await Promise.all([
       api<Record<string, string> & { activity: { title: string } }>(`/student/activities/${activityId}/logbook`),
-      api<Record<string, string | number>>(`/student/activities/${activityId}/ai-declaration`),
+      api<Record<string, string | number | null>>(`/student/activities/${activityId}/ai-declaration`),
       api<Record<string, string> & { activity: { title: string } }>(`/student/activities/${activityId}/submission-status`),
     ]);
     title.value = logbookData.activity.title;
@@ -98,7 +103,13 @@ async function load() {
       validationsAndDecisions: logbookData.validationsAndDecisions ?? '',
       finalReflection: logbookData.finalReflection ?? '',
     });
-    Object.assign(declaration, declarationData);
+    const loadedUsageLevel = declarationData.usageLevel;
+    Object.assign(declaration, declarationData, {
+      usageLevel:
+        typeof loadedUsageLevel === 'number' && [1, 2, 3].includes(loadedUsageLevel)
+          ? loadedUsageLevel
+          : '',
+    });
     Object.assign(submission, submissionData);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo cargar la actividad';
@@ -156,6 +167,20 @@ async function submitEvidence() {
     error.value = 'Entrega texto, un enlace o un archivo.';
     return;
   }
+  if (!declaration.toolName.trim()) {
+    error.value = 'Indica el nombre de la herramienta de IA utilizada.';
+    return;
+  }
+  const usageLevel = declaration.usageLevel;
+  if (typeof usageLevel !== 'number' || ![1, 2, 3].includes(usageLevel)) {
+    error.value = 'Selecciona tu nivel declarado de uso de IA.';
+    return;
+  }
+  const purpose = declaration.purpose.trim();
+  if (!purpose) {
+    error.value = 'Describe el propósito para el cual utilizaste IA.';
+    return;
+  }
   message.value = '';
   error.value = '';
   submittingEvidence.value = true;
@@ -163,8 +188,8 @@ async function submitEvidence() {
   form.set('productText', submission.productText);
   form.set('productUrl', submission.productUrl);
   form.set('toolName', declaration.toolName);
-  form.set('usageLevel', String(declaration.usageLevel));
-  form.set('purpose', declaration.purpose);
+  form.set('usageLevel', String(usageLevel));
+  form.set('purpose', purpose);
   form.set('promptSummary', declaration.promptSummary);
   if (selectedFile.value) form.set('file', selectedFile.value);
   try {
@@ -313,13 +338,14 @@ onMounted(load);
             <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
             <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
             <h3>Declaración de uso de IA</h3>
-            <label>Herramienta utilizada<input v-model="declaration.toolName" maxlength="120" required /></label>
+            <label>Herramienta utilizada<input v-model.trim="declaration.toolName" maxlength="120" placeholder="Ej. ChatGPT, Gemini o Copilot" required /></label>
             <label>Nivel declarado
               <select v-model.number="declaration.usageLevel" required>
+                <option value="" disabled>Selecciona un nivel</option>
                 <option :value="1">Nivel 1 — apoyo mínimo</option><option :value="2">Nivel 2 — apoyo moderado</option><option :value="3">Nivel 3 — apoyo significativo</option>
               </select>
             </label>
-            <label>Propósito<textarea v-model="declaration.purpose" rows="3" maxlength="5000" required /></label>
+            <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" required /></label>
             <label>Resumen de prompts<textarea v-model="declaration.promptSummary" rows="4" maxlength="10000" required /></label>
             <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
           </div>

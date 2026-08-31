@@ -26,13 +26,29 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Una actividad no puede existir sin clase.
 - Una matrícula no puede repetirse para el mismo estudiante y clase.
 - Una bitácora, declaración o entrega no puede repetirse para estudiante y actividad.
-- El nivel declarado y detectado de IA está restringido a 1–3.
+- El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
+  declaración y exige seleccionar explícitamente un entero entre 1 y 3 antes de crearla.
+- El nivel declarado y detectado de IA está restringido a 1–3 en la API y en SQLite.
+- El propósito declarado exige contenido real y admite hasta 5 000 caracteres. Los extremos se
+  recortan y los saltos de línea se normalizan a `LF`, tanto en JSON como en entregas multipart.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
 - Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la
   misma actividad, pero no trasladarse implícitamente ni reutilizarse en dos actividades.
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión
   manual sin crear valoraciones simuladas.
+
+## Declaración de IA y actualización de la entrega
+
+Durante el piloto, `AiDeclaration` y `Submission` representan la versión vigente de la evidencia;
+no constituyen un historial de versiones. La declaración puede guardarse por separado mientras la
+actividad no haya sido entregada. Después de la primera entrega, el endpoint independiente de la
+declaración rechaza modificaciones: cualquier cambio debe realizarse mediante la actualización de
+la entrega completa, que guarda producto y declaración en una sola transacción y renueva
+`submittedAt`.
+
+Si posteriormente se exige evidencia inmutable o trazabilidad de cada reentrega, se deberá agregar
+una entidad de versiones o una instantánea de la declaración asociada a cada versión de la entrega.
 
 ## Configuración
 

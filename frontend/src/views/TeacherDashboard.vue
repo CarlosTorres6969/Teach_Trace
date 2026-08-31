@@ -421,8 +421,8 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <form class="panel form-stack" @submit.prevent="createRubric">
-        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4.</p></div>
-        <label>Nombre de la rúbrica<input v-model="rubricName" required maxlength="160" /></label>
+        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4. Los nombres, dimensiones y descriptores de cada nivel no pueden repetirse.</p></div>
+        <label>Nombre de la rúbrica<input v-model.trim="rubricName" required maxlength="160" /></label>
         <fieldset
           v-for="(criterion, index) in criteria"
           :key="index"
@@ -433,13 +433,13 @@ onBeforeUnmount(() => {
           <div class="form-grid">
             <label>
               Nombre
-              <input v-model="criterion.name" required maxlength="120" />
+              <input v-model.trim="criterion.name" required maxlength="120" />
               <span class="char-hint muted">{{ criterion.name.length }}/120</span>
             </label>
             <label>
               Dimensión
               <input
-                v-model="criterion.dimension"
+                v-model.trim="criterion.dimension"
                 required
                 maxlength="120"
                 :aria-invalid="!!duplicateDimensionErrors[index]"
@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
             <label v-for="level in LEVELS" :key="level">
               Nivel {{ level }}
               <textarea
-                v-model="criterion.descriptors[`level${level}` as keyof typeof criterion.descriptors]"
+                v-model.trim="criterion.descriptors[`level${level}` as keyof typeof criterion.descriptors]"
                 rows="2"
                 required
                 :maxlength="DESCRIPTOR_MAX"

@@ -413,6 +413,109 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymousAttempt.response.status).toBe(401);
   });
 
+  it('crea y normaliza rúbricas válidas y rechaza estructuras inválidas o no autorizadas', async () => {
+    const endpoint = '/api/teacher/rubrics';
+    const criteria = () =>
+      Array.from({ length: 7 }, (_, index) => ({
+        name: `  Criterio QA ${index + 1}  `,
+        dimension: `  Dimensión QA ${index + 1}  `,
+        descriptors: {
+          level1: '  Nivel inicial  ',
+          level2: '  Nivel básico  ',
+          level3: '  Nivel competente  ',
+          level4: '  Nivel avanzado  ',
+        },
+      }));
+    const validInput = { name: '  Rúbrica de validación QA  ', criteria: criteria() };
+    const create = (body: unknown, cookie = teacher.sessionCookie) =>
+      request(endpoint, {
+        method: 'POST',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const created = await create(validInput);
+    expect(created.response.status).toBe(201);
+    expect(created.body).toEqual(expect.objectContaining({
+      name: 'Rúbrica de validación QA',
+      criteria: expect.arrayContaining([
+        {
+          name: 'Criterio QA 1',
+          dimension: 'Dimensión QA 1',
+          descriptors: {
+            level1: 'Nivel inicial',
+            level2: 'Nivel básico',
+            level3: 'Nivel competente',
+            level4: 'Nivel avanzado',
+          },
+        },
+      ]),
+    }));
+
+    const persisted = await request(endpoint, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const persistedRubric = (persisted.body as Array<{
+      id: number;
+      name: string;
+      criteria: Array<{ name: string; dimension: string }>;
+    }>).find((rubric) => rubric.id === (created.body as { id: number }).id);
+    expect(persistedRubric).toEqual(expect.objectContaining({
+      name: 'Rúbrica de validación QA',
+      criteria: expect.arrayContaining([
+        expect.objectContaining({ name: 'Criterio QA 1', dimension: 'Dimensión QA 1' }),
+      ]),
+    }));
+
+    const eightCriteria = { name: 'Ocho dimensiones', criteria: [...criteria(), {
+      name: 'Criterio adicional',
+      dimension: 'Dimensión adicional',
+      descriptors: {
+        level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
+      },
+    }] };
+    const duplicateDimension = { name: 'Dimensión duplicada', criteria: criteria() };
+    duplicateDimension.criteria[1].dimension = '  DIMENSIÓN QA 1  ';
+    const duplicateCriterion = { name: 'Criterio duplicado', criteria: criteria() };
+    duplicateCriterion.criteria[1].name = '  CRITERIO QA 1  ';
+    const whitespaceOnly = {
+      name: '   ',
+      criteria: Array.from({ length: 7 }, () => ({
+        name: '   ',
+        dimension: '   ',
+        descriptors: { level1: '   ', level2: '   ', level3: '   ', level4: '   ' },
+      })),
+    };
+    const missingDescriptor = { name: 'Descriptor faltante', criteria: criteria() };
+    delete (missingDescriptor.criteria[0].descriptors as { level4?: string }).level4;
+    const longDescriptor = { name: 'Descriptor extenso', criteria: criteria() };
+    longDescriptor.criteria[0].descriptors.level1 = 'a'.repeat(1001);
+    const duplicateDescriptors = { name: 'Descriptores duplicados', criteria: criteria() };
+    duplicateDescriptors.criteria[0].descriptors.level2 = '  NIVEL INICIAL  ';
+    const incorrectDescriptorType = { name: 'Descriptor con tipo inválido', criteria: criteria() };
+    (incorrectDescriptorType.criteria[0].descriptors as unknown as Record<string, unknown>).level1 = 1;
+    const additionalLevel = { name: 'Nivel adicional', criteria: criteria() };
+    (additionalLevel.criteria[0].descriptors as unknown as Record<string, unknown>).level5 =
+      'Nivel no permitido';
+
+    for (const invalidInput of [
+      eightCriteria,
+      duplicateDimension,
+      duplicateCriterion,
+      whitespaceOnly,
+      missingDescriptor,
+      longDescriptor,
+      duplicateDescriptors,
+      incorrectDescriptorType,
+      additionalLevel,
+    ]) {
+      expect((await create(invalidInput)).response.status).toBe(400);
+    }
+
+    expect((await create(validInput, student.sessionCookie)).response.status).toBe(403);
+    expect((await create(validInput, '')).response.status).toBe(401);
+  });
+
   it('asocia, sustituye y protege la reutilización de rúbricas mediante el endpoint real', async () => {
     const criteria = (prefix: string) =>
       Array.from({ length: 7 }, (_, index) => ({
@@ -593,6 +696,347 @@ describe('TeachTrace API (integración)', () => {
     expect((await associate('', secondActivityId, firstRubricId)).response.status).toBe(401);
   });
 
+  it('valida, normaliza y persiste el nombre de la herramienta de IA', async () => {
+    const draftActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para declaración en borrador',
+        classId,
+        dueDate: '2026-12-20',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(draftActivity.response.status).toBe(201);
+    const draftActivityId = (draftActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
+    const validDeclaration = {
+      toolName: '  Claude  ',
+      usageLevel: 2,
+      purpose: '  Contrastar fuentes  ',
+      promptSummary: '  Comparar argumentos  ',
+    };
+
+    const updated = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify(validDeclaration),
+    });
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      toolName: 'Claude',
+      purpose: 'Contrastar fuentes',
+      promptSummary: 'Comparar argumentos',
+    });
+
+    for (const toolName of ['', '   ', 'a'.repeat(121), 42]) {
+      const invalid = await request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validDeclaration, toolName }),
+      });
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const missing = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usageLevel: 2,
+        purpose: 'Contrastar fuentes',
+        promptSummary: 'Comparar argumentos',
+      }),
+    });
+    expect(missing.response.status).toBe(400);
+
+    const invalidSubmission = new FormData();
+    invalidSubmission.set('productText', 'Producto sin herramienta declarada');
+    invalidSubmission.set('productUrl', '');
+    invalidSubmission.set('toolName', '   ');
+    invalidSubmission.set('usageLevel', '2');
+    invalidSubmission.set('purpose', 'Contrastar fuentes');
+    invalidSubmission.set('promptSummary', 'Comparar argumentos');
+    const rejectedSubmission = await request(
+      `/api/student/activities/${draftActivityId}/submission`,
+      {
+        method: 'PUT',
+        headers: sessionHeaders(student.sessionCookie),
+        body: invalidSubmission,
+      },
+    );
+    expect(rejectedSubmission.response.status).toBe(400);
+
+    const teacherAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify(validDeclaration),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+    const anonymousAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(validDeclaration),
+    });
+    expect(anonymousAttempt.response.status).toBe(401);
+
+    const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+    });
+    expect(persisted.toolName).toBe('Claude');
+  });
+
+  it('exige y persiste un nivel declarado válido sin coerciones inseguras', async () => {
+    const draftActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para niveles de IA',
+        classId,
+        dueDate: '2026-12-21',
+        activityType: 'Proyecto',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(draftActivity.response.status).toBe(201);
+    const draftActivityId = (draftActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
+    const declaration = {
+      toolName: 'Claude',
+      purpose: 'Contrastar fuentes',
+      promptSummary: 'Comparar argumentos',
+    };
+
+    const initial = await request(endpoint, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(initial.response.status).toBe(200);
+    expect(initial.body).toMatchObject({ usageLevel: null, updatedAt: null });
+
+    for (const usageLevel of [1, 2, 3]) {
+      const updated = await request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, usageLevel }),
+      });
+      expect(updated.response.status).toBe(200);
+      expect(updated.body).toMatchObject({ usageLevel });
+
+      const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+      expect(persisted.usageLevel).toBe(usageLevel);
+    }
+
+    for (const usageLevel of [undefined, null, 0, 4, 1.5, true, false, '2']) {
+      const invalid = await request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, usageLevel }),
+      });
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const unchanged = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+    });
+    expect(unchanged.usageLevel).toBe(3);
+
+    const teacherAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+    const anonymousAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(anonymousAttempt.response.status).toBe(401);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'estudiante.sin.matricula.nivel@unah.edu.hn',
+        name: 'Estudiante sin matrícula',
+        passwordHash: await authService.hashPassword('SinMatricula123!'),
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const unenrolledLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'estudiante.sin.matricula.nivel@unah.edu.hn',
+        password: 'SinMatricula123!',
+      }),
+    });
+    const unenrolledCookie = readSessionCookie(unenrolledLogin.response);
+    const unenrolledAttempt = await request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(unenrolledCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...declaration, usageLevel: 2 }),
+    });
+    expect(unenrolledAttempt.response.status).toBe(404);
+
+    for (const usageLevel of ['1', '2', '3']) {
+      const form = new FormData();
+      form.set('productText', `Producto con nivel ${usageLevel}`);
+      form.set('productUrl', '');
+      form.set('toolName', declaration.toolName);
+      form.set('usageLevel', usageLevel);
+      form.set('purpose', declaration.purpose);
+      form.set('promptSummary', declaration.promptSummary);
+      const submitted = await request(
+        `/api/student/activities/${draftActivityId}/submission`,
+        {
+          method: 'PUT',
+          headers: sessionHeaders(student.sessionCookie),
+          body: form,
+        },
+      );
+      expect(submitted.response.status).toBe(200);
+
+      const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+      expect(persisted.usageLevel).toBe(Number(usageLevel));
+    }
+  });
+
+  it('valida y muestra un propósito normalizado de forma consistente', async () => {
+    const draftActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para propósito de IA',
+        classId,
+        dueDate: '2026-12-22',
+        activityType: 'Investigación',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(draftActivity.response.status).toBe(201);
+    const draftActivityId = (draftActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
+    const declaration = {
+      toolName: 'Claude',
+      usageLevel: 2,
+      promptSummary: 'Consultas para contrastar argumentos',
+    };
+    const updatePurpose = (cookie: string, purpose: unknown) =>
+      request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, purpose }),
+      });
+
+    const paragraphs = 'Primer párrafo del propósito.\n\nSegundo párrafo con contexto.';
+    const created = await updatePurpose(student.sessionCookie, `  ${paragraphs}  `);
+    expect(created.response.status).toBe(200);
+    expect(created.body).toMatchObject({ purpose: paragraphs });
+
+    const updated = await updatePurpose(
+      student.sessionCookie,
+      'Propósito actualizado durante el trabajo',
+    );
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toMatchObject({ purpose: 'Propósito actualizado durante el trabajo' });
+
+    const maximumPurpose = 'a'.repeat(5000);
+    const maximum = await updatePurpose(student.sessionCookie, maximumPurpose);
+    expect(maximum.response.status).toBe(200);
+    expect((maximum.body as { purpose: string }).purpose).toHaveLength(5000);
+
+    for (const purpose of [undefined, null, '', '   ', 42, 'a'.repeat(5001)]) {
+      const invalid = await updatePurpose(student.sessionCookie, purpose);
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const unchanged = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+    });
+    expect(unchanged.purpose).toBe(maximumPurpose);
+
+    expect((await updatePurpose(teacher.sessionCookie, paragraphs)).response.status).toBe(403);
+    expect((await updatePurpose('', paragraphs)).response.status).toBe(401);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'estudiante.sin.matricula.proposito@unah.edu.hn',
+        name: 'Estudiante sin matrícula para propósito',
+        passwordHash: await authService.hashPassword('SinMatricula123!'),
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const unenrolledLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'estudiante.sin.matricula.proposito@unah.edu.hn',
+        password: 'SinMatricula123!',
+      }),
+    });
+    const unenrolledCookie = readSessionCookie(unenrolledLogin.response);
+    expect((await updatePurpose(unenrolledCookie, paragraphs)).response.status).toBe(404);
+
+    const independentPurpose = 'Propósito guardado antes de la entrega';
+    const independent = await updatePurpose(student.sessionCookie, `  ${independentPurpose}  `);
+    expect(independent.response.status).toBe(200);
+    const declarationBeforeSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+    expect(declarationBeforeSubmission.purpose).toBe(independentPurpose);
+
+    const submittedPurpose = 'Apoyar la comparación de fuentes.\n\nDocumentar contraargumentos.';
+    const form = new FormData();
+    form.set('productText', 'Producto académico con propósito declarado');
+    form.set('productUrl', '');
+    form.set('toolName', declaration.toolName);
+    form.set('usageLevel', String(declaration.usageLevel));
+    form.set('purpose', `  ${submittedPurpose}  `);
+    form.set('promptSummary', declaration.promptSummary);
+    const submitted = await request(
+      `/api/student/activities/${draftActivityId}/submission`,
+      {
+        method: 'PUT',
+        headers: sessionHeaders(student.sessionCookie),
+        body: form,
+      },
+    );
+    expect(submitted.response.status).toBe(200);
+
+    const declarationAfterSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: draftActivityId } },
+      });
+    expect(declarationAfterSubmission.id).toBe(declarationBeforeSubmission.id);
+    expect(declarationAfterSubmission.purpose).toBe(submittedPurpose);
+
+    const submissions = await request(
+      `/api/teacher/activities/${draftActivityId}/submissions`,
+      { headers: sessionHeaders(teacher.sessionCookie) },
+    );
+    expect(submissions.response.status).toBe(200);
+    const teacherSubmissionId = (submissions.body as Array<{ id: number }>)[0].id;
+    const detail = await request(`/api/teacher/submissions/${teacherSubmissionId}`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(detail.response.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      aiDeclaration: { purpose: submittedPurpose },
+    });
+  });
+
   it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),
@@ -665,6 +1109,36 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(student.sessionCookie),
     });
     expect(studentDownload.response.status).toBe(403);
+  });
+
+  it('evita modificar la declaración por separado después de entregar', async () => {
+    const changedDeclaration = await request(
+      `/api/student/activities/${activityId}/ai-declaration`,
+      {
+        method: 'PUT',
+        headers: {
+          ...sessionHeaders(student.sessionCookie),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          toolName: 'Gemini',
+          usageLevel: 3,
+          purpose: 'Cambiar la evidencia',
+          promptSummary: 'Cambio aislado',
+        }),
+      },
+    );
+    expect(changedDeclaration.response.status).toBe(409);
+
+    const persisted = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: activityId } },
+    });
+    expect(persisted).toMatchObject({
+      toolName: 'ChatGPT',
+      usageLevel: 2,
+      purpose: 'Contrastar argumentos',
+      promptSummary: 'Consultas para contrastar',
+    });
   });
 
   it('R1: persiste la degradación manual cuando el motor todavía no está disponible', async () => {

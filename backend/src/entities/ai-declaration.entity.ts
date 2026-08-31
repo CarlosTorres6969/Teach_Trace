@@ -29,7 +29,7 @@ export class AiDeclaration {
   @Column({ default: '' })
   toolName: string;
 
-  @Column({ type: 'integer', default: 1 })
+  @Column({ type: 'integer' })
   usageLevel: number;
 
   @Column({ type: 'integer', nullable: true })
