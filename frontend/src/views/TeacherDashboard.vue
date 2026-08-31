@@ -54,6 +54,32 @@ const selectedActivity = computed(
   () => activities.value.find((activity) => activity.id === selectedActivityId.value) ?? null,
 );
 
+// Errores de validación inline por criterio (índice → mensaje)
+const criterionErrors = ref<Record<number, string>>({});
+
+// Índice de los niveles para iterar en el template
+const LEVELS = [1, 2, 3, 4] as const;
+const DESCRIPTOR_MAX = 1000;
+
+// Detecta dimensiones duplicadas y devuelve un mapa índice → error
+const duplicateDimensionErrors = computed<Record<number, string>>(() => {
+  const seen = new Map<string, number>();
+  const errors: Record<number, string> = {};
+  criteria.value.forEach((c, i) => {
+    const key = c.dimension.trim().toLowerCase();
+    if (!key) return;
+    if (seen.has(key)) {
+      errors[i] = `La dimensión "${c.dimension.trim()}" ya está usada en el criterio ${(seen.get(key)! + 1)}.`;
+      errors[seen.get(key)!] ??= `La dimensión "${c.dimension.trim()}" está duplicada.`;
+    } else {
+      seen.set(key, i);
+    }
+  });
+  return errors;
+});
+
+const hasDuplicateDimensions = computed(() => Object.keys(duplicateDimensionErrors.value).length > 0);
+
 function emptyCriterion(): Criterion {
   return { name: '', dimension: '', descriptors: { level1: '', level2: '', level3: '', level4: '' } };
 }
@@ -206,6 +232,12 @@ async function associateRubric(activityId: number) {
 }
 
 async function createRubric() {
+  // Validación de dimensiones duplicadas en cliente antes de enviar
+  if (hasDuplicateDimensions.value) {
+    error.value = 'Hay dimensiones duplicadas. Cada criterio debe tener una dimensión única.';
+    return;
+  }
+  criterionErrors.value = {};
   await act('Rúbrica creada', async () => {
     await api('/teacher/rubrics', {
       method: 'POST', body: JSON.stringify({ name: rubricName.value, criteria: criteria.value }),
@@ -391,18 +423,50 @@ onBeforeUnmount(() => {
       <form class="panel form-stack" @submit.prevent="createRubric">
         <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4.</p></div>
         <label>Nombre de la rúbrica<input v-model="rubricName" required maxlength="160" /></label>
-        <fieldset v-for="(criterion, index) in criteria" :key="index" class="criterion-box">
+        <fieldset
+          v-for="(criterion, index) in criteria"
+          :key="index"
+          class="criterion-box"
+          :class="{ 'criterion-box--error': duplicateDimensionErrors[index] }"
+        >
           <legend>Criterio {{ index + 1 }}</legend>
           <div class="form-grid">
-            <label>Nombre<input v-model="criterion.name" required maxlength="120" /></label>
-            <label>Dimensión<input v-model="criterion.dimension" required maxlength="120" /></label>
-            <label>Nivel 1<textarea v-model="criterion.descriptors.level1" rows="2" required /></label>
-            <label>Nivel 2<textarea v-model="criterion.descriptors.level2" rows="2" required /></label>
-            <label>Nivel 3<textarea v-model="criterion.descriptors.level3" rows="2" required /></label>
-            <label>Nivel 4<textarea v-model="criterion.descriptors.level4" rows="2" required /></label>
+            <label>
+              Nombre
+              <input v-model="criterion.name" required maxlength="120" />
+              <span class="char-hint muted">{{ criterion.name.length }}/120</span>
+            </label>
+            <label>
+              Dimensión
+              <input
+                v-model="criterion.dimension"
+                required
+                maxlength="120"
+                :aria-invalid="!!duplicateDimensionErrors[index]"
+              />
+              <span class="char-hint muted">{{ criterion.dimension.length }}/120</span>
+              <span v-if="duplicateDimensionErrors[index]" class="field-error" role="alert">
+                {{ duplicateDimensionErrors[index] }}
+              </span>
+            </label>
+            <label v-for="level in LEVELS" :key="level">
+              Nivel {{ level }}
+              <textarea
+                v-model="criterion.descriptors[`level${level}` as keyof typeof criterion.descriptors]"
+                rows="2"
+                required
+                :maxlength="DESCRIPTOR_MAX"
+              />
+              <span class="char-hint muted">
+                {{ criterion.descriptors[`level${level}` as keyof typeof criterion.descriptors].length }}/{{ DESCRIPTOR_MAX }}
+              </span>
+            </label>
           </div>
         </fieldset>
-        <button class="button primary">Crear rúbrica</button>
+        <p v-if="hasDuplicateDimensions" class="alert error" role="alert">
+          Hay dimensiones duplicadas. Revisa los criterios marcados antes de guardar.
+        </p>
+        <button class="button primary" :disabled="hasDuplicateDimensions">Crear rúbrica</button>
       </form>
       <section class="section-block">
         <div class="section-title"><h2>Rúbricas disponibles</h2><span>{{ rubrics.length }}</span></div>

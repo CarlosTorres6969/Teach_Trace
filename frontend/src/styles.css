@@ -199,6 +199,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .individual-enrollment { display: grid; }
 .criterion-box { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; }
 .criterion-box legend { padding: 0 .5rem; font-weight: 700; }
+.criterion-box--error { border-color: var(--danger); background: #fff6f5; }
+.criterion-box--error legend { color: var(--danger); }
+.char-hint { font-size: .75rem; font-weight: 400; text-align: right; }
+.field-error { font-size: .8rem; font-weight: 600; color: var(--danger); }
 details { border-top: 1px solid var(--line); padding: .8rem 0; }
 summary { cursor: pointer; font-weight: 600; }
 details li { margin: .5rem 0; color: var(--muted); }

@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsInt,
+  IsNotEmpty,
   IsString,
   MaxLength,
   Min,
@@ -12,15 +13,15 @@ import {
 } from 'class-validator';
 
 export class LevelDescriptorsDto {
-  @IsString() @MaxLength(1000) level1: string;
-  @IsString() @MaxLength(1000) level2: string;
-  @IsString() @MaxLength(1000) level3: string;
-  @IsString() @MaxLength(1000) level4: string;
+  @IsString() @IsNotEmpty() @MaxLength(1000) level1: string;
+  @IsString() @IsNotEmpty() @MaxLength(1000) level2: string;
+  @IsString() @IsNotEmpty() @MaxLength(1000) level3: string;
+  @IsString() @IsNotEmpty() @MaxLength(1000) level4: string;
 }
 
 export class RubricCriterionDto {
-  @IsString() @MaxLength(120) name: string;
-  @IsString() @MaxLength(120) dimension: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) name: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) dimension: string;
   @ValidateNested() @Type(() => LevelDescriptorsDto) descriptors: LevelDescriptorsDto;
 }
 

@@ -796,4 +796,167 @@ describe('TeachTrace API (integración)', () => {
     const saved = await declarations.save(declaration);
     expect(saved.usageDiscrepancy).toBe(true);
   });
+
+  // ─── HU-07 / HU-08: Gestión de criterios, dimensiones y niveles de rúbrica ───
+
+  function buildCriteria(overrides: Partial<{ dimension: string; level1: string }>[] = []) {
+    return Array.from({ length: 7 }, (_, i) => ({
+      name: `Criterio ${i + 1}`,
+      dimension: overrides[i]?.dimension ?? `Dimensión ${i + 1}`,
+      descriptors: {
+        level1: overrides[i]?.level1 ?? 'Descriptor nivel 1',
+        level2: 'Descriptor nivel 2',
+        level3: 'Descriptor nivel 3',
+        level4: 'Descriptor nivel 4',
+      },
+    }));
+  }
+
+  it('HU-07/08: crea una rúbrica con exactamente siete criterios y sus cuatro niveles', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Rúbrica de prueba HU-07/08',
+        criteria: buildCriteria(),
+      }),
+    });
+
+    expect(response.response.status).toBe(201);
+    const rubric = response.body as { id: number; name: string; criteria: unknown[] };
+    expect(rubric.name).toBe('Rúbrica de prueba HU-07/08');
+    expect(rubric.criteria).toHaveLength(7);
+    expect(rubric.id).toBeGreaterThan(0);
+  });
+
+  it('HU-07/08: la rúbrica creada aparece en el listado del docente', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    expect(response.response.status).toBe(200);
+    const list = response.body as Array<{ name: string; criteria: unknown[] }>;
+    const created = list.find((r) => r.name === 'Rúbrica de prueba HU-07/08');
+    expect(created).toBeDefined();
+    expect(created?.criteria).toHaveLength(7);
+  });
+
+  it('HU-07/08: la rúbrica incluye los descriptores de los cuatro niveles por criterio', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const list = response.body as Array<{
+      name: string;
+      criteria: Array<{
+        name: string;
+        dimension: string;
+        descriptors: { level1: string; level2: string; level3: string; level4: string };
+      }>;
+    }>;
+    const rubric = list.find((r) => r.name === 'Rúbrica de prueba HU-07/08');
+    const firstCriterion = rubric?.criteria[0];
+    expect(firstCriterion?.descriptors.level1).toBe('Descriptor nivel 1');
+    expect(firstCriterion?.descriptors.level2).toBe('Descriptor nivel 2');
+    expect(firstCriterion?.descriptors.level3).toBe('Descriptor nivel 3');
+    expect(firstCriterion?.descriptors.level4).toBe('Descriptor nivel 4');
+  });
+
+  it('HU-07: rechaza una rúbrica con menos de siete criterios', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Rúbrica incompleta',
+        criteria: buildCriteria().slice(0, 5),
+      }),
+    });
+
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-07: rechaza una rúbrica con más de siete criterios', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Rúbrica excedida',
+        criteria: [
+          ...buildCriteria(),
+          { name: 'Criterio extra', dimension: 'Dimensión extra', descriptors: { level1: 'A', level2: 'B', level3: 'C', level4: 'D' } },
+        ],
+      }),
+    });
+
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-07: rechaza una rúbrica con dimensiones duplicadas', async () => {
+    const criteriaWithDuplicate = buildCriteria();
+    criteriaWithDuplicate[1].dimension = criteriaWithDuplicate[0].dimension;
+
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Rúbrica con dimensión duplicada',
+        criteria: criteriaWithDuplicate,
+      }),
+    });
+
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-08: rechaza descriptores vacíos en cualquier nivel', async () => {
+    const criteriaWithEmptyDescriptor = buildCriteria([{ level1: '' }]);
+
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Rúbrica con descriptor vacío',
+        criteria: criteriaWithEmptyDescriptor,
+      }),
+    });
+
+    expect(response.response.status).toBe(400);
+  });
+
+  it('HU-07/08: requiere autenticación para crear una rúbrica', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Sin sesión', criteria: buildCriteria() }),
+    });
+
+    expect(response.response.status).toBe(401);
+  });
+
+  it('HU-07/08: impide que un estudiante cree rúbricas', async () => {
+    const response = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Rúbrica de estudiante', criteria: buildCriteria() }),
+    });
+
+    expect(response.response.status).toBe(403);
+  });
 });
