@@ -31,6 +31,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - El nivel declarado y detectado de IA está restringido a 1–3 en la API y en SQLite.
 - El propósito declarado exige contenido real y admite hasta 5 000 caracteres. Los extremos se
   recortan y los saltos de línea se normalizan a `LF`, tanto en JSON como en entregas multipart.
+- El resumen de prompts también exige contenido real, admite hasta 10 000 caracteres y aplica la
+  misma normalización en JSON y multipart.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
 - Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la

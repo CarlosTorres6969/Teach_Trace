@@ -53,6 +53,8 @@
   cadenas exactas `"1"`, `"2"` y `"3"`.
 - Propósito del uso de IA obligatorio, normalizado y limitado a 5 000 caracteres, conservando
   párrafos y saltos de línea internos.
+- Resumen de prompts obligatorio, normalizado y limitado a 10 000 caracteres, con el mismo
+  comportamiento en la declaración independiente y en la entrega.
 - Después de entregar, la declaración solo puede cambiarse al actualizar la entrega completa.
 - Archivos almacenados en SQLite y limitados a 10 MB por entrega.
 - El stub del motor de IA nunca persiste valoraciones simuladas.
@@ -66,6 +68,7 @@ Las pruebas incluyen unidades por dominio y una aplicación NestJS real sobre SQ
 La integración verifica autenticación, cookies de sesión, limitación de intentos, cuentas inactivas,
 sesiones expiradas, roles, aislamiento entre estudiantes, matrícula, rúbrica de
 siete dimensiones, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
-declaraciones de IA inválidas, selección y persistencia de los tres niveles declarados, propósito
-normalizado en declaración y entrega, bloqueo de cambios aislados tras la entrega, separación entre
-valor IA y docente, referencia de línea base y degradación a revisión manual.
+declaraciones de IA inválidas, selección y persistencia de los tres niveles declarados, propósito y
+resumen de prompts normalizados en declaración y entrega, bloqueo de cambios aislados tras la
+entrega, separación entre valor IA y docente, referencia de línea base y degradación a revisión
+manual.

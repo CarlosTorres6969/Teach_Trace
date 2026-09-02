@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
@@ -122,6 +122,58 @@ describe('AiDeclarationsService', () => {
     expect(await validate(dto)).not.toHaveLength(0);
   });
 
+  it('acepta párrafos y normaliza sus saltos de línea en el resumen de prompts', async () => {
+    const dto = plainToInstance(UpdateAiDeclarationDto, {
+      ...validInput,
+      promptSummary: '  Primer prompt.\r\n\r\nSegundo prompt.  ',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.promptSummary).toBe('Primer prompt.\n\nSegundo prompt.');
+  });
+
+  it('acepta exactamente 10 000 caracteres en el resumen de prompts', async () => {
+    const dto = plainToInstance(UpdateAiDeclarationDto, {
+      ...validInput,
+      promptSummary: `  ${'a'.repeat(10000)}  `,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.promptSummary).toHaveLength(10000);
+  });
+
+  it.each([undefined, null, '', '   ', 42, 'a'.repeat(10001)])(
+    'rechaza un resumen de prompts vacío, inválido o demasiado extenso: %p',
+    async (promptSummary) => {
+      const dto = plainToInstance(UpdateAiDeclarationDto, {
+        ...validInput,
+        promptSummary,
+      });
+
+      expect(await validate(dto)).not.toHaveLength(0);
+    },
+  );
+
+  it('aplica la misma validación del resumen a la entrega multipart', async () => {
+    const dto = plainToInstance(SubmitEvidenceDto, {
+      ...validInput,
+      usageLevel: '2',
+      promptSummary: '   ',
+      productText: 'Producto académico',
+      productUrl: '',
+    });
+
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it('rechaza el resumen vacío aunque el servicio se invoque sin pasar por el DTO', async () => {
+    const service = new AiDeclarationsService({} as never, {} as never, {} as never);
+
+    await expect(
+      service.update({ id: 4 } as never, 9, { ...validInput, promptSummary: '   ' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('marca discrepancia cuando el nivel detectado difiere del declarado', async () => {
     const declaration = {
       usageLevel: 3,
@@ -167,14 +219,14 @@ describe('AiDeclarationsService', () => {
       ...validInput,
       toolName: '  Gemini  ',
       purpose: '  Contrastar fuentes.\n\nDocumentar decisiones.  ',
-      promptSummary: '  Comparar argumentos  ',
+      promptSummary: '  Comparar argumentos.\r\n\r\nRevisar coherencia.  ',
     });
 
     expect(declarations.save).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: 'Gemini',
         purpose: 'Contrastar fuentes.\n\nDocumentar decisiones.',
-        promptSummary: 'Comparar argumentos',
+        promptSummary: 'Comparar argumentos.\n\nRevisar coherencia.',
       }),
     );
   });

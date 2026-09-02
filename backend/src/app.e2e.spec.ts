@@ -1450,17 +1450,28 @@ describe('TeachTrace API (integración)', () => {
     form.set('toolName', overrides.toolName ?? 'ChatGPT');
     form.set('usageLevel', overrides.usageLevel ?? '2');
     form.set('purpose', overrides.purpose ?? 'Apoyar la redacción del análisis');
-    form.set('promptSummary', overrides.promptSummary ?? '');
+    form.set('promptSummary', overrides.promptSummary ?? 'Resumen de prompts de prueba');
     return form;
   }
 
-  it('HU-18: acepta entrega con promptSummary vacío (campo opcional)', async () => {
-    const response = await request(`/api/student/activities/${activityId}/submission`, {
+  it('HU-18: rechaza promptSummary ausente, vacío o formado por espacios', async () => {
+    for (const promptSummary of ['', '   ']) {
+      const response = await request(`/api/student/activities/${activityId}/submission`, {
+        method: 'PUT',
+        headers: sessionHeaders(student.sessionCookie),
+        body: buildSubmitForm({ promptSummary }),
+      });
+      expect(response.response.status).toBe(400);
+    }
+
+    const missingSummary = buildSubmitForm();
+    missingSummary.delete('promptSummary');
+    const missing = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
-      body: buildSubmitForm({ promptSummary: '' }),
+      body: missingSummary,
     });
-    expect(response.response.status).toBe(200);
+    expect(missing.response.status).toBe(400);
   });
 
   it('HU-18: acepta promptSummary con texto simple', async () => {
@@ -1521,6 +1532,130 @@ describe('TeachTrace API (integración)', () => {
     expect(body.aiDeclaration.promptSummary).toBe(summary);
   });
 
+  it('HU-18: mantiene consistencia entre declaración, entrega, permisos y consulta docente', async () => {
+    const newActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad para resumen de prompts',
+        classId,
+        dueDate: '2027-01-10',
+        activityType: 'Investigación',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(newActivity.response.status).toBe(201);
+    const newActivityId = (newActivity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${newActivityId}/ai-declaration`;
+    const declaration = {
+      toolName: 'ChatGPT',
+      usageLevel: 2,
+      purpose: 'Contrastar fuentes académicas',
+    };
+    const updateSummary = (cookie: string, promptSummary: unknown) =>
+      request(endpoint, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...declaration, promptSummary }),
+      });
+
+    const paragraphs = 'Primer prompt: resumir.\n\nSegundo prompt: contrastar.';
+    const created = await updateSummary(
+      student.sessionCookie,
+      '  Primer prompt: resumir.\r\n\r\nSegundo prompt: contrastar.  ',
+    );
+    expect(created.response.status).toBe(200);
+    expect(created.body).toMatchObject({ promptSummary: paragraphs });
+
+    const consulted = await request(endpoint, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(consulted.response.status).toBe(200);
+    expect(consulted.body).toMatchObject({ promptSummary: paragraphs });
+
+    const updatedSummary = 'Resumen actualizado durante el desarrollo';
+    const updated = await updateSummary(student.sessionCookie, `  ${updatedSummary}  `);
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toMatchObject({ promptSummary: updatedSummary });
+
+    const maximum = await updateSummary(student.sessionCookie, 'a'.repeat(10000));
+    expect(maximum.response.status).toBe(200);
+    expect((maximum.body as { promptSummary: string }).promptSummary).toHaveLength(10000);
+    expect(
+      (await updateSummary(student.sessionCookie, 'a'.repeat(10001))).response.status,
+    ).toBe(400);
+    for (const invalidSummary of [undefined, null, '', '   ', 42]) {
+      expect((await updateSummary(student.sessionCookie, invalidSummary)).response.status).toBe(
+        400,
+      );
+    }
+
+    expect((await updateSummary(teacher.sessionCookie, paragraphs)).response.status).toBe(403);
+    expect((await updateSummary('', paragraphs)).response.status).toBe(401);
+
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(
+      users.create({
+        email: 'estudiante.sin.matricula.resumen@unah.edu.hn',
+        name: 'Estudiante sin matrícula para resumen',
+        passwordHash: await authService.hashPassword('SinMatricula123!'),
+        role: UserRole.STUDENT,
+        active: true,
+      }),
+    );
+    const unenrolledLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'estudiante.sin.matricula.resumen@unah.edu.hn',
+        password: 'SinMatricula123!',
+      }),
+    });
+    const unenrolledCookie = readSessionCookie(unenrolledLogin.response);
+    expect((await updateSummary(unenrolledCookie, paragraphs)).response.status).toBe(404);
+
+    const beforeSubmission = await updateSummary(student.sessionCookie, updatedSummary);
+    expect(beforeSubmission.response.status).toBe(200);
+    const storedBeforeSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: newActivityId } },
+      });
+
+    const deliveredSummary = 'Prompt para sintetizar.\n\nPrompt para verificar fuentes.';
+    const form = buildSubmitForm({
+      productText: 'Producto con resumen de prompts',
+      promptSummary: `  Prompt para sintetizar.\r\n\r\nPrompt para verificar fuentes.  `,
+    });
+    const submitted = await request(`/api/student/activities/${newActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    expect(submitted.response.status).toBe(200);
+
+    const storedAfterSubmission = await dataSource
+      .getRepository(AiDeclaration)
+      .findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: newActivityId } },
+      });
+    expect(storedAfterSubmission.id).toBe(storedBeforeSubmission.id);
+    expect(storedAfterSubmission.promptSummary).toBe(deliveredSummary);
+
+    const submissions = await request(`/api/teacher/activities/${newActivityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const teacherSubmissionId = (submissions.body as Array<{ id: number }>)[0].id;
+    const detail = await request(`/api/teacher/submissions/${teacherSubmissionId}`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(detail.response.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      aiDeclaration: { promptSummary: deliveredSummary },
+    });
+  });
+
   // ─── HU-19: Entrega del producto final ───────────────────────────────────────
 
   it('HU-19: acepta entrega solamente con archivo, sin texto ni URL', async () => {
@@ -1530,7 +1665,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('toolName', 'ChatGPT');
     form.set('usageLevel', '1');
     form.set('purpose', 'Apoyo para estructurar ideas');
-    form.set('promptSummary', '');
+    form.set('promptSummary', 'Resumen de prompts utilizados para preparar el archivo');
     form.set('file', new Blob(['contenido del archivo'], { type: 'text/plain' }), 'entrega.txt');
 
     const response = await request(`/api/student/activities/${activityId}/submission`, {

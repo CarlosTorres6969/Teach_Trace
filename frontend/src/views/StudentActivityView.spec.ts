@@ -121,4 +121,40 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     const form = submissionCall?.[1]?.body as FormData;
     expect(form.get('purpose')).toBe('Primer párrafo.\n\nSegundo párrafo.');
   });
+
+  it('exige un resumen de prompts y conserva sus párrafos al entregar', async () => {
+    const wrapper = mount(StudentActivityView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-step-button').trigger('click');
+
+    await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico');
+    await wrapper.get('input[placeholder^="Ej."]').setValue('ChatGPT');
+    await wrapper.get('select').setValue('2');
+    await wrapper.get('textarea[maxlength="5000"]').setValue('Contrastar fuentes');
+    const summary = wrapper.get('textarea[maxlength="10000"]');
+    expect(summary.attributes('required')).toBeDefined();
+    expect(summary.attributes('maxlength')).toBe('10000');
+    expect(wrapper.text()).not.toContain('Opcional');
+    await summary.setValue('   ');
+    apiMock.mockClear();
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Escribe un resumen de los prompts utilizados.');
+    expect(apiMock).not.toHaveBeenCalled();
+
+    await summary.setValue('  Primer prompt.\n\nSegundo prompt.  ');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const submissionCall = apiMock.mock.calls.find(([path]) =>
+      String(path).endsWith('/submission'),
+    );
+    const form = submissionCall?.[1]?.body as FormData;
+    expect(form.get('promptSummary')).toBe('Primer prompt.\n\nSegundo prompt.');
+  });
 });

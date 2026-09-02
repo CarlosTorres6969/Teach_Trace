@@ -181,6 +181,11 @@ async function submitEvidence() {
     error.value = 'Describe el propósito para el cual utilizaste IA.';
     return;
   }
+  const promptSummary = declaration.promptSummary.trim();
+  if (!promptSummary) {
+    error.value = 'Escribe un resumen de los prompts utilizados.';
+    return;
+  }
   message.value = '';
   error.value = '';
   submittingEvidence.value = true;
@@ -190,7 +195,7 @@ async function submitEvidence() {
   form.set('toolName', declaration.toolName);
   form.set('usageLevel', String(usageLevel));
   form.set('purpose', purpose);
-  form.set('promptSummary', declaration.promptSummary);
+  form.set('promptSummary', promptSummary);
   if (selectedFile.value) form.set('file', selectedFile.value);
   try {
     const result = await api<Record<string, string | null>>(
@@ -348,8 +353,8 @@ onMounted(load);
             <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" required /></label>
             <label>
               Resumen de prompts
-              <span class="field-hint muted">Opcional — registra los prompts más relevantes que usaste.</span>
-              <textarea v-model="declaration.promptSummary" rows="4" maxlength="10000" />
+              <span class="field-hint muted">Resume los prompts más relevantes que utilizaste.</span>
+              <textarea v-model.trim="declaration.promptSummary" rows="4" maxlength="10000" required />
               <small class="character-count">
                 {{ declaration.promptSummary.length.toLocaleString() }} / 10 000 caracteres
               </small>

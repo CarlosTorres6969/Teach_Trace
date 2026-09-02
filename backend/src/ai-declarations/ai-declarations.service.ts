@@ -44,6 +44,10 @@ export class AiDeclarationsService {
     if (!purpose) {
       throw new BadRequestException('El propósito del uso de IA es obligatorio');
     }
+    const promptSummary = normalizeAiDeclarationText(input.promptSummary);
+    if (!promptSummary) {
+      throw new BadRequestException('El resumen de prompts es obligatorio');
+    }
     const activity = await this.activitiesService.getForStudent(student.id, activityId);
     const submission = await this.submissions.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
@@ -67,7 +71,7 @@ export class AiDeclarationsService {
     declaration.toolName = toolName;
     declaration.usageLevel = input.usageLevel;
     declaration.purpose = purpose;
-    declaration.promptSummary = normalizeAiDeclarationText(input.promptSummary);
+    declaration.promptSummary = promptSummary;
     declaration.usageDiscrepancy =
       declaration.detectedUsageLevel !== null &&
       declaration.detectedUsageLevel !== declaration.usageLevel;

@@ -65,6 +65,10 @@ export class SubmissionsService {
     if (!purpose) {
       throw new BadRequestException('El propósito del uso de IA es obligatorio');
     }
+    const promptSummary = normalizeAiDeclarationText(input.promptSummary);
+    if (!promptSummary) {
+      throw new BadRequestException('El resumen de prompts es obligatorio');
+    }
     if (!productText && !productUrl && !file && !existingSubmission?.fileName) {
       throw new BadRequestException('Debe entregar texto, un enlace o un archivo');
     }
@@ -113,7 +117,7 @@ export class SubmissionsService {
       declaration.toolName = normalizeAiDeclarationText(input.toolName);
       declaration.usageLevel = input.usageLevel;
       declaration.purpose = purpose;
-      declaration.promptSummary = normalizeAiDeclarationText(input.promptSummary);
+      declaration.promptSummary = promptSummary;
       declaration.usageDiscrepancy =
         declaration.detectedUsageLevel !== null &&
         declaration.detectedUsageLevel !== declaration.usageLevel;
