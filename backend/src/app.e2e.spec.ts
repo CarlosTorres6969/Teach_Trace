@@ -1726,28 +1726,48 @@ describe('TeachTrace API (integración)', () => {
   });
 
   it('HU-19: actualizar la entrega no genera duplicados', async () => {
-    // Primera entrega
-    await request(`/api/student/activities/${activityId}/submission`, {
+    const submissionRepository = dataSource.getRepository(Submission);
+
+    const firstResponse = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
       body: buildSubmitForm({ productText: 'Primera versión del producto' }),
     });
-    // Segunda entrega — actualización
-    await request(`/api/student/activities/${activityId}/submission`, {
+    expect(firstResponse.response.status).toBe(200);
+
+    const persistedAfterFirstSubmission = await submissionRepository.findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: activityId } },
+    });
+
+    const updateResponse = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
       body: buildSubmitForm({ productText: 'Versión actualizada del producto' }),
     });
+    expect(updateResponse.response.status).toBe(200);
+
+    const persistedAfterUpdate = await submissionRepository.findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: activityId } },
+    });
+    const persistedCount = await submissionRepository.count({
+      where: { student: { id: student.user.id }, activity: { id: activityId } },
+    });
+    expect(persistedAfterUpdate.id).toBe(persistedAfterFirstSubmission.id);
+    expect(persistedAfterUpdate.productText).toBe('Versión actualizada del producto');
+    expect(persistedCount).toBe(1);
 
     const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
-    const list = submissions.body as Array<{ id: number }>;
-    // Solo debe existir una entrega por estudiante por actividad
-    const studentSubmissions = list.filter(Boolean);
-    expect(studentSubmissions.length).toBeGreaterThanOrEqual(1);
+    expect(submissions.response.status).toBe(200);
+    const list = submissions.body as Array<{ id: number; student: { id: number } }>;
+    const studentSubmissions = list.filter(
+      (submission) => submission.student.id === student.user.id,
+    );
+    expect(studentSubmissions).toHaveLength(1);
+    expect(studentSubmissions[0].id).toBe(persistedAfterFirstSubmission.id);
 
-    const detail = await request(`/api/teacher/submissions/${list[0].id}`, {
+    const detail = await request(`/api/teacher/submissions/${studentSubmissions[0].id}`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     const body = detail.body as { productText: string };
