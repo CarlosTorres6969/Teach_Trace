@@ -15,6 +15,7 @@
 | HU-19, HU-20 | Entrega de texto, enlace o archivo y visualización del estado y fecha. |
 | HU-21 | Consulta docente del producto, bitácora y declaración del estudiante. |
 | EP07 — Preferencias de notificación | Configuración por evento de email, push y avisos en plataforma; este último canal es obligatorio. |
+| EP07 — Modo oscuro | Tema claro u oscuro instantáneo, persistido localmente y en la cuenta, con modo del sistema como valor inicial. |
 
 ## Recorridos
 
@@ -26,6 +27,7 @@
 4. Entrega texto, enlace o archivo.
 5. Consulta el estado y actualiza la entrega si es necesario.
 6. Configura sus canales por tipo de evento desde `/settings/notifications`.
+7. Alterna el modo claro u oscuro desde la barra de navegación.
 
 ### Docente
 
@@ -65,6 +67,8 @@
 - La caída del motor deja persistidos los estados de revisión manual en actividad y entrega.
 - Las preferencias se consultan al momento de enviar; los nuevos eventos comienzan con todos los
   canales activos y los avisos en plataforma no pueden deshabilitarse.
+- El tema se aplica antes de montar la interfaz, se conserva en `localStorage` y se recupera desde
+  la cuenta en cada inicio o restauración de sesión.
 
 ## Cobertura automatizada
 
@@ -78,3 +82,5 @@ entrega, separación entre valor IA y docente, referencia de línea base y degra
 manual.
 También cubre los valores predeterminados de notificación, su actualización inmediata, la
 obligatoriedad del canal en plataforma y el acceso autenticado.
+Las pruebas de tema verifican la preferencia del sistema operativo, el cambio instantáneo, la
+persistencia local y remota, los valores inválidos y contraste WCAG AA en colores principales.

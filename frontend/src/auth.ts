@@ -1,6 +1,7 @@
 import { reactive } from 'vue';
 import { API_URL } from './api-url';
 import type { User } from './types';
+import { applyTheme } from './theme';
 
 const AUTH_EVENT_KEY = 'teachtrace_auth_event';
 const BROADCAST_CHANNEL_NAME = 'teachtrace-auth';
@@ -32,6 +33,7 @@ let restorePromise: Promise<void> | null = null;
 
 export function setSession(user: User, notify = true) {
   auth.user = user;
+  applyTheme(user.theme ?? 'system');
   auth.initialized = true;
   if (notify) broadcastAuthEvent('login');
 }

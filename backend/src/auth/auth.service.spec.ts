@@ -1,6 +1,6 @@
 import { UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { UserRole } from '../entities/user.entity';
+import { UserRole, UserTheme } from '../entities/user.entity';
 import { LoginAttemptService } from './login-attempt.service';
 
 describe('AuthService', () => {
@@ -38,6 +38,7 @@ describe('AuthService', () => {
       email: 'estudiante@unah.edu.hn',
       name: 'Estudiante',
       role: UserRole.STUDENT,
+      theme: UserTheme.SYSTEM,
       active: true,
       passwordHash,
       sessions: [],

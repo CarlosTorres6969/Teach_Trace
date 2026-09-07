@@ -3,20 +3,35 @@
 :root {
   font-family: 'DM Sans', system-ui, sans-serif;
   color: #0c2340;
-  background: #eef2f8;
+  background: var(--canvas);
   font-synthesis: none;
   --ink: #0c2340;
   --green: #234f8f;
+  --primary-solid: #234f8f;
   --green-light: #dde8f7;
   --gold: #f5a623;
   --paper: #ffffff;
   --line: #d7dce6;
   --muted: #5b6b80;
   --danger: #a33d35;
+  --canvas: #eef2f8;
+}
+
+html.dark {
+  --ink: #edf3fc;
+  --green: #8fc1ff;
+  --primary-solid: #356fb8;
+  --green-light: #203a5c;
+  --gold: #ffc45c;
+  --paper: #162235;
+  --line: #35445a;
+  --muted: #b5c1d2;
+  --danger: #ffaaa3;
+  --canvas: #0b1220;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--ink); background: var(--canvas); transition: color .15s, background-color .15s; }
 body.modal-open { overflow: hidden; }
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -34,6 +49,7 @@ a { color: var(--green); }
 .user-menu div { display: flex; flex-direction: column; text-align: right; font-size: .86rem; }
 .user-menu span { opacity: .72; }
 .topbar-settings-icon { display: none; }
+.theme-toggle { width: 42px; min-width: 42px; padding-inline: 0; font-size: 1.2rem; }
 
 .login-shell { min-height: 100vh; display: grid; grid-template-columns: 1.15fr .85fr; background: var(--green); }
 .login-intro { color: white; padding: clamp(3rem, 9vw, 9rem); display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; }
@@ -67,7 +83,7 @@ a { color: var(--green); }
 .status[data-status='evaluated'] { background: #dce7f6; color: #234f8f; }
 
 .button { border: 0; border-radius: 9px 3px 9px 3px; padding: .72rem 1rem; cursor: pointer; font-weight: 700; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; width: fit-content; }
-.button.primary { color: white; background: var(--green); }
+.button.primary { color: white; background: var(--primary-solid); }
 .button.secondary { color: var(--green); background: var(--green-light); }
 .button.ghost { color: white; background: rgba(255,255,255,.12); }
 .button.full { width: 100%; }
@@ -76,7 +92,7 @@ a { color: var(--green); }
 .text-button.danger { color: var(--danger); }
 
 label { display: grid; gap: .45rem; color: #33455f; font-size: .88rem; font-weight: 600; }
-input, textarea, select { width: 100%; border: 1px solid #c6cedd; background: white; color: var(--ink); border-radius: 8px 3px 8px 3px; padding: .78rem .85rem; outline: none; transition: .15s; }
+input, textarea, select { width: 100%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 8px 3px 8px 3px; padding: .78rem .85rem; outline: none; transition: .15s; }
 textarea { resize: vertical; line-height: 1.55; }
 input:focus, textarea:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(35,79,143,.12); }
 .form-stack { display: grid; gap: 1.25rem; }
@@ -241,6 +257,53 @@ dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
 .notification-form > .alert { margin: 0 1.25rem; }
 .notification-actions { display: flex; justify-content: flex-end; padding: 0 1.25rem 1.25rem; }
 .toast { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 50; max-width: min(380px, calc(100% - 3rem)); padding: 1rem 1.2rem; color: white; background: #1d5c8f; border-radius: 10px 3px 10px 3px; box-shadow: 0 14px 35px rgba(10,34,64,.24); font-weight: 700; }
+
+html.dark .eyebrow { color: var(--gold); }
+html.dark .brand-mark { color: #0c2340; }
+html.dark .button.primary,
+html.dark .catalog-code,
+html.dark .section-title span,
+html.dark .student-avatar { color: white; background: var(--primary-solid); }
+html.dark .button.secondary { color: #d9eaff; background: #25466e; }
+html.dark label { color: #d1dbea; }
+html.dark input,
+html.dark textarea,
+html.dark select { background: #101b2b; }
+html.dark .status { color: #d9e2f0; background: #2b3545; }
+html.dark .status[data-status='submitted'] { color: #add5ff; background: #183c62; }
+html.dark .status[data-status='under_review'] { color: #ffd783; background: #4a3814; }
+html.dark .status[data-status='evaluated'] { color: #bbd8ff; background: #203b61; }
+html.dark .logbook-progress { background: #29384d; }
+html.dark .logbook-step-button,
+html.dark .logbook-step-content,
+html.dark .modal-section,
+html.dark .roster-list,
+html.dark .catalog-stats,
+html.dark .notification-table thead th { color: var(--ink); background: #101b2b; }
+html.dark .logbook-step-number,
+html.dark .roster-modal-list > div,
+html.dark .empty-inline,
+html.dark .enrollment-mode-tabs button.active,
+html.dark .excel-format-note code,
+html.dark .excel-file-picker,
+html.dark .notification-checkbox span { color: var(--ink); background: #18273b; }
+html.dark .logbook-step-button.completed:not(.active) .logbook-step-number { color: #b9d9ff; background: #25466e; }
+html.dark .alert.error { color: #ffbdb7; background: #4a2227; }
+html.dark .alert.success { color: #b9e5ff; background: #183b50; }
+html.dark .catalog-badges span { color: #cae2ff; }
+html.dark .catalog-badges span.pending { color: #ffda8a; background: #4a3814; }
+html.dark .modal-backdrop { background: rgba(2, 7, 15, .78); }
+html.dark .modal-header { background: rgba(22, 34, 53, .97); }
+html.dark .modal-close { background: #24334a; }
+html.dark .enrollment-mode-tabs { background: #0f1928; }
+html.dark .excel-format-note,
+html.dark .platform-notice { color: #c7ddf8; background: #1c334f; }
+html.dark .excel-file-picker:hover,
+html.dark .excel-file-picker:focus-within { background: #1b2b42; }
+html.dark .bulk-enrollment-result { color: #cbe4ff; background: #183751; border-color: #315c82; }
+html.dark .bulk-result-stats { background: rgba(8, 18, 31, .55); }
+html.dark .criterion-box--error { background: #3d2025; }
+html.dark .notification-checkbox input:disabled + span { background: #35618f; border-color: #78a9dc; }
 
 @media (max-width: 780px) {
   .login-shell { grid-template-columns: 1fr; padding: 1rem 0 3rem; }

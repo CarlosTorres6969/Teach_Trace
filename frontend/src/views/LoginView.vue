@@ -109,36 +109,36 @@ function useDemo(role: 'student' | 'teacher') {
   width: min(460px, 100%);
   margin: 0;
   padding: clamp(1.75rem, 4vw, 3rem);
-  border: 1px solid #dfe4eb;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: white;
+  background: var(--paper);
   box-shadow: none;
 }
-.access-label { display: block; margin-bottom: .65rem; color: #1f4a86; font: 700 .68rem 'Inter', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+.access-label { display: block; margin-bottom: .65rem; color: var(--green); font: 700 .68rem 'Inter', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 .login-card h2 {
   margin-bottom: .45rem;
   font-family: 'Poppins', system-ui, sans-serif;
   font-weight: 800;
-  color: #0c2340;
+  color: var(--ink);
 }
 .login-card .muted {
-  color: #6b7280;
+  color: var(--muted);
   font-family: 'Inter', system-ui, sans-serif;
 }
 .login-card label {
-  color: #0c2340;
+  color: var(--ink);
   font-family: 'Inter', system-ui, sans-serif;
   font-weight: 600;
 }
 .login-card input {
-  background: white;
-  border: 1px solid #cfd6df;
+  background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: 6px;
-  color: #0c2340;
+  color: var(--ink);
   font-family: 'Inter', system-ui, sans-serif;
 }
 .login-card input:focus {
-  border-color: #1f4a86;
+  border-color: var(--green);
   box-shadow: 0 0 0 3px rgba(31, 74, 134, 0.15);
 }
 .login-card .button.primary {
@@ -157,14 +157,14 @@ function useDemo(role: 'student' | 'teacher') {
   border-radius: 6px;
 }
 .demo-box {
-  border-top-color: #e3e6ed;
+  border-top-color: var(--line);
   font-family: 'Inter', system-ui, sans-serif;
 }
 .demo-box span {
-  color: #6b7280;
+  color: var(--muted);
 }
 .demo-box .text-button {
-  color: #1f4a86;
+  color: var(--green);
   font-weight: 700;
 }
 

@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="TeachTrace UNAH - evidencia del proceso de aprendizaje" />
     <title>TeachTrace UNAH</title>
+    <script>
+      (() => {
+        try {
+          const cached = localStorage.getItem('teachtrace_theme');
+          const stored = ['light', 'dark', 'system'].includes(cached) ? cached : 'system';
+          const dark =
+            stored === 'dark' ||
+            (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

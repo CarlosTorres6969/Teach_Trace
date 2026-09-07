@@ -5,7 +5,7 @@ export function configureApp(app: INestApplication, config: ConfigService) {
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: config.get<string>('FRONTEND_ORIGIN', 'http://localhost:5173'),
-    methods: ['GET', 'POST', 'PUT'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH'],
     credentials: true,
   });
   app.useGlobalPipes(

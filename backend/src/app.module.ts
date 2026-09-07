@@ -27,6 +27,7 @@ import { SeedService } from './seed.service';
 import { StudentModule } from './student/student.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { TeacherModule } from './teacher/teacher.module';
+import { UsersModule } from './users/users.module';
 
 const entities = [
   User,
@@ -84,6 +85,7 @@ const entities = [
     IndicatorsModule,
     StudentModule,
     TeacherModule,
+    UsersModule,
   ],
   providers: [SeedService],
 })

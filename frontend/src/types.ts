@@ -1,10 +1,12 @@
 export type Role = 'student' | 'teacher';
+export type ThemePreference = 'light' | 'dark' | 'system';
 
 export type User = {
   id: number;
   email: string;
   name: string;
   role: Role;
+  theme: ThemePreference;
 };
 
 export type NotificationEventType =

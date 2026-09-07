@@ -53,6 +53,7 @@ function createStudentUser(overrides: Partial<User> = {}): User {
     email: 'estudiante@unah.edu.hn',
     name: 'Estudiante',
     role: 'student',
+    theme: 'system',
     ...overrides,
   };
 }
@@ -63,6 +64,7 @@ function createTeacherUser(overrides: Partial<User> = {}): User {
     email: 'docente@unah.edu.hn',
     name: 'Docente',
     role: 'teacher',
+    theme: 'system',
     ...overrides,
   };
 }

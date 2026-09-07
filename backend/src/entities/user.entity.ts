@@ -6,6 +6,12 @@ export enum UserRole {
   TEACHER = 'teacher',
 }
 
+export enum UserTheme {
+  LIGHT = 'light',
+  DARK = 'dark',
+  SYSTEM = 'system',
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -25,6 +31,9 @@ export class User {
 
   @Column({ default: true })
   active: boolean;
+
+  @Column({ type: 'simple-enum', enum: UserTheme, default: UserTheme.SYSTEM })
+  theme: UserTheme;
 
   @OneToMany(() => AuthSession, (session) => session.user)
   sessions: AuthSession[];

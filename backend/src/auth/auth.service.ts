@@ -58,7 +58,13 @@ export class AuthService {
   }
 
   safeUser(user: User) {
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      theme: user.theme,
+    };
   }
 
   async hashPassword(password: string): Promise<string> {

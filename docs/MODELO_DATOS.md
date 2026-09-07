@@ -5,7 +5,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 
 ## Entidades y relaciones
 
-- `User`: cuenta autorizada con rol `student` o `teacher`.
+- `User`: cuenta autorizada con rol `student` o `teacher` y tema `light`, `dark` o `system`.
 - `AuthSession`: sesión JWT revocable y con vencimiento.
 - `AcademicClass`: clase impartida por un docente.
 - `Enrollment`: matrícula activa de un estudiante; la combinación estudiante–clase es única.
@@ -44,6 +44,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Cada usuario tiene como máximo una preferencia por tipo de evento. Los tres canales comienzan
   activos y `IN_APP` es obligatorio; el backend consulta el valor vigente sin caché antes de que un
   emisor de notificaciones pueda usar un canal.
+- El tema de un usuario solo admite `light`, `dark` o `system`; las cuentas nuevas utilizan
+  `system` para respetar inicialmente la preferencia del dispositivo.
 
 ## Declaración de IA y actualización de la entrega
 

@@ -19,7 +19,7 @@ import {
   NotificationPreference,
 } from './entities/notification-preference.entity';
 import { Submission, EvaluationStatus } from './entities/submission.entity';
-import { User, UserRole } from './entities/user.entity';
+import { User, UserRole, UserTheme } from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
 import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
 
@@ -1886,5 +1886,53 @@ describe('TeachTrace API (integración)', () => {
 
     const anonymous = await request('/api/notification-preferences');
     expect(anonymous.response.status).toBe(401);
+  });
+
+  it('EP07: persiste el tema del usuario y lo sincroniza mediante su sesión', async () => {
+    const users = dataSource.getRepository(User);
+    const beforeUpdate = await users.findOneByOrFail({ id: student.user.id });
+    expect(beforeUpdate.theme).toBe(UserTheme.SYSTEM);
+
+    const updated = await request('/api/users/me/preferences', {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ theme: UserTheme.DARK }),
+    });
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toEqual({ theme: UserTheme.DARK });
+
+    const persisted = await users.findOneByOrFail({ id: student.user.id });
+    expect(persisted.theme).toBe(UserTheme.DARK);
+
+    const sessionUser = await request('/api/auth/me', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(sessionUser.response.status).toBe(200);
+    expect(sessionUser.body).toMatchObject({ id: student.user.id, theme: UserTheme.DARK });
+  });
+
+  it('EP07: rechaza temas inválidos y protege la preferencia de usuario', async () => {
+    const invalid = await request('/api/users/me/preferences', {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ theme: 'sepia' }),
+    });
+    expect(invalid.response.status).toBe(400);
+
+    const anonymous = await request('/api/users/me/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: UserTheme.LIGHT }),
+    });
+    expect(anonymous.response.status).toBe(401);
+
+    const persisted = await dataSource.getRepository(User).findOneByOrFail({ id: student.user.id });
+    expect(persisted.theme).toBe(UserTheme.DARK);
   });
 });
