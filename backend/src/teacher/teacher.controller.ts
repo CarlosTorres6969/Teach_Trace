@@ -19,7 +19,9 @@ import { CreateClassDto, EnrollStudentDto, EnrollStudentsDto } from '../classes/
 import { User, UserRole } from '../entities/user.entity';
 import { AssociateRubricDto, CreateRubricDto } from '../rubrics/rubrics.dto';
 import { SubmissionsService } from '../submissions/submissions.service';
+import { ConfirmValuationDto } from './confirm-valuation.dto';
 import { TeacherService } from './teacher.service';
+import { TeacherValuationsService } from './teacher-valuations.service';
 
 @Controller('teacher')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,6 +30,7 @@ export class TeacherController {
   constructor(
     private readonly teacherService: TeacherService,
     private readonly submissionsService: SubmissionsService,
+    private readonly teacherValuationsService: TeacherValuationsService,
   ) {}
 
   @Get('classes')
@@ -133,5 +136,28 @@ export class TeacherController {
       `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
     response.send(file.content);
+  }
+
+  @Put('submissions/:submissionId/valuations/:valuationId')
+  confirmValuation(
+    @CurrentUser() user: User,
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+    @Param('valuationId', ParseIntPipe) valuationId: number,
+    @Body() dto: ConfirmValuationDto,
+  ) {
+    return this.teacherValuationsService.confirmValuation(
+      user.id,
+      submissionId,
+      valuationId,
+      dto,
+    );
+  }
+
+  @Put('submissions/:submissionId/close')
+  closeEvaluation(
+    @CurrentUser() user: User,
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+  ) {
+    return this.teacherValuationsService.closeEvaluationManually(user.id, submissionId);
   }
 }

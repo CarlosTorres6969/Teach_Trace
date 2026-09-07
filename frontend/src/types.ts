@@ -23,6 +23,16 @@ export type NotificationPreference = {
   channels: NotificationChannel[];
 };
 
+export type AppNotification = {
+  id: number;
+  type: 'GRADE_PUBLISHED';
+  title: string;
+  message: string;
+  read: boolean;
+  activityId: number | null;
+  createdAt: string;
+};
+
 export type AcademicClass = {
   id: number;
   name: string;

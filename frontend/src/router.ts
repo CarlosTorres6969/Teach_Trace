@@ -4,6 +4,7 @@ import LoginView from './views/LoginView.vue';
 import NotificationSettingsView from './views/NotificationSettingsView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
 import StudentActivityView from './views/StudentActivityView.vue';
+import StudentResultsView from './views/StudentResultsView.vue';
 import TeacherDashboard from './views/TeacherDashboard.vue';
 import TeacherSubmissionsView from './views/TeacherSubmissionsView.vue';
 
@@ -14,6 +15,7 @@ export const router = createRouter({
     { path: '/login', component: LoginView, meta: { public: true } },
     { path: '/student', component: StudentDashboard, meta: { role: 'student' } },
     { path: '/student/activities/:id', component: StudentActivityView, meta: { role: 'student' } },
+    { path: '/student/activities/:id/results', component: StudentResultsView, meta: { role: 'student' } },
     {
       path: '/settings/notifications',
       component: NotificationSettingsView,

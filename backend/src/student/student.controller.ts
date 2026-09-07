@@ -84,4 +84,12 @@ export class StudentController {
   ) {
     return this.studentService.submitEvidence(user, activityId, input, file);
   }
+
+  @Get('activities/:activityId/results')
+  getResults(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+  ) {
+    return this.studentService.getResults(user.id, activityId);
+  }
 }

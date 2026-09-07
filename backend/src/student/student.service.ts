@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
 import { AiDeclarationsService } from '../ai-declarations/ai-declarations.service';
+import { Submission, SubmissionStatus } from '../entities/submission.entity';
+import { Valuation } from '../entities/valuation.entity';
 import { User } from '../entities/user.entity';
 import { LogbooksService } from '../logbooks/logbooks.service';
 import { SubmissionsService, UploadedAcademicFile } from '../submissions/submissions.service';
@@ -15,6 +19,10 @@ export class StudentService {
     private readonly logbooksService: LogbooksService,
     private readonly declarationsService: AiDeclarationsService,
     private readonly submissionsService: SubmissionsService,
+    @InjectRepository(Submission)
+    private readonly submissions: Repository<Submission>,
+    @InjectRepository(Valuation)
+    private readonly valuations: Repository<Valuation>,
   ) {}
 
   async listActivities(studentId: number) {
@@ -67,5 +75,41 @@ export class StudentService {
     file?: UploadedAcademicFile,
   ) {
     return this.submissionsService.submit(student, activityId, input, file);
+  }
+
+  async getResults(studentId: number, activityId: number) {
+    const activity = await this.activitiesService.getForStudent(studentId, activityId);
+    const submission = await this.submissions.findOne({
+      where: { student: { id: studentId }, activity: { id: activityId } },
+    });
+
+    const valuationList = submission
+      ? await this.valuations.find({ where: { submission: { id: submission.id } } })
+      : [];
+
+    const confirmedValues = valuationList
+      .filter((v) => v.teacherValue !== null)
+      .map((v) => v.teacherValue as number);
+
+    const finalScore =
+      confirmedValues.length > 0
+        ? confirmedValues.reduce((a, b) => a + b, 0) / confirmedValues.length
+        : null;
+
+    return {
+      activity: { id: activity.id, title: activity.title },
+      status: submission?.status ?? SubmissionStatus.NOT_SUBMITTED,
+      valuations: valuationList.map((v) => ({
+        id: v.id,
+        criterion: v.criterion,
+        dimension: v.dimension,
+        aiValue: v.aiValue,
+        teacherValue: v.teacherValue,
+        teacherComment: v.teacherComment,
+        confirmed: v.confirmed,
+      })),
+      finalScore,
+      feedback: '',
+    };
   }
 }
