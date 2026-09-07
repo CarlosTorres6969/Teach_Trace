@@ -33,6 +33,7 @@ a { color: var(--green); }
 .user-menu { display: flex; align-items: center; gap: 1.25rem; }
 .user-menu div { display: flex; flex-direction: column; text-align: right; font-size: .86rem; }
 .user-menu span { opacity: .72; }
+.topbar-settings-icon { display: none; }
 
 .login-shell { min-height: 100vh; display: grid; grid-template-columns: 1.15fr .85fr; background: var(--green); }
 .login-intro { color: white; padding: clamp(3rem, 9vw, 9rem); display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; }
@@ -218,6 +219,29 @@ dl { display: grid; grid-template-columns: 150px 1fr; gap: .8rem 1rem; }
 dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
 .empty-state { color: var(--muted); text-align: center; padding: 3rem 1rem; }
 
+.notification-form { display: grid; gap: 1.25rem; padding: 0; overflow: hidden; }
+.notification-table-wrap { overflow-x: auto; }
+.notification-table { width: 100%; border-collapse: collapse; }
+.notification-table th, .notification-table td { padding: 1rem; border-bottom: 1px solid var(--line); }
+.notification-table thead th { color: #425570; background: #f3f6fb; font-size: .78rem; text-align: center; }
+.notification-table thead th:first-child { min-width: 330px; text-align: left; }
+.notification-table tbody th { text-align: left; font-weight: 400; }
+.notification-table tbody th strong, .notification-table tbody th small { display: block; }
+.notification-table tbody th strong { margin-bottom: .25rem; color: var(--ink); }
+.notification-table tbody th small { color: var(--muted); line-height: 1.45; }
+.notification-table td { width: 110px; text-align: center; }
+.notification-checkbox { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.notification-checkbox input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.notification-checkbox span { width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid #a8b5c8; border-radius: 7px 2px 7px 2px; background: white; transition: .15s; }
+.notification-checkbox input:checked + span { border-color: var(--green); background: var(--green); }
+.notification-checkbox input:checked + span::after { content: '✓'; color: white; font-size: .88rem; font-weight: 700; }
+.notification-checkbox input:focus-visible + span { box-shadow: 0 0 0 3px rgba(35,79,143,.18); }
+.notification-checkbox input:disabled + span { border-color: #7d9ac2; background: #6f8fba; cursor: not-allowed; opacity: .8; }
+.platform-notice { margin: 0 1.25rem; padding: .8rem 1rem; color: #33507a; background: #eef4fb; border-left: 3px solid var(--green); border-radius: 4px; font-size: .84rem; }
+.notification-form > .alert { margin: 0 1.25rem; }
+.notification-actions { display: flex; justify-content: flex-end; padding: 0 1.25rem 1.25rem; }
+.toast { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 50; max-width: min(380px, calc(100% - 3rem)); padding: 1rem 1.2rem; color: white; background: #1d5c8f; border-radius: 10px 3px 10px 3px; box-shadow: 0 14px 35px rgba(10,34,64,.24); font-weight: 700; }
+
 @media (max-width: 780px) {
   .login-shell { grid-template-columns: 1fr; padding: 1rem 0 3rem; }
   .login-intro { padding: 3rem 1.5rem; }
@@ -226,6 +250,9 @@ dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
   .form-grid, .split-view { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
   .user-menu div { display: none; }
+  .user-menu { gap: .5rem; }
+  .topbar-settings-label { display: none; }
+  .topbar-settings-icon { display: inline; font-size: 1.05rem; }
   .tabs { overflow-x: auto; }
   .tabs button { white-space: nowrap; }
   .logbook-heading { display: grid; gap: .75rem; }
@@ -250,6 +277,9 @@ dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
   .association-row .button { width: 100%; }
   .bulk-result-stats { grid-template-columns: 1fr; }
   .bulk-result-stats span + span { border-top: 1px solid #ccdaee; border-left: 0; }
+  .notification-table thead th:first-child { min-width: 260px; }
+  .notification-table th, .notification-table td { padding: .8rem .65rem; }
+  .notification-actions .button { width: 100%; }
   dl { grid-template-columns: 1fr; gap: .2rem; }
   dd { margin-bottom: .8rem; }
 }

@@ -20,6 +20,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - `Valuation`: una fila por criterio y entrega; conserva por separado el nivel propuesto por IA y
   el nivel asignado por el docente.
 - `Indicator`: valor calculado y referencia de línea base.
+- `NotificationPreference`: canales de notificación habilitados para una combinación única de
+  usuario y tipo de evento.
 
 ## Restricciones relevantes
 
@@ -39,6 +41,9 @@ sincronización automática; las pruebas de integración utilizan una base compl
   misma actividad, pero no trasladarse implícitamente ni reutilizarse en dos actividades.
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión
   manual sin crear valoraciones simuladas.
+- Cada usuario tiene como máximo una preferencia por tipo de evento. Los tres canales comienzan
+  activos y `IN_APP` es obligatorio; el backend consulta el valor vigente sin caché antes de que un
+  emisor de notificaciones pueda usar un canal.
 
 ## Declaración de IA y actualización de la entrega
 

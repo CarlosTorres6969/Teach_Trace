@@ -7,6 +7,20 @@ export type User = {
   role: Role;
 };
 
+export type NotificationEventType =
+  | 'NEW_ACTIVITY'
+  | 'GRADE_PUBLISHED'
+  | 'MESSAGE_RECEIVED'
+  | 'ACTIVITY_DUE_SOON'
+  | 'SUBMISSION_STATUS_CHANGED';
+
+export type NotificationChannel = 'EMAIL' | 'PUSH' | 'IN_APP';
+
+export type NotificationPreference = {
+  eventType: NotificationEventType;
+  channels: NotificationChannel[];
+};
+
 export type AcademicClass = {
   id: number;
   name: string;

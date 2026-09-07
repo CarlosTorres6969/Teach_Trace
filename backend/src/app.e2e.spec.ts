@@ -13,9 +13,15 @@ import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { Indicator } from './entities/indicator.entity';
 import { Logbook } from './entities/logbook.entity';
+import {
+  NotificationChannel,
+  NotificationEventType,
+  NotificationPreference,
+} from './entities/notification-preference.entity';
 import { Submission, EvaluationStatus } from './entities/submission.entity';
 import { User, UserRole } from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
+import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
 
 jest.setTimeout(180000);
 
@@ -1781,5 +1787,104 @@ describe('TeachTrace API (integración)', () => {
       body: buildSubmitForm({ productUrl: '  https://ejemplo.com/entrega  ' }),
     });
     expect(response.response.status).toBe(200);
+  });
+
+  it('EP07: crea todas las preferencias activas por defecto', async () => {
+    const response = await request('/api/notification-preferences', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+
+    expect(response.response.status).toBe(200);
+    const preferences = response.body as Array<{
+      eventType: NotificationEventType;
+      channels: NotificationChannel[];
+    }>;
+    expect(preferences).toHaveLength(Object.values(NotificationEventType).length);
+    for (const eventType of Object.values(NotificationEventType)) {
+      expect(preferences).toContainEqual({
+        eventType,
+        channels: Object.values(NotificationChannel),
+      });
+    }
+
+    const persistedCount = await dataSource.getRepository(NotificationPreference).count({
+      where: { user: { id: student.user.id } },
+    });
+    expect(persistedCount).toBe(Object.values(NotificationEventType).length);
+  });
+
+  it('EP07: guarda preferencias y las aplica inmediatamente al verificar un envío', async () => {
+    const preferences = Object.values(NotificationEventType).map((eventType) => ({
+      eventType,
+      channels:
+        eventType === NotificationEventType.NEW_ACTIVITY
+          ? [NotificationChannel.PUSH, NotificationChannel.IN_APP]
+          : Object.values(NotificationChannel),
+    }));
+    const updated = await request('/api/notification-preferences', {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ preferences }),
+    });
+    expect(updated.response.status).toBe(200);
+
+    const listed = await request('/api/notification-preferences', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(listed.body).toContainEqual({
+      eventType: NotificationEventType.NEW_ACTIVITY,
+      channels: [NotificationChannel.PUSH, NotificationChannel.IN_APP],
+    });
+
+    const preferenceService = app.get(NotificationPreferencesService);
+    await expect(
+      preferenceService.isChannelEnabled(
+        student.user.id,
+        NotificationEventType.NEW_ACTIVITY,
+        NotificationChannel.EMAIL,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      preferenceService.isChannelEnabled(
+        student.user.id,
+        NotificationEventType.NEW_ACTIVITY,
+        NotificationChannel.PUSH,
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('EP07: exige el canal en plataforma y protege las preferencias', async () => {
+    const preferences = Object.values(NotificationEventType).map((eventType) => ({
+      eventType,
+      channels:
+        eventType === NotificationEventType.GRADE_PUBLISHED
+          ? [NotificationChannel.EMAIL]
+          : Object.values(NotificationChannel),
+    }));
+    const invalid = await request('/api/notification-preferences', {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ preferences }),
+    });
+    expect(invalid.response.status).toBe(400);
+
+    const incomplete = await request('/api/notification-preferences', {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ preferences: preferences.slice(0, -1) }),
+    });
+    expect(incomplete.response.status).toBe(400);
+
+    const anonymous = await request('/api/notification-preferences');
+    expect(anonymous.response.status).toBe(401);
   });
 });

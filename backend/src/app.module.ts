@@ -13,6 +13,7 @@ import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { Indicator } from './entities/indicator.entity';
 import { Logbook } from './entities/logbook.entity';
+import { NotificationPreference } from './entities/notification-preference.entity';
 import { Rubric } from './entities/rubric.entity';
 import { Submission } from './entities/submission.entity';
 import { User } from './entities/user.entity';
@@ -20,6 +21,7 @@ import { Valuation } from './entities/valuation.entity';
 import { EvaluationsModule } from './evaluations/evaluations.module';
 import { IndicatorsModule } from './indicators/indicators.module';
 import { LogbooksModule } from './logbooks/logbooks.module';
+import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import { RubricsModule } from './rubrics/rubrics.module';
 import { SeedService } from './seed.service';
 import { StudentModule } from './student/student.module';
@@ -38,6 +40,7 @@ const entities = [
   Submission,
   Valuation,
   Indicator,
+  NotificationPreference,
 ];
 
 @Module({
@@ -73,6 +76,7 @@ const entities = [
     ActivitiesModule,
     RubricsModule,
     LogbooksModule,
+    NotificationPreferencesModule,
     AiDeclarationsModule,
     SubmissionsModule,
     AiEngineModule,

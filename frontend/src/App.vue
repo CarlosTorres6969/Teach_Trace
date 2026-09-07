@@ -28,6 +28,15 @@ async function logout() {
         <strong>{{ auth.user.name }}</strong>
         <span>{{ auth.user.role === 'student' ? 'Estudiante' : 'Docente' }}</span>
       </div>
+      <RouterLink
+        v-if="auth.user.role === 'student'"
+        class="button ghost"
+        to="/settings/notifications"
+        aria-label="Configurar notificaciones"
+      >
+        <span class="topbar-settings-icon" aria-hidden="true">⚙</span>
+        <span class="topbar-settings-label">Notificaciones</span>
+      </RouterLink>
       <button class="button ghost" type="button" @click="logout">Cerrar sesión</button>
     </div>
   </header>

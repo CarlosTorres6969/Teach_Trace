@@ -14,6 +14,7 @@
 | HU-15 a HU-18 | Declaración de herramienta, nivel 1–3, propósito y prompts, guardada junto al producto. |
 | HU-19, HU-20 | Entrega de texto, enlace o archivo y visualización del estado y fecha. |
 | HU-21 | Consulta docente del producto, bitácora y declaración del estudiante. |
+| EP07 — Preferencias de notificación | Configuración por evento de email, push y avisos en plataforma; este último canal es obligatorio. |
 
 ## Recorridos
 
@@ -24,6 +25,7 @@
 3. Completa la declaración de IA junto con el producto.
 4. Entrega texto, enlace o archivo.
 5. Consulta el estado y actualiza la entrega si es necesario.
+6. Configura sus canales por tipo de evento desde `/settings/notifications`.
 
 ### Docente
 
@@ -61,6 +63,8 @@
 - La fase de cada actividad distingue línea base interna y piloto.
 - Los niveles declarados/detectados están restringidos a 1–3 y las valoraciones a 1–4.
 - La caída del motor deja persistidos los estados de revisión manual en actividad y entrega.
+- Las preferencias se consultan al momento de enviar; los nuevos eventos comienzan con todos los
+  canales activos y los avisos en plataforma no pueden deshabilitarse.
 
 ## Cobertura automatizada
 
@@ -72,3 +76,5 @@ declaraciones de IA inválidas, selección y persistencia de los tres niveles de
 resumen de prompts normalizados en declaración y entrega, bloqueo de cambios aislados tras la
 entrega, separación entre valor IA y docente, referencia de línea base y degradación a revisión
 manual.
+También cubre los valores predeterminados de notificación, su actualización inmediata, la
+obligatoriedad del canal en plataforma y el acceso autenticado.

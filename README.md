@@ -13,6 +13,7 @@ El flujo base implementa:
 - Bitácora estructurada del proceso del estudiante.
 - Entrega conjunta de producto, archivo y declaración de uso de IA.
 - Roster docente y consulta de todas las evidencias entregadas.
+- Preferencias de notificación por evento y canal para estudiantes.
 
 ## Inicio rápido
 
@@ -48,6 +49,7 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `logbooks`: bitácoras del estudiante.
 - `ai-declarations`: declaración estructurada del uso de IA.
 - `submissions`: entrega conjunta, archivos, evidencias y disparo de evaluación.
+- `notification-preferences`: canales habilitados por usuario y tipo de evento.
 - `ai-engine`: contrato del motor de IA; permanece como stub seguro.
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
