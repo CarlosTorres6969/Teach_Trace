@@ -92,4 +92,12 @@ export class StudentController {
   ) {
     return this.studentService.getResults(user.id, activityId);
   }
+
+  @Get('classes/:classId/projection')
+  getProjection(
+    @CurrentUser() user: User,
+    @Param('classId', ParseIntPipe) classId: number,
+  ) {
+    return this.studentService.getProjection(user.id, classId);
+  }
 }

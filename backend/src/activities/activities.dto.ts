@@ -5,8 +5,11 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
+  IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -34,6 +37,12 @@ export class CreateActivityDto {
 
   @IsEnum(ActivityPhase)
   evaluationPhase: ActivityPhase;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(100)
+  weight?: number;
 }
 
 export class UpdateLearningOutcomesDto {

@@ -30,10 +30,13 @@ export class StudentService {
     return Promise.all(
       activities.map(async (activity) => {
         const submission = await this.submissionsService.getStatus(studentId, activity.id);
+        const finalScore = await this.getActivityFinalScore(studentId, activity.id);
         return {
           id: activity.id,
           title: activity.title,
           subject: activity.subject,
+          dueDate: activity.dueDate,
+          weight: activity.weight,
           evaluationPhase: activity.evaluationPhase,
           academicClass: activity.academicClass
             ? {
@@ -43,6 +46,7 @@ export class StudentService {
               }
             : null,
           submissionStatus: submission.status,
+          finalScore,
         };
       }),
     );
@@ -75,6 +79,126 @@ export class StudentService {
     file?: UploadedAcademicFile,
   ) {
     return this.submissionsService.submit(student, activityId, input, file);
+  }
+
+  // ─── Helpers privados ────────────────────────────────────────────────────────
+
+  private async getActivityFinalScore(studentId: number, activityId: number): Promise<number | null> {
+    const submission = await this.submissions.findOne({
+      where: { student: { id: studentId }, activity: { id: activityId } },
+    });
+    if (!submission) return null;
+    const valuationList = await this.valuations.find({
+      where: { submission: { id: submission.id } },
+    });
+    const teacherValues = valuationList
+      .filter((v) => v.teacherValue !== null)
+      .map((v) => v.teacherValue as number);
+    if (!teacherValues.length) return null;
+    return teacherValues.reduce((a, b) => a + b, 0) / teacherValues.length;
+  }
+
+  // ─── Proyección ───────────────────────────────────────────────────────────────
+
+  async getProjection(studentId: number, classId: number) {
+    const activities = await this.activitiesService.listForStudent(studentId);
+    // Filtrar solo las de esta clase
+    const classActivities = activities.filter(
+      (a) => a.academicClass?.id === classId,
+    );
+    if (!classActivities.length) {
+      return {
+        classId,
+        totalActivities: 0,
+        completedActivities: 0,
+        pendingActivities: 0,
+        currentWeightedScore: null,
+        projectedFinalScore: null,
+        projectedPercentage: null,
+        requiredAvgToPass: null,
+        passingThreshold: 2.6,
+        activities: [],
+      };
+    }
+
+    // Escala 1-4 → porcentaje: (score - 1) / 3 * 100
+    const toPercent = (score: number) => Math.round(((score - 1) / 3) * 100);
+
+    type ActivityProjection = {
+      id: number;
+      title: string;
+      dueDate: string;
+      weight: number;
+      status: string;
+      finalScore: number | null;
+      percentage: number | null;
+    };
+
+    const activityProjections: ActivityProjection[] = await Promise.all(
+      classActivities.map(async (activity) => {
+        const finalScore = await this.getActivityFinalScore(studentId, activity.id);
+        const submission = await this.submissions.findOne({
+          where: { student: { id: studentId }, activity: { id: activity.id } },
+        });
+        return {
+          id: activity.id,
+          title: activity.title,
+          dueDate: activity.dueDate,
+          weight: activity.weight ?? 1.0,
+          status: submission?.status ?? 'not_submitted',
+          finalScore,
+          percentage: finalScore !== null ? toPercent(finalScore) : null,
+        };
+      }),
+    );
+
+    // Separar completadas (con teacherValue) de pendientes
+    const completed = activityProjections.filter((a) => a.finalScore !== null);
+    const pending = activityProjections.filter((a) => a.finalScore === null);
+
+    // Nota ponderada actual: Σ(score × weight) / Σ(weight) para completadas
+    const sumWeightedScores = completed.reduce((acc, a) => acc + (a.finalScore! * a.weight), 0);
+    const sumCompletedWeights = completed.reduce((acc, a) => acc + a.weight, 0);
+    const currentWeightedScore = sumCompletedWeights > 0
+      ? sumWeightedScores / sumCompletedWeights
+      : null;
+
+    // Proyección: si mantengo el mismo promedio en las pendientes
+    const totalWeight = activityProjections.reduce((acc, a) => acc + a.weight, 0);
+    const sumPendingWeights = pending.reduce((acc, a) => acc + a.weight, 0);
+
+    let projectedFinalScore: number | null = null;
+    if (currentWeightedScore !== null) {
+      const projectedPendingContribution = currentWeightedScore * sumPendingWeights;
+      projectedFinalScore = (sumWeightedScores + projectedPendingContribution) / totalWeight;
+    }
+
+    const projectedPercentage = projectedFinalScore !== null
+      ? toPercent(projectedFinalScore)
+      : null;
+
+    // ¿Cuánto necesito en las pendientes para llegar al 80 % (≈ nivel 3.4 en escala 1-4)?
+    // 80 % en escala 1-4 = 1 + 0.80 * 3 = 3.4
+    const passingThreshold = 3.4; // equivale a 80%
+    let requiredAvgToPass: number | null = null;
+    if (sumPendingWeights > 0) {
+      // passingThreshold * totalWeight = sumWeightedScores + requiredAvg * sumPendingWeights
+      const required = (passingThreshold * totalWeight - sumWeightedScores) / sumPendingWeights;
+      requiredAvgToPass = Math.max(1, Math.min(4, required));
+    }
+
+    return {
+      classId,
+      totalActivities: classActivities.length,
+      completedActivities: completed.length,
+      pendingActivities: pending.length,
+      currentWeightedScore,
+      projectedFinalScore,
+      projectedPercentage,
+      requiredAvgToPass,
+      passingThreshold,
+      activities: activityProjections,
+    };
   }
 
   async getResults(studentId: number, activityId: number) {

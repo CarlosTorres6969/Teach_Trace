@@ -396,3 +396,30 @@ html.dark .bell-item--unread { background: #172a3e; }
 html.dark .bell-item--unread:hover { background: #1e3350; }
 html.dark .valuation-level-item { background: #101b2b; }
 html.dark .results-score { background: var(--green-light); }
+
+/* ─── Proyección de nota ─────────────────────────────────────────────────── */
+.projection-widget { display: grid; gap: 1.25rem; margin-bottom: 2rem; }
+.projection-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.projection-title { font-size: clamp(1.4rem, 3vw, 2rem); margin-bottom: 0; }
+.projection-stats { display: flex; gap: 1rem; }
+.projection-stat { display: grid; gap: .1rem; padding: .65rem .9rem; text-align: center; background: var(--green-light); border-radius: 10px 3px 10px 3px; min-width: 68px; }
+.projection-stat strong { font-size: 1.4rem; color: var(--green); font-family: 'Fraunces', Georgia, serif; }
+.projection-stat span { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.projection-message { padding: .8rem 1rem; border-radius: 8px; font-weight: 600; font-size: .9rem; }
+.projection-message--ok { color: #1d5c1d; background: #d4edda; }
+.projection-message--warn { color: #7a4f0d; background: #fff3cd; }
+.projection-message--danger { color: #842e28; background: #fae4e1; }
+.projection-message--neutral { color: var(--muted); background: var(--green-light); }
+.projection-chart { height: 220px; }
+.projection-empty { text-align: center; padding: 1.5rem 0; }
+html.dark .projection-message--ok { color: #a3d9a5; background: #1a3d1a; }
+html.dark .projection-message--warn { color: #ffd083; background: #3d2f0a; }
+html.dark .projection-message--danger { color: var(--danger); background: #3d1518; }
+html.dark .projection-message--neutral { color: var(--muted); background: var(--green-light); }
+
+/* ─── Dashboard de actividades del estudiante ───────────────────────────── */
+.activity-card-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: auto; padding-top: .75rem; }
+.activity-card-actions .button { flex: 1 1 auto; }
+.activity-score { display: flex; align-items: baseline; gap: .4rem; margin: .25rem 0; }
+.activity-score .eyebrow { margin-right: auto; }
+.activity-score strong { font-size: 1.5rem; font-family: 'Fraunces', Georgia, serif; color: var(--green); }

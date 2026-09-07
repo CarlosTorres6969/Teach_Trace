@@ -69,3 +69,26 @@ export type Rubric = {
   criteria: Criterion[];
   activityId?: number | null;
 };
+
+export type ActivityProjectionItem = {
+  id: number;
+  title: string;
+  dueDate: string;
+  weight: number;
+  status: string;
+  finalScore: number | null;
+  percentage: number | null;
+};
+
+export type ProjectionData = {
+  classId: number;
+  totalActivities: number;
+  completedActivities: number;
+  pendingActivities: number;
+  currentWeightedScore: number | null;
+  projectedFinalScore: number | null;
+  projectedPercentage: number | null;
+  requiredAvgToPass: number | null;
+  passingThreshold: number;
+  activities: ActivityProjectionItem[];
+};

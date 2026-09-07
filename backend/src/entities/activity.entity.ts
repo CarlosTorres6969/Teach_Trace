@@ -44,6 +44,9 @@ export class Activity {
   @Column({ default: false })
   manualEvaluationRequired: boolean;
 
+  @Column({ type: 'float', default: 1.0 })
+  weight: number;
+
   @OneToOne(() => Rubric, (rubric) => rubric.activity, { nullable: true })
   rubric: Rubric | null;
 }

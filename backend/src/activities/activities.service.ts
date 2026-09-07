@@ -66,6 +66,7 @@ export class ActivitiesService {
         teacher,
         academicClass,
         manualEvaluationRequired: false,
+        weight: input.weight ?? 1.0,
         rubric: null,
       }),
     );
