@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Put,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -99,5 +100,14 @@ export class StudentController {
     @Param('classId', ParseIntPipe) classId: number,
   ) {
     return this.studentService.getProjection(user.id, classId);
+  }
+
+  @Get('performance-chart')
+  getPerformanceChart(
+    @CurrentUser() user: User,
+    @Query('classId') classIdStr?: string,
+  ) {
+    const classId = classIdStr ? parseInt(classIdStr, 10) : undefined;
+    return this.studentService.getPerformanceChart(user.id, classId);
   }
 }

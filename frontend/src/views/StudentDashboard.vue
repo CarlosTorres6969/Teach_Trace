@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
+import EvolutionChart from '../components/EvolutionChart.vue';
 import ProjectionWidget from '../components/ProjectionWidget.vue';
 import type { Activity } from '../types';
 
@@ -22,19 +23,17 @@ const statusText: Record<string, string> = {
   evaluated: 'Evaluado',
 };
 
-// Extraer las clases únicas que tiene el estudiante para mostrar un widget por clase
-const uniqueClassIds = computed(() => {
-  const seen = new Set<number>();
-  const ids: number[] = [];
+// Clases únicas del estudiante (para widgets y selector de gráfico)
+const uniqueClasses = computed(() => {
+  const seen = new Map<number, { id: number; name: string; code: string }>();
   for (const a of activities.value) {
-    const id = a.academicClass?.id;
-    if (id !== undefined && !seen.has(id)) {
-      seen.add(id);
-      ids.push(id);
-    }
+    const c = a.academicClass;
+    if (c && !seen.has(c.id)) seen.set(c.id, c);
   }
-  return ids;
+  return [...seen.values()];
 });
+
+const uniqueClassIds = computed(() => uniqueClasses.value.map((c) => c.id));
 
 onMounted(async () => {
   try {
@@ -67,6 +66,9 @@ onMounted(async () => {
         :key="classId"
         :class-id="classId"
       />
+
+      <!-- Gráfico de evolución -->
+      <EvolutionChart v-if="uniqueClasses.length > 0" :classes="uniqueClasses" />
 
       <!-- Lista de actividades -->
       <section class="card-grid">

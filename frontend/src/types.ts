@@ -92,3 +92,17 @@ export type ProjectionData = {
   passingThreshold: number;
   activities: ActivityProjectionItem[];
 };
+
+export type PerformanceChartActivity = {
+  id: number;
+  title: string;
+  dueDate: string;
+};
+
+export type PerformanceChart = {
+  labels: string[];
+  myGrades: (number | null)[];
+  classAverage: (number | null)[];
+  trendLine: (number | null)[];
+  activities: PerformanceChartActivity[];
+};

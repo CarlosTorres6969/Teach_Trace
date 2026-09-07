@@ -201,6 +201,97 @@ export class StudentService {
     };
   }
 
+  // ─── Gráfico de evolución ─────────────────────────────────────────────────────
+
+  async getPerformanceChart(studentId: number, classId?: number) {
+    const toPercent = (score: number) => Math.round(((score - 1) / 3) * 100);
+
+    // Obtener actividades del estudiante, opcionalmente filtradas por clase
+    const allActivities = await this.activitiesService.listForStudent(studentId);
+    const activities = classId
+      ? allActivities.filter((a) => a.academicClass?.id === classId)
+      : allActivities;
+
+    // Ordenar cronológicamente por dueDate
+    const sorted = [...activities].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    const labels: string[] = [];
+    const myGrades: (number | null)[] = [];
+    const classAverage: (number | null)[] = [];
+    const activityMeta: Array<{ id: number; title: string; dueDate: string }> = [];
+
+    for (const activity of sorted) {
+      labels.push(activity.dueDate);
+      activityMeta.push({ id: activity.id, title: activity.title, dueDate: activity.dueDate });
+
+      // Nota propia
+      const myScore = await this.getActivityFinalScore(studentId, activity.id);
+      myGrades.push(myScore !== null ? toPercent(myScore) : null);
+
+      // Promedio de la clase: solo estudiantes con entrega evaluada en esta actividad
+      const allSubmissions = await this.submissions.find({
+        where: { activity: { id: activity.id } },
+      });
+
+      const classScores: number[] = [];
+      for (const sub of allSubmissions) {
+        if (sub.student.id === studentId) continue; // excluir el propio
+        const subValuations = await this.valuations.find({
+          where: { submission: { id: sub.id } },
+        });
+        const teacherVals = subValuations
+          .filter((v) => v.teacherValue !== null)
+          .map((v) => v.teacherValue as number);
+        if (teacherVals.length) {
+          const avg = teacherVals.reduce((a, b) => a + b, 0) / teacherVals.length;
+          classScores.push(toPercent(avg));
+        }
+      }
+      // Incluir la nota propia en el promedio de la clase si existe
+      if (myScore !== null) classScores.push(toPercent(myScore));
+
+      classAverage.push(
+        classScores.length > 0
+          ? Math.round(classScores.reduce((a, b) => a + b, 0) / classScores.length)
+          : null,
+      );
+    }
+
+    // Regresión lineal simple sobre los puntos propios no nulos
+    const trendLine = this.linearRegression(myGrades);
+
+    return {
+      labels,
+      myGrades,
+      classAverage,
+      trendLine,
+      activities: activityMeta,
+    };
+  }
+
+  // Regresión lineal simple: devuelve un punto por cada label (null si no hay datos suficientes)
+  private linearRegression(values: (number | null)[]): (number | null)[] {
+    const points: Array<{ x: number; y: number }> = [];
+    values.forEach((v, i) => { if (v !== null) points.push({ x: i, y: v }); });
+    if (points.length < 2) return values.map(() => null);
+
+    const n = points.length;
+    const sumX = points.reduce((acc, p) => acc + p.x, 0);
+    const sumY = points.reduce((acc, p) => acc + p.y, 0);
+    const sumXY = points.reduce((acc, p) => acc + p.x * p.y, 0);
+    const sumX2 = points.reduce((acc, p) => acc + p.x * p.x, 0);
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) return values.map(() => null);
+
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+
+    return values.map((_, i) => {
+      const val = slope * i + intercept;
+      return Math.round(Math.max(0, Math.min(100, val)));
+    });
+  }
+
   async getResults(studentId: number, activityId: number) {
     const activity = await this.activitiesService.getForStudent(studentId, activityId);
     const submission = await this.submissions.findOne({

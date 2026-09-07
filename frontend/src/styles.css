@@ -423,3 +423,13 @@ html.dark .projection-message--neutral { color: var(--muted); background: var(--
 .activity-score { display: flex; align-items: baseline; gap: .4rem; margin: .25rem 0; }
 .activity-score .eyebrow { margin-right: auto; }
 .activity-score strong { font-size: 1.5rem; font-family: 'Fraunces', Georgia, serif; color: var(--green); }
+
+/* ─── Gráfico de evolución ───────────────────────────────────────────────── */
+.evolution-chart { display: grid; gap: 1.25rem; margin-bottom: 2rem; }
+.evolution-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.evolution-header h2 { margin-bottom: 0; font-size: clamp(1.2rem, 2.5vw, 1.6rem); }
+.evolution-selector label { display: grid; gap: .3rem; font-size: .85rem; font-weight: 600; color: #33455f; }
+.evolution-selector select { min-width: 200px; }
+.evolution-chart-area { height: 260px; }
+.evolution-loading { text-align: center; padding: 2rem 0; }
+.evolution-empty { margin: 0; }
