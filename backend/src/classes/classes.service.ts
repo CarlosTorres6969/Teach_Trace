@@ -131,6 +131,22 @@ export class ClassesService {
     );
   }
 
+  async sharedClassExists(studentId: number, teacherId: number): Promise<boolean> {
+    const teacherClasses = await this.classes.find({
+      where: { teacher: { id: teacherId } },
+    });
+    if (!teacherClasses.length) return false;
+    const classIds = teacherClasses.map((c) => c.id);
+    const enrollment = await this.enrollments.findOne({
+      where: {
+        student: { id: studentId },
+        academicClass: { id: In(classIds) },
+        active: true,
+      },
+    });
+    return !!enrollment;
+  }
+
   private async classResponse(academicClass: AcademicClass) {
     const enrollments = await this.enrollments.find({
       where: { academicClass: { id: academicClass.id }, active: true },

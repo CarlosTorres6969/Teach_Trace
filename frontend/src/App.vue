@@ -55,7 +55,9 @@ async function markRead(notification: AppNotification) {
 
 function navigateToNotification(notification: AppNotification) {
   bellOpen.value = false;
-  if (notification.activityId) {
+  if (notification.type === 'MESSAGE_RECEIVED' && notification.conversationId) {
+    void router.push(`/student/messages/${notification.conversationId}`);
+  } else if (notification.activityId) {
     void router.push(`/student/activities/${notification.activityId}/results`);
   }
 }
@@ -157,6 +159,24 @@ onBeforeUnmount(() => {
         <strong>{{ auth.user.name }}</strong>
         <span>{{ auth.user.role === 'student' ? 'Estudiante' : 'Docente' }}</span>
       </div>
+
+      <!-- Enlace a mensajes según rol -->
+      <RouterLink
+        v-if="auth.user.role === 'student'"
+        class="button ghost"
+        to="/student/messages"
+        aria-label="Mis mensajes"
+      >
+        💬 Mensajes
+      </RouterLink>
+      <RouterLink
+        v-else-if="auth.user.role === 'teacher'"
+        class="button ghost"
+        to="/teacher/messages"
+        aria-label="Mensajes de estudiantes"
+      >
+        💬 Mensajes
+      </RouterLink>
 
       <!-- Campana de notificaciones — solo estudiantes -->
       <div v-if="auth.user.role === 'student'" class="bell-wrapper">

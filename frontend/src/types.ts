@@ -25,11 +25,12 @@ export type NotificationPreference = {
 
 export type AppNotification = {
   id: number;
-  type: 'GRADE_PUBLISHED';
+  type: 'GRADE_PUBLISHED' | 'MESSAGE_RECEIVED';
   title: string;
   message: string;
   read: boolean;
   activityId: number | null;
+  conversationId: number | null;
   createdAt: string;
 };
 
@@ -105,4 +106,25 @@ export type PerformanceChart = {
   classAverage: (number | null)[];
   trendLine: (number | null)[];
   activities: PerformanceChartActivity[];
+};
+
+export type ConversationSummary = {
+  id: number;
+  subject: string;
+  status: 'open' | 'resolved';
+  createdAt: string;
+  updatedAt: string;
+  with: { id: number; name: string; role: Role };
+  submissionId: number | null;
+};
+
+export type MessageItem = {
+  id: number;
+  body: string;
+  createdAt: string;
+  sender: { id: number; name: string; role: Role };
+};
+
+export type ConversationThread = ConversationSummary & {
+  messages: MessageItem[];
 };

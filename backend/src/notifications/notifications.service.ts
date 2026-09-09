@@ -109,6 +109,43 @@ export class NotificationsService {
 
   // ─── Dispatch (llamado por otros servicios) ──────────────────────────────────
 
+  async dispatchMessageReceived(
+    recipient: User,
+    senderName: string,
+    subject: string,
+    conversationId: number,
+  ) {
+    const title = `Nuevo mensaje de ${senderName}`;
+    const message = `Asunto: "${subject}"`;
+
+    await this.notifications.save(
+      this.notifications.create({
+        user: recipient,
+        type: NotificationType.MESSAGE_RECEIVED,
+        title,
+        message,
+        read: false,
+        activityId: null,
+        conversationId,
+      }),
+    );
+
+    const pushEnabled = await this.preferencesService.isChannelEnabled(
+      recipient.id,
+      NotificationEventType.MESSAGE_RECEIVED,
+      NotificationChannel.PUSH,
+    );
+
+    const url =
+      recipient.role === 'teacher'
+        ? `/teacher/messages/${conversationId}`
+        : `/student/messages/${conversationId}`;
+
+    if (pushEnabled && this.vapidConfigured) {
+      await this.sendPush(recipient.id, title, message, url);
+    }
+  }
+
   async dispatchGradePublished(student: User, activityTitle: string, activityId: number) {
     const title = 'Tu entrega ha sido calificada';
     const message = `Tu entrega de "${activityTitle}" ya tiene retroalimentación del docente.`;
@@ -178,6 +215,7 @@ export class NotificationsService {
       message: n.message,
       read: n.read,
       activityId: n.activityId,
+      conversationId: n.conversationId,
       createdAt: n.createdAt,
     };
   }

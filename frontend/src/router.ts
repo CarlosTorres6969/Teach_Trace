@@ -4,8 +4,10 @@ import LoginView from './views/LoginView.vue';
 import NotificationSettingsView from './views/NotificationSettingsView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
 import StudentActivityView from './views/StudentActivityView.vue';
+import StudentMessagesView from './views/StudentMessagesView.vue';
 import StudentResultsView from './views/StudentResultsView.vue';
 import TeacherDashboard from './views/TeacherDashboard.vue';
+import TeacherMessagesView from './views/TeacherMessagesView.vue';
 import TeacherSubmissionsView from './views/TeacherSubmissionsView.vue';
 
 export const router = createRouter({
@@ -16,17 +18,13 @@ export const router = createRouter({
     { path: '/student', component: StudentDashboard, meta: { role: 'student' } },
     { path: '/student/activities/:id', component: StudentActivityView, meta: { role: 'student' } },
     { path: '/student/activities/:id/results', component: StudentResultsView, meta: { role: 'student' } },
-    {
-      path: '/settings/notifications',
-      component: NotificationSettingsView,
-      meta: { role: 'student' },
-    },
+    { path: '/student/messages', component: StudentMessagesView, meta: { role: 'student' } },
+    { path: '/student/messages/:id', component: StudentMessagesView, meta: { role: 'student' } },
+    { path: '/settings/notifications', component: NotificationSettingsView, meta: { role: 'student' } },
     { path: '/teacher', component: TeacherDashboard, meta: { role: 'teacher' } },
-    {
-      path: '/teacher/activities/:id/submissions',
-      component: TeacherSubmissionsView,
-      meta: { role: 'teacher' },
-    },
+    { path: '/teacher/activities/:id/submissions', component: TeacherSubmissionsView, meta: { role: 'teacher' } },
+    { path: '/teacher/messages', component: TeacherMessagesView, meta: { role: 'teacher' } },
+    { path: '/teacher/messages/:id', component: TeacherMessagesView, meta: { role: 'teacher' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });
