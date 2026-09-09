@@ -9,8 +9,17 @@ export class UsersService {
   constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
 
   async updatePreferences(user: User, input: UpdateUserPreferencesDto) {
-    user.theme = input.theme;
+    if (input.theme !== undefined) user.theme = input.theme;
+    if (input.accessibilitySettings !== undefined) {
+      user.accessibilitySettings = { ...input.accessibilitySettings };
+    }
+
     const updated = await this.users.save(user);
-    return { theme: updated.theme };
+    return {
+      ...(input.theme !== undefined ? { theme: updated.theme } : {}),
+      ...(input.accessibilitySettings !== undefined
+        ? { accessibilitySettings: updated.accessibilitySettings }
+        : {}),
+    };
   }
 }

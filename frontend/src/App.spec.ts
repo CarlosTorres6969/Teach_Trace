@@ -27,6 +27,11 @@ describe('App - selector de tema', () => {
         name: 'Estudiante',
         role: 'student',
         theme: 'light',
+        accessibilitySettings: {
+          fontSize: 100,
+          highContrast: false,
+          reducedMotion: false,
+        },
       },
       false,
     );

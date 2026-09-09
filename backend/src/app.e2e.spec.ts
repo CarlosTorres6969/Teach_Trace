@@ -19,7 +19,12 @@ import {
   NotificationPreference,
 } from './entities/notification-preference.entity';
 import { Submission, EvaluationStatus } from './entities/submission.entity';
-import { User, UserRole, UserTheme } from './entities/user.entity';
+import {
+  DEFAULT_ACCESSIBILITY_SETTINGS,
+  User,
+  UserRole,
+  UserTheme,
+} from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
 import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
 
@@ -1934,5 +1939,67 @@ describe('TeachTrace API (integración)', () => {
 
     const persisted = await dataSource.getRepository(User).findOneByOrFail({ id: student.user.id });
     expect(persisted.theme).toBe(UserTheme.DARK);
+  });
+
+  it('HU-41: persiste la configuracion de accesibilidad y la sincroniza con la sesion', async () => {
+    const users = dataSource.getRepository(User);
+    const beforeUpdate = await users.findOneByOrFail({ id: student.user.id });
+    expect(beforeUpdate.accessibilitySettings).toEqual(DEFAULT_ACCESSIBILITY_SETTINGS);
+
+    const accessibilitySettings = {
+      fontSize: 135,
+      highContrast: true,
+      reducedMotion: true,
+    };
+    const updated = await request('/api/users/me/preferences', {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ accessibilitySettings }),
+    });
+
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toEqual({ accessibilitySettings });
+    const persisted = await users.findOneByOrFail({ id: student.user.id });
+    expect(persisted.accessibilitySettings).toEqual(accessibilitySettings);
+
+    const sessionUser = await request('/api/auth/me', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(sessionUser.response.status).toBe(200);
+    expect(sessionUser.body).toMatchObject({ accessibilitySettings });
+  });
+
+  it('HU-41: rechaza configuraciones de accesibilidad incompletas o fuera de rango', async () => {
+    const invalidSettings = [
+      { fontSize: 99, highContrast: false, reducedMotion: false },
+      { fontSize: 151, highContrast: false, reducedMotion: false },
+      { fontSize: 125.5, highContrast: false, reducedMotion: false },
+      { fontSize: '125', highContrast: false, reducedMotion: false },
+      { fontSize: 125, highContrast: 'yes', reducedMotion: false },
+      { fontSize: 125, highContrast: false },
+      { fontSize: 125, highContrast: false, reducedMotion: false, unknown: true },
+    ];
+
+    for (const accessibilitySettings of invalidSettings) {
+      const response = await request('/api/users/me/preferences', {
+        method: 'PATCH',
+        headers: {
+          ...sessionHeaders(student.sessionCookie),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ accessibilitySettings }),
+      });
+      expect(response.response.status).toBe(400);
+    }
+
+    const anonymous = await request('/api/users/me/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessibilitySettings: DEFAULT_ACCESSIBILITY_SETTINGS }),
+    });
+    expect(anonymous.response.status).toBe(401);
   });
 });

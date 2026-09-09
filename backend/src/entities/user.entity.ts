@@ -12,6 +12,18 @@ export enum UserTheme {
   SYSTEM = 'system',
 }
 
+export type AccessibilitySettings = {
+  fontSize: number;
+  highContrast: boolean;
+  reducedMotion: boolean;
+};
+
+export const DEFAULT_ACCESSIBILITY_SETTINGS: AccessibilitySettings = {
+  fontSize: 100,
+  highContrast: false,
+  reducedMotion: false,
+};
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -34,6 +46,12 @@ export class User {
 
   @Column({ type: 'simple-enum', enum: UserTheme, default: UserTheme.SYSTEM })
   theme: UserTheme;
+
+  @Column({
+    type: 'simple-json',
+    default: '{"fontSize":100,"highContrast":false,"reducedMotion":false}',
+  })
+  accessibilitySettings: AccessibilitySettings;
 
   @OneToMany(() => AuthSession, (session) => session.user)
   sessions: AuthSession[];

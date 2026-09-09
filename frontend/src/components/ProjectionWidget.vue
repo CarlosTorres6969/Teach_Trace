@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { computed, onMounted, ref } from 'vue';
 import { Line } from 'vue-chartjs';
+import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
 import type { ProjectionData } from '../types';
 
@@ -49,6 +50,7 @@ async function load() {
 // ─── Datos del gráfico ────────────────────────────────────────────────────────
 const chartData = computed(() => {
   if (!projection.value) return null;
+  const highContrast = accessibilitySettings.value.highContrast;
 
   const acts = projection.value.activities;
   const labels = acts.map((a, i) => `Act. ${i + 1}`);
@@ -68,9 +70,9 @@ const chartData = computed(() => {
       {
         label: 'Nota real (%)',
         data: realPoints,
-        borderColor: '#234f8f',
-        backgroundColor: 'rgba(35,79,143,0.08)',
-        pointBackgroundColor: '#234f8f',
+        borderColor: highContrast ? '#9bd8ff' : '#234f8f',
+        backgroundColor: highContrast ? 'rgba(155,216,255,0.16)' : 'rgba(35,79,143,0.08)',
+        pointBackgroundColor: highContrast ? '#9bd8ff' : '#234f8f',
         pointRadius: 5,
         tension: 0.3,
         fill: false,
@@ -79,9 +81,9 @@ const chartData = computed(() => {
       {
         label: 'Proyección (%)',
         data: projectionPoints,
-        borderColor: '#f5a623',
-        backgroundColor: 'rgba(245,166,35,0.07)',
-        pointBackgroundColor: '#f5a623',
+        borderColor: highContrast ? '#ffe66b' : '#f5a623',
+        backgroundColor: highContrast ? 'rgba(255,230,107,0.12)' : 'rgba(245,166,35,0.07)',
+        pointBackgroundColor: highContrast ? '#ffe66b' : '#f5a623',
         pointRadius: 4,
         tension: 0.3,
         borderDash: [6, 4],
@@ -92,28 +94,58 @@ const chartData = computed(() => {
   };
 });
 
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { position: 'bottom' as const, labels: { boxWidth: 14, font: { size: 12 } } },
-    tooltip: {
-      callbacks: {
-        label: (ctx: TooltipItem<'line'>) =>
-          ctx.parsed.y !== null ? `${ctx.dataset.label ?? ''}: ${ctx.parsed.y}%` : 'Sin datos',
+const chartOptions = computed(() => {
+  const fontScale = accessibilitySettings.value.fontSize / 100;
+  const textColor = accessibilitySettings.value.highContrast ? '#ffffff' : '#666666';
+  const gridColor = accessibilitySettings.value.highContrast
+    ? 'rgba(255,255,255,0.35)'
+    : 'rgba(0,0,0,0.06)';
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          boxWidth: 14,
+          color: textColor,
+          font: { size: Math.round(12 * fontScale) },
+        },
+      },
+      tooltip: {
+        titleFont: { size: Math.round(12 * fontScale) },
+        bodyFont: { size: Math.round(12 * fontScale) },
+        callbacks: {
+          label: (ctx: TooltipItem<'line'>) =>
+            ctx.parsed.y !== null
+              ? `${ctx.dataset.label ?? ''}: ${ctx.parsed.y}%`
+              : 'Sin datos',
+        },
       },
     },
-  },
-  scales: {
-    y: {
-      min: 0,
-      max: 100,
-      ticks: { callback: (v: number | string) => `${v}%`, stepSize: 25 },
-      grid: { color: 'rgba(0,0,0,0.06)' },
+    scales: {
+      y: {
+        min: 0,
+        max: 100,
+        ticks: {
+          color: textColor,
+          font: { size: Math.round(12 * fontScale) },
+          callback: (v: number | string) => `${v}%`,
+          stepSize: 25,
+        },
+        grid: { color: gridColor },
+      },
+      x: {
+        ticks: {
+          color: textColor,
+          font: { size: Math.round(11 * fontScale) },
+        },
+        grid: { display: false },
+      },
     },
-    x: { grid: { display: false } },
-  },
-};
+  };
+});
 
 // ─── Mensajes contextuales ────────────────────────────────────────────────────
 const projectedLabel = computed(() => {

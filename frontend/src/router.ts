@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { auth, restoreSession, clearSession } from './auth';
+import AccessibilitySettingsView from './views/AccessibilitySettingsView.vue';
 import LoginView from './views/LoginView.vue';
 import NotificationSettingsView from './views/NotificationSettingsView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
@@ -21,6 +22,7 @@ export const router = createRouter({
     { path: '/student/messages', component: StudentMessagesView, meta: { role: 'student' } },
     { path: '/student/messages/:id', component: StudentMessagesView, meta: { role: 'student' } },
     { path: '/settings/notifications', component: NotificationSettingsView, meta: { role: 'student' } },
+    { path: '/settings/accessibility', component: AccessibilitySettingsView, meta: { role: 'student' } },
     { path: '/teacher', component: TeacherDashboard, meta: { role: 'teacher' } },
     { path: '/teacher/activities/:id/submissions', component: TeacherSubmissionsView, meta: { role: 'teacher' } },
     { path: '/teacher/messages', component: TeacherMessagesView, meta: { role: 'teacher' } },

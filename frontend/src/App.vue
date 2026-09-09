@@ -170,6 +170,15 @@ onBeforeUnmount(() => {
         💬 Mensajes
       </RouterLink>
       <RouterLink
+        v-if="auth.user.role === 'student'"
+        class="button ghost"
+        to="/settings/accessibility"
+        aria-label="Configuración de accesibilidad"
+      >
+        <span aria-hidden="true">Aa</span>
+        <span class="topbar-settings-label">Accesibilidad</span>
+      </RouterLink>
+      <RouterLink
         v-else-if="auth.user.role === 'teacher'"
         class="button ghost"
         to="/teacher/messages"

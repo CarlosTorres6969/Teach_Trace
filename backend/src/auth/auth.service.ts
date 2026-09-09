@@ -5,7 +5,7 @@ import { randomBytes, scrypt as nodeScrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
-import { User } from '../entities/user.entity';
+import { DEFAULT_ACCESSIBILITY_SETTINGS, User } from '../entities/user.entity';
 import { LoginDto } from './login.dto';
 import { LoginAttemptService } from './login-attempt.service';
 
@@ -64,6 +64,9 @@ export class AuthService {
       name: user.name,
       role: user.role,
       theme: user.theme,
+      accessibilitySettings: user.accessibilitySettings ?? {
+        ...DEFAULT_ACCESSIBILITY_SETTINGS,
+      },
     };
   }
 

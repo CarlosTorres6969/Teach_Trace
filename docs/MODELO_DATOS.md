@@ -5,7 +5,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 
 ## Entidades y relaciones
 
-- `User`: cuenta autorizada con rol `student` o `teacher` y tema `light`, `dark` o `system`.
+- `User`: cuenta autorizada con rol `student` o `teacher`, tema `light`, `dark` o `system` y
+  configuración de accesibilidad (`fontSize`, `highContrast`, `reducedMotion`).
 - `AuthSession`: sesión JWT revocable y con vencimiento.
 - `AcademicClass`: clase impartida por un docente.
 - `Enrollment`: matrícula activa de un estudiante; la combinación estudiante–clase es única.
@@ -46,6 +47,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
   emisor de notificaciones pueda usar un canal.
 - El tema de un usuario solo admite `light`, `dark` o `system`; las cuentas nuevas utilizan
   `system` para respetar inicialmente la preferencia del dispositivo.
+- La accesibilidad comienza con texto al 100 %, contraste normal y animaciones normales. El
+  cliente siempre respeta `prefers-reduced-motion`, aunque la preferencia guardada esté apagada.
 
 ## Declaración de IA y actualización de la entrega
 

@@ -1,12 +1,19 @@
 export type Role = 'student' | 'teacher';
 export type ThemePreference = 'light' | 'dark' | 'system';
 
+export type AccessibilitySettings = {
+  fontSize: number;
+  highContrast: boolean;
+  reducedMotion: boolean;
+};
+
 export type User = {
   id: number;
   email: string;
   name: string;
   role: Role;
   theme: ThemePreference;
+  accessibilitySettings: AccessibilitySettings;
 };
 
 export type NotificationEventType =

@@ -15,7 +15,10 @@
   --muted: #5b6b80;
   --danger: #a33d35;
   --canvas: #eef2f8;
+  --app-font-size: 100%;
 }
+
+html { font-size: var(--app-font-size); }
 
 html.dark {
   --ink: #edf3fc;
@@ -41,11 +44,11 @@ h1 { font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; margin-bottom: .5re
 h2 { margin-bottom: .4rem; }
 a { color: var(--green); }
 
-.topbar { height: 72px; padding: 0 clamp(1rem, 4vw, 4rem); background: linear-gradient(120deg, #234f8f 0%, #0c2340 100%); color: white; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 5; }
+.topbar { min-height: 72px; height: auto; padding: .5rem clamp(1rem, 4vw, 4rem); background: linear-gradient(120deg, #234f8f 0%, #0c2340 100%); color: white; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; position: sticky; top: 0; z-index: 5; }
 .brand { color: white; text-decoration: none; display: flex; align-items: center; gap: .7rem; font-weight: 700; }
 .brand small { color: #b9cde7; font-size: .65rem; letter-spacing: .12em; }
 .brand-mark { width: 38px; height: 38px; display: inline-grid; place-items: center; background: var(--gold); color: var(--green); font: 700 1.4rem 'Fraunces'; border-radius: 10px 2px 10px 2px; }
-.user-menu { display: flex; align-items: center; gap: 1.25rem; }
+.user-menu { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 1.25rem; }
 .user-menu div { display: flex; flex-direction: column; text-align: right; font-size: .86rem; }
 .user-menu span { opacity: .72; }
 .topbar-settings-icon { display: none; }
@@ -258,6 +261,78 @@ dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
 .notification-actions { display: flex; justify-content: flex-end; padding: 0 1.25rem 1.25rem; }
 .toast { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 50; max-width: min(380px, calc(100% - 3rem)); padding: 1rem 1.2rem; color: white; background: #1d5c8f; border-radius: 10px 3px 10px 3px; box-shadow: 0 14px 35px rgba(10,34,64,.24); font-weight: 700; }
 
+/* Accesibilidad */
+.accessibility-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); gap: 1.25rem; align-items: start; }
+.accessibility-controls { display: grid; gap: 1.5rem; }
+.accessibility-controls h2 { margin-top: .25rem; }
+.font-size-control { display: grid; gap: .7rem; }
+.font-size-control > span:first-child { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+.font-size-control output { color: var(--green); font-size: 1.15rem; font-weight: 700; }
+.font-size-control input[type='range'] { padding: 0; accent-color: var(--green); cursor: pointer; }
+.range-labels { display: flex; justify-content: space-between; color: var(--muted); }
+.accessibility-option { display: flex; grid-template-columns: none; align-items: flex-start; gap: .85rem; padding: 1rem; border: 1px solid var(--line); border-radius: 10px 3px 10px 3px; cursor: pointer; }
+.accessibility-option input { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; margin-top: .15rem; accent-color: var(--green); }
+.accessibility-option span, .accessibility-option strong, .accessibility-option small { display: block; }
+.accessibility-option small { margin-top: .25rem; color: var(--muted); line-height: 1.45; }
+.accessibility-actions { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.accessibility-preview { position: sticky; top: 96px; display: grid; gap: .85rem; border-style: dashed; }
+.accessibility-preview h2, .accessibility-preview p { margin: 0; }
+
+/* Paleta de contraste reforzado: texto normal >= 7:1. */
+html.high-contrast {
+  color-scheme: dark;
+  --ink: #ffffff;
+  --green: #9bd8ff;
+  --primary-solid: #003566;
+  --green-light: #102f49;
+  --gold: #ffe66b;
+  --paper: #000000;
+  --line: #ffffff;
+  --muted: #ffffff;
+  --danger: #ffb3ad;
+  --canvas: #000000;
+}
+html.high-contrast body,
+html.high-contrast .topbar,
+html.high-contrast .login-shell { background: #000000 !important; }
+html.high-contrast .topbar { border-bottom: 2px solid #ffffff; }
+html.high-contrast label,
+html.high-contrast .eyebrow,
+html.high-contrast .notification-table thead th { color: #ffffff; }
+html.high-contrast .activity-card,
+html.high-contrast .panel,
+html.high-contrast .login-card,
+html.high-contrast input,
+html.high-contrast textarea,
+html.high-contrast select,
+html.high-contrast .status { color: #ffffff; background: #000000; border-color: #ffffff; box-shadow: none; }
+html.high-contrast .button.primary { color: #ffffff; background: #003566; border: 2px solid #ffffff; }
+html.high-contrast .button.secondary,
+html.high-contrast .button.ghost { color: #ffffff; background: #000000; border: 2px solid #ffffff; }
+html.high-contrast a,
+html.high-contrast .text-button,
+html.high-contrast .font-size-control output { color: #9bd8ff; }
+html.high-contrast .brand-mark { color: #000000; background: #ffe66b; }
+html.high-contrast *:focus-visible { outline: 3px solid #ffe66b; outline-offset: 3px; }
+
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: .01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 html.dark .eyebrow { color: var(--gold); }
 html.dark .brand-mark { color: #0c2340; }
 html.dark .button.primary,
@@ -311,9 +386,11 @@ html.dark .notification-checkbox input:disabled + span { background: #35618f; bo
   .login-intro h1 { font-size: 3.3rem; }
   .page-heading { display: block; }
   .form-grid, .split-view { grid-template-columns: 1fr; }
+  .accessibility-layout { grid-template-columns: 1fr; }
+  .accessibility-preview { position: static; }
   .span-2 { grid-column: auto; }
   .user-menu div { display: none; }
-  .user-menu { gap: .5rem; }
+  .user-menu { flex: 1 1 100%; gap: .5rem; }
   .topbar-settings-label { display: none; }
   .topbar-settings-icon { display: inline; font-size: 1.05rem; }
   .tabs { overflow-x: auto; }
@@ -484,3 +561,71 @@ html.dark .messages-list-item:hover { background: #1a2b42; }
 html.dark .messages-list-item--active { background: #172a3e; }
 html.dark .messages-bubble--theirs { background: #1a2b42; }
 html.dark .messages-bubble--theirs p { color: #e4ecf7; }
+
+/* El contraste reforzado debe prevalecer sobre los temas y estados de cada componente. */
+html.high-contrast .button.primary,
+html.high-contrast .section-title span,
+html.high-contrast .catalog-code,
+html.high-contrast .student-avatar,
+html.high-contrast .notification-checkbox input:checked + span,
+html.high-contrast .logbook-step-button.active .logbook-step-number {
+  color: #ffffff !important;
+  background: #003566 !important;
+  border-color: #ffffff !important;
+}
+
+html.high-contrast .button.secondary,
+html.high-contrast .button.ghost,
+html.high-contrast .status,
+html.high-contrast .logbook-step-button,
+html.high-contrast .logbook-step-number,
+html.high-contrast .logbook-step-content,
+html.high-contrast .alert,
+html.high-contrast .roster-list,
+html.high-contrast .catalog-stats,
+html.high-contrast .catalog-badges span,
+html.high-contrast .modal-header,
+html.high-contrast .modal-close,
+html.high-contrast .modal-section,
+html.high-contrast .roster-modal-list > div,
+html.high-contrast .empty-inline,
+html.high-contrast .enrollment-mode-tabs,
+html.high-contrast .enrollment-mode-tabs button,
+html.high-contrast .excel-format-note,
+html.high-contrast .excel-format-note code,
+html.high-contrast .excel-file-picker,
+html.high-contrast .bulk-enrollment-result,
+html.high-contrast .bulk-result-stats,
+html.high-contrast .criterion-box--error,
+html.high-contrast .notification-table thead th,
+html.high-contrast .notification-checkbox span,
+html.high-contrast .platform-notice,
+html.high-contrast .bell-dropdown,
+html.high-contrast .bell-item,
+html.high-contrast .valuation-level-item,
+html.high-contrast .projection-message,
+html.high-contrast .messages-list-item,
+html.high-contrast .messages-bubble--theirs {
+  color: #ffffff !important;
+  background: #000000 !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html.high-contrast .logbook-step-button.active,
+html.high-contrast .enrollment-mode-tabs button.active,
+html.high-contrast .bell-item--unread,
+html.high-contrast .messages-list-item--active {
+  color: #ffffff !important;
+  background: #102f49 !important;
+  border-color: #9bd8ff !important;
+}
+
+html.high-contrast .logbook-progress { background: #ffffff; }
+html.high-contrast .logbook-progress span { background: #003566; }
+html.high-contrast .alert,
+html.high-contrast .projection-message { border: 2px solid #ffffff; }
+html.high-contrast .login-card .button.primary:hover:not(:disabled) {
+  color: #ffffff;
+  background: #003566;
+}

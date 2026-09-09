@@ -1,6 +1,7 @@
 import { reactive } from 'vue';
 import { API_URL } from './api-url';
 import type { User } from './types';
+import { applyAccessibilitySettings, DEFAULT_ACCESSIBILITY_SETTINGS } from './accessibility';
 import { applyTheme } from './theme';
 
 const AUTH_EVENT_KEY = 'teachtrace_auth_event';
@@ -34,6 +35,7 @@ let restorePromise: Promise<void> | null = null;
 export function setSession(user: User, notify = true) {
   auth.user = user;
   applyTheme(user.theme ?? 'system');
+  applyAccessibilitySettings(user.accessibilitySettings ?? DEFAULT_ACCESSIBILITY_SETTINGS);
   auth.initialized = true;
   if (notify) broadcastAuthEvent('login');
 }

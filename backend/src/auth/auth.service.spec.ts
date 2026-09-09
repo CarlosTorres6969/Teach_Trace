@@ -39,6 +39,11 @@ describe('AuthService', () => {
       name: 'Estudiante',
       role: UserRole.STUDENT,
       theme: UserTheme.SYSTEM,
+      accessibilitySettings: {
+        fontSize: 100,
+        highContrast: false,
+        reducedMotion: false,
+      },
       active: true,
       passwordHash,
       sessions: [],

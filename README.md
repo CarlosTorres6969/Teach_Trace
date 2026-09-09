@@ -15,6 +15,7 @@ El flujo base implementa:
 - Roster docente y consulta de todas las evidencias entregadas.
 - Preferencias de notificación por evento y canal para estudiantes.
 - Modo claro, oscuro o automático sincronizado con la cuenta del usuario.
+- Accesibilidad global con texto ampliable, contraste AAA y movimiento reducido.
 
 ## Inicio rápido
 

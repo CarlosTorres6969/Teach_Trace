@@ -16,6 +16,7 @@
 | HU-21 | Consulta docente del producto, bitácora y declaración del estudiante. |
 | EP07 — Preferencias de notificación | Configuración por evento de email, push y avisos en plataforma; este último canal es obligatorio. |
 | EP07 — Modo oscuro | Tema claro u oscuro instantáneo, persistido localmente y en la cuenta, con modo del sistema como valor inicial. |
+| HU-41 | Tamaño de texto, alto contraste y movimiento reducido sincronizados con la cuenta. |
 
 ## Recorridos
 
@@ -69,6 +70,8 @@
   canales activos y los avisos en plataforma no pueden deshabilitarse.
 - El tema se aplica antes de montar la interfaz, se conserva en `localStorage` y se recupera desde
   la cuenta en cada inicio o restauración de sesión.
+- La accesibilidad se aplica globalmente mediante variables y clases CSS, combina la reducción de
+  movimiento elegida con `prefers-reduced-motion` y se recupera desde la cuenta.
 
 ## Cobertura automatizada
 
@@ -84,3 +87,5 @@ También cubre los valores predeterminados de notificación, su actualización i
 obligatoriedad del canal en plataforma y el acceso autenticado.
 Las pruebas de tema verifican la preferencia del sistema operativo, el cambio instantáneo, la
 persistencia local y remota, los valores inválidos y contraste WCAG AA en colores principales.
+Las pruebas de accesibilidad verifican límites, persistencia, vista previa, movimiento reducido y
+contraste WCAG AAA de la paleta alternativa.

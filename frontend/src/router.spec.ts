@@ -54,6 +54,7 @@ function createStudentUser(overrides: Partial<User> = {}): User {
     name: 'Estudiante',
     role: 'student',
     theme: 'system',
+    accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
     ...overrides,
   };
 }
@@ -65,6 +66,7 @@ function createTeacherUser(overrides: Partial<User> = {}): User {
     name: 'Docente',
     role: 'teacher',
     theme: 'system',
+    accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
     ...overrides,
   };
 }
