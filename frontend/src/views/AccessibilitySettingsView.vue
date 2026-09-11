@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
         <h2>Aprender con claridad</h2>
         <p>
           Este texto cambia mientras ajustas el control. La configuración se aplicará a todas las
-          clases, actividades, mensajes y resultados de TeachTrace.
+          clases, actividades, foros y resultados de TeachTrace.
         </p>
         <a href="#preview" @click.prevent>Enlace de ejemplo</a>
         <button class="button primary" type="button">Botón de ejemplo</button>

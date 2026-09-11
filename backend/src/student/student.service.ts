@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ActivitiesService } from '../activities/activities.service';
+import { In, Repository } from 'typeorm';
+import {
+  ActivitiesService,
+  StudentActivityFilter,
+} from '../activities/activities.service';
 import { AiDeclarationsService } from '../ai-declarations/ai-declarations.service';
+import { AiDeclaration } from '../entities/ai-declaration.entity';
+import { Logbook } from '../entities/logbook.entity';
 import { Submission, SubmissionStatus } from '../entities/submission.entity';
 import { Valuation } from '../entities/valuation.entity';
 import { User } from '../entities/user.entity';
@@ -23,13 +28,44 @@ export class StudentService {
     private readonly submissions: Repository<Submission>,
     @InjectRepository(Valuation)
     private readonly valuations: Repository<Valuation>,
+    @InjectRepository(Logbook)
+    private readonly logbooks: Repository<Logbook>,
+    @InjectRepository(AiDeclaration)
+    private readonly declarations: Repository<AiDeclaration>,
   ) {}
 
-  async listActivities(studentId: number) {
-    const activities = await this.activitiesService.listForStudent(studentId);
+  async listActivities(studentId: number, requestedFilter?: string) {
+    const filter = (requestedFilter ?? 'all') as StudentActivityFilter;
+    const activities = await this.activitiesService.listForStudent(studentId, filter);
+    const activityIds = activities.map((activity) => activity.id);
+    const [logbooks, declarations, submissions] = activityIds.length
+      ? await Promise.all([
+          this.logbooks.find({
+            where: { student: { id: studentId }, activity: { id: In(activityIds) } },
+          }),
+          this.declarations.find({
+            where: { student: { id: studentId }, activity: { id: In(activityIds) } },
+          }),
+          this.submissions.find({
+            where: { student: { id: studentId }, activity: { id: In(activityIds) } },
+          }),
+        ])
+      : [[], [], []];
+    const logbooksByActivity = new Map(logbooks.map((item) => [item.activity.id, item]));
+    const declarationsByActivity = new Map(
+      declarations.map((item) => [item.activity.id, item]),
+    );
+    const submissionsByActivity = new Map(
+      submissions.map((item) => [item.activity.id, item]),
+    );
     return Promise.all(
       activities.map(async (activity) => {
-        const submission = await this.submissionsService.getStatus(studentId, activity.id);
+        const submission = submissionsByActivity.get(activity.id);
+        const progress = this.completionProgress(
+          logbooksByActivity.get(activity.id),
+          declarationsByActivity.get(activity.id),
+          submission,
+        );
         const finalScore = await this.getActivityFinalScore(studentId, activity.id);
         return {
           id: activity.id,
@@ -45,11 +81,28 @@ export class StudentService {
                 code: activity.academicClass.code,
               }
             : null,
-          submissionStatus: submission.status,
+          submissionStatus: submission?.status ?? SubmissionStatus.NOT_SUBMITTED,
           finalScore,
+          createdAt: activity.createdAt,
+          isNew: this.isUnviewedWithinDays(activity, studentId, 3),
+          logbookStatus: progress.logbookStatus,
+          completionPercentage: progress.percentage,
+          missingSections: progress.missingSections,
         };
       }),
     );
+  }
+
+  async getNewActivityCount(studentId: number) {
+    const activities = await this.activitiesService.listForStudent(studentId, 'all');
+    return {
+      count: activities.filter((activity) => this.isUnviewedWithinDays(activity, studentId, 7))
+        .length,
+    };
+  }
+
+  markActivityViewed(studentId: number, activityId: number) {
+    return this.activitiesService.markViewed(studentId, activityId);
   }
 
   getLogbook(studentId: number, activityId: number) {
@@ -96,6 +149,59 @@ export class StudentService {
       .map((v) => v.teacherValue as number);
     if (!teacherValues.length) return null;
     return teacherValues.reduce((a, b) => a + b, 0) / teacherValues.length;
+  }
+
+  private completionProgress(
+    logbook?: Logbook,
+    declaration?: AiDeclaration,
+    submission?: Submission,
+  ) {
+    const logbookFields = logbook
+      ? [
+          logbook.initialIdeas,
+          logbook.prompts,
+          logbook.validationsAndDecisions,
+          logbook.finalReflection,
+        ]
+      : [];
+    const completedLogbookFields = logbookFields.filter((value) => value.trim().length > 0).length;
+    const logbookComplete = completedLogbookFields === 4;
+    const declarationComplete = Boolean(
+      declaration?.toolName.trim() &&
+        declaration.usageLevel &&
+        declaration.purpose.trim() &&
+        declaration.promptSummary.trim(),
+    );
+    const productDelivered = Boolean(
+      submission && submission.status !== SubmissionStatus.NOT_SUBMITTED,
+    );
+    const missingSections: string[] = [];
+    if (!logbookComplete) missingSections.push('bitácora');
+    if (!declarationComplete) missingSections.push('declaración IA');
+    if (!productDelivered) missingSections.push('producto final');
+    return {
+      percentage:
+        (logbookComplete ? 40 : 0) +
+        (declarationComplete ? 30 : 0) +
+        (productDelivered ? 30 : 0),
+      missingSections,
+      logbookStatus:
+        completedLogbookFields === 4
+          ? 'complete'
+          : completedLogbookFields > 0
+            ? 'in_progress'
+            : 'not_started',
+    };
+  }
+
+  private isUnviewedWithinDays(
+    activity: { createdAt: Date; viewedByStudents?: Array<{ studentId: number }> },
+    studentId: number,
+    days: number,
+  ) {
+    if (activity.viewedByStudents?.some((view) => view.studentId === studentId)) return false;
+    const age = Date.now() - new Date(activity.createdAt).getTime();
+    return age >= 0 && age <= days * 24 * 60 * 60 * 1000;
   }
 
   // ─── Proyección ───────────────────────────────────────────────────────────────

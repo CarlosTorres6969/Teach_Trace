@@ -2002,4 +2002,238 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(anonymous.response.status).toBe(401);
   });
+
+  it('HU-22 a HU-24: filtra actividades, calcula progreso y registra la primera vista', async () => {
+    const beforeCount = await request('/api/student/activities/new-count', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 2);
+    const dueDateText = [
+      dueDate.getFullYear(),
+      String(dueDate.getMonth() + 1).padStart(2, '0'),
+      String(dueDate.getDate()).padStart(2, '0'),
+    ].join('-');
+    const created = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Actividad de dashboard',
+        classId,
+        dueDate: dueDateText,
+        activityType: 'Proyecto',
+        evaluationPhase: ActivityPhase.PILOT,
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    const createdId = (created.body as { id: number }).id;
+
+    const week = await request('/api/student/activities?filter=week', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    const initialActivity = (week.body as Array<Record<string, unknown>>).find(
+      (item) => item.id === createdId,
+    );
+    expect(initialActivity).toMatchObject({
+      completionPercentage: 0,
+      logbookStatus: 'not_started',
+      isNew: true,
+      missingSections: ['bitácora', 'declaración IA', 'producto final'],
+    });
+
+    const afterCreateCount = await request('/api/student/activities/new-count', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((afterCreateCount.body as { count: number }).count).toBe(
+      (beforeCount.body as { count: number }).count + 1,
+    );
+
+    const marked = await request(`/api/student/activities/${createdId}/mark-viewed`, {
+      method: 'PATCH',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(marked.response.status).toBe(200);
+    await request(`/api/student/activities/${createdId}/mark-viewed`, {
+      method: 'PATCH',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    const views = await dataSource.getRepository(Activity).findOneByOrFail({ id: createdId });
+    expect(views.viewedByStudents).toHaveLength(1);
+
+    await request(`/api/student/activities/${createdId}/logbook`, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        initialIdeas: 'Idea inicial',
+        prompts: 'Prompt utilizado',
+        validationsAndDecisions: 'Validación y decisión',
+        finalReflection: 'Reflexión final',
+      }),
+    });
+    await request(`/api/student/activities/${createdId}/ai-declaration`, {
+      method: 'PUT',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        toolName: 'ChatGPT',
+        usageLevel: 2,
+        purpose: 'Revisar estructura',
+        promptSummary: 'Solicité retroalimentación',
+      }),
+    });
+    const atSeventy = await request('/api/student/activities?filter=all', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(
+      (atSeventy.body as Array<Record<string, unknown>>).find((item) => item.id === createdId),
+    ).toMatchObject({ completionPercentage: 70, missingSections: ['producto final'] });
+
+    const form = new FormData();
+    form.set('productText', 'Producto final de prueba');
+    form.set('toolName', 'ChatGPT');
+    form.set('usageLevel', '2');
+    form.set('purpose', 'Revisar estructura');
+    form.set('promptSummary', 'Solicité retroalimentación');
+    const submitted = await request(`/api/student/activities/${createdId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    expect(submitted.response.status).toBe(200);
+    const complete = await request('/api/student/activities?filter=all', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(
+      (complete.body as Array<Record<string, unknown>>).find((item) => item.id === createdId),
+    ).toMatchObject({ completionPercentage: 100, missingSections: [], isNew: false });
+
+    const invalidFilter = await request('/api/student/activities?filter=year', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(invalidFilter.response.status).toBe(400);
+  });
+
+  it('HU-30: ofrece foro paginado con respuestas, búsqueda, avisos y moderación', async () => {
+    const created = await request(`/api/forum/classes/${classId}/threads`, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Duda sobre el proyecto final',
+        description: '¿Qué evidencia debemos adjuntar en la entrega?',
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    const threadId = (created.body as { id: number }).id;
+
+    const reply = await request(`/api/forum/threads/${threadId}/posts`, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: 'Adjunta el producto y documenta el proceso.' }),
+    });
+    expect(reply.response.status).toBe(201);
+    const replyId = (reply.body as { id: number }).id;
+
+    const nested = await request(`/api/forum/threads/${threadId}/posts`, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: 'Gracias por la aclaración.', parentPostId: replyId }),
+    });
+    expect(nested.response.status).toBe(201);
+    const nestedId = (nested.body as { id: number }).id;
+
+    const tooDeep = await request(`/api/forum/threads/${threadId}/posts`, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: 'No debe aceptarse.', parentPostId: nestedId }),
+    });
+    expect(tooDeep.response.status).toBe(400);
+
+    const pinned = await request(`/api/forum/threads/${threadId}/pinned`, {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pinned: true }),
+    });
+    expect(pinned.response.status).toBe(200);
+    expect(pinned.body).toMatchObject({ pinned: true });
+
+    const resolved = await request(`/api/forum/threads/${threadId}/resolved`, {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ resolved: true }),
+    });
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.body).toMatchObject({ resolved: true });
+
+    const reopenedByTeacher = await request(`/api/forum/threads/${threadId}/resolved`, {
+      method: 'PATCH',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ resolved: false }),
+    });
+    expect(reopenedByTeacher.response.status).toBe(200);
+    expect(reopenedByTeacher.body).toMatchObject({ resolved: false });
+
+    const search = await request(
+      `/api/forum/classes/${classId}/threads?page=1&q=${encodeURIComponent('proyecto final')}`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+    expect(search.response.status).toBe(200);
+    expect(search.body).toMatchObject({ page: 1, pageSize: 20 });
+    expect((search.body as { items: Array<{ id: number }> }).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: threadId })]),
+    );
+
+    const notifications = await request('/api/notifications', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(notifications.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'FORUM_REPLY',
+          forumThreadId: threadId,
+          classId,
+        }),
+      ]),
+    );
+
+    const moderated = await request(`/api/forum/posts/${nestedId}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(moderated.response.status).toBe(200);
+    const thread = await request(`/api/forum/threads/${threadId}`, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((thread.body as { posts: Array<{ id: number }> }).posts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: nestedId })]),
+    );
+  });
 });

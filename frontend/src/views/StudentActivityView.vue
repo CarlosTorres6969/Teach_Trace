@@ -118,6 +118,15 @@ async function load() {
   }
 }
 
+async function markActivityViewed() {
+  try {
+    await api(`/student/activities/${activityId}/mark-viewed`, { method: 'PATCH' });
+    window.dispatchEvent(new CustomEvent('teachtrace:activity-viewed'));
+  } catch {
+    // La lectura del detalle no debe bloquearse si el indicador no puede actualizarse.
+  }
+}
+
 function openStep(index: number) {
   currentStep.value = index;
   message.value = '';
@@ -233,7 +242,10 @@ async function runSave<T = unknown>(success: string, path: string, data: object)
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  void markActivityViewed();
+});
 </script>
 
 <template>

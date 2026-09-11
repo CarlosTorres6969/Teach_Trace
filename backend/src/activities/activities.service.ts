@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { ClassesService } from '../classes/classes.service';
 import { Activity } from '../entities/activity.entity';
 import { Enrollment } from '../entities/enrollment.entity';
@@ -12,6 +12,8 @@ import {
   UpdateLearningOutcomesDto,
 } from './activities.dto';
 
+export type StudentActivityFilter = 'week' | 'month' | 'all';
+
 @Injectable()
 export class ActivitiesService {
   constructor(
@@ -20,17 +22,34 @@ export class ActivitiesService {
     private readonly classesService: ClassesService,
   ) {}
 
-  async listForStudent(studentId: number) {
+  async listForStudent(studentId: number, filter: StudentActivityFilter = 'all') {
+    if (!['week', 'month', 'all'].includes(filter)) {
+      throw new BadRequestException('El filtro debe ser week, month o all');
+    }
     const enrollments = await this.enrollments.find({
       where: { student: { id: studentId }, active: true },
     });
     const classIds = enrollments.map((enrollment) => enrollment.academicClass.id);
     if (!classIds.length) return [];
+    const dueDateRange = this.dateRange(filter);
     return this.activities.find({
-      where: { academicClass: { id: In(classIds) } },
+      where: {
+        academicClass: { id: In(classIds) },
+        ...(dueDateRange ? { dueDate: Between(dueDateRange.from, dueDateRange.to) } : {}),
+      },
       relations: { rubric: true },
-      order: { id: 'ASC' },
+      order: { dueDate: 'ASC', id: 'ASC' },
     });
+  }
+
+  async markViewed(studentId: number, activityId: number) {
+    const activity = await this.getForStudent(studentId, activityId);
+    activity.viewedByStudents ??= [];
+    if (!activity.viewedByStudents.some((view) => view.studentId === studentId)) {
+      activity.viewedByStudents.push({ studentId, viewedAt: new Date().toISOString() });
+      await this.activities.save(activity);
+    }
+    return { activityId, viewed: true };
   }
 
   async getForStudent(studentId: number, activityId: number) {
@@ -104,5 +123,25 @@ export class ActivitiesService {
   async setManualEvaluationRequired(activity: Activity, required: boolean) {
     activity.manualEvaluationRequired = required;
     return this.activities.save(activity);
+  }
+
+  private dateRange(filter: StudentActivityFilter) {
+    if (filter === 'all') return null;
+    const now = new Date();
+    const from = this.toDateOnly(now);
+    const end = new Date(now);
+    if (filter === 'week') {
+      end.setDate(now.getDate() + 6);
+    } else {
+      end.setMonth(now.getMonth() + 1, 0);
+    }
+    return { from, to: this.toDateOnly(end) };
+  }
+
+  private toDateOnly(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

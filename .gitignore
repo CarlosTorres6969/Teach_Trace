@@ -11,3 +11,6 @@ frontend/src/**/*.js
 *.log
 *.docx
 *.pdf
+docs/
+*.md
+!README.md

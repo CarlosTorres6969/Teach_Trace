@@ -9,6 +9,7 @@ import { registerPushNotifications } from './usePush';
 
 const router = useRouter();
 const savingTheme = ref(false);
+const newActivityCount = ref(0);
 
 // ─── Notificaciones ───────────────────────────────────────────────────────────
 const notifications = ref<AppNotification[]>([]);
@@ -23,6 +24,16 @@ async function fetchUnreadCount() {
     unreadCount.value = data.count;
   } catch {
     // silencioso — no interrumpir la app si falla el polling
+  }
+}
+
+async function fetchNewActivityCount() {
+  if (!auth.user || auth.user.role !== 'student') return;
+  try {
+    const data = await api<{ count: number }>('/student/activities/new-count');
+    newActivityCount.value = data.count;
+  } catch {
+    // silencioso: el resto de la navegación continúa disponible
   }
 }
 
@@ -55,8 +66,11 @@ async function markRead(notification: AppNotification) {
 
 function navigateToNotification(notification: AppNotification) {
   bellOpen.value = false;
-  if (notification.type === 'MESSAGE_RECEIVED' && notification.conversationId) {
-    void router.push(`/student/messages/${notification.conversationId}`);
+  if (notification.type === 'FORUM_REPLY' && notification.forumThreadId && notification.classId) {
+    void router.push({
+      path: `/student/classes/${notification.classId}/forum`,
+      query: { thread: String(notification.forumThreadId) },
+    });
   } else if (notification.activityId) {
     void router.push(`/student/activities/${notification.activityId}/results`);
   }
@@ -88,6 +102,10 @@ function formatDate(iso: string): string {
 
 function closeBellOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape') bellOpen.value = false;
+}
+
+function refreshActivityCount() {
+  void fetchNewActivityCount();
 }
 
 // ─── Tema ─────────────────────────────────────────────────────────────────────
@@ -133,9 +151,12 @@ onMounted(async () => {
   window.addEventListener('keydown', closeBellOnEscape);
 
   if (auth.user?.role === 'student') {
-    await fetchUnreadCount();
+    await Promise.all([fetchUnreadCount(), fetchNewActivityCount()]);
+    window.addEventListener('teachtrace:activity-viewed', refreshActivityCount);
     // Polling cada 30 segundos como fallback
-    pollInterval = setInterval(() => { void fetchUnreadCount(); }, 30000);
+    pollInterval = setInterval(() => {
+      void Promise.all([fetchUnreadCount(), fetchNewActivityCount()]);
+    }, 30000);
     // Registrar service worker y suscripción push
     void registerPushNotifications();
   }
@@ -143,6 +164,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', closeBellOnEscape);
+  window.removeEventListener('teachtrace:activity-viewed', refreshActivityCount);
   if (pollInterval) clearInterval(pollInterval);
 });
 </script>
@@ -160,14 +182,13 @@ onBeforeUnmount(() => {
         <span>{{ auth.user.role === 'student' ? 'Estudiante' : 'Docente' }}</span>
       </div>
 
-      <!-- Enlace a mensajes según rol -->
       <RouterLink
         v-if="auth.user.role === 'student'"
-        class="button ghost"
-        to="/student/messages"
-        aria-label="Mis mensajes"
+        class="button ghost activities-nav-link"
+        to="/student"
+        :aria-label="`Mis actividades${newActivityCount ? `, ${newActivityCount} nuevas` : ''}`"
       >
-        💬 Mensajes
+        Actividades<span v-if="newActivityCount > 0" class="activities-nav-badge">{{ newActivityCount }}</span>
       </RouterLink>
       <RouterLink
         v-if="auth.user.role === 'student'"
@@ -178,15 +199,6 @@ onBeforeUnmount(() => {
         <span aria-hidden="true">Aa</span>
         <span class="topbar-settings-label">Accesibilidad</span>
       </RouterLink>
-      <RouterLink
-        v-else-if="auth.user.role === 'teacher'"
-        class="button ghost"
-        to="/teacher/messages"
-        aria-label="Mensajes de estudiantes"
-      >
-        💬 Mensajes
-      </RouterLink>
-
       <!-- Campana de notificaciones — solo estudiantes -->
       <div v-if="auth.user.role === 'student'" class="bell-wrapper">
         <button

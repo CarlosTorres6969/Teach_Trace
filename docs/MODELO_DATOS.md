@@ -11,7 +11,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - `AcademicClass`: clase impartida por un docente.
 - `Enrollment`: matrícula activa de un estudiante; la combinación estudiante–clase es única.
 - `Activity`: actividad obligatoriamente asociada a una clase y clasificada como `baseline` o
-  `pilot`.
+  `pilot`; registra su fecha de creación y la primera vista de cada estudiante.
 - `Rubric`: siete dimensiones con descriptores para niveles 1–4.
 - `Logbook`: bitácora única por estudiante y actividad.
 - `AiDeclaration`: declaración única por estudiante y actividad, con nivel declarado, nivel
@@ -23,10 +23,14 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - `Indicator`: valor calculado y referencia de línea base.
 - `NotificationPreference`: canales de notificación habilitados para una combinación única de
   usuario y tipo de evento.
+- `Notification`: aviso en plataforma, incluidos los enlaces a respuestas del foro.
+- `ForumThread`: hilo perteneciente a una clase, con autor y estados destacado/resuelto.
+- `ForumPost`: respuesta perteneciente a un hilo y, opcionalmente, a otra respuesta raíz.
 
 ## Restricciones relevantes
 
 - Una actividad no puede existir sin clase.
+- La primera vista de una actividad se conserva una sola vez por estudiante.
 - Una matrícula no puede repetirse para el mismo estudiante y clase.
 - Una bitácora, declaración o entrega no puede repetirse para estudiante y actividad.
 - El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
@@ -45,6 +49,8 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Cada usuario tiene como máximo una preferencia por tipo de evento. Los tres canales comienzan
   activos y `IN_APP` es obligatorio; el backend consulta el valor vigente sin caché antes de que un
   emisor de notificaciones pueda usar un canal.
+- Un hilo de foro no puede existir sin clase y una respuesta no puede existir sin hilo. Las
+  respuestas anidadas se limitan a un nivel desde la API.
 - El tema de un usuario solo admite `light`, `dark` o `system`; las cuentas nuevas utilizan
   `system` para respetar inicialmente la preferencia del dispositivo.
 - La accesibilidad comienza con texto al 100 %, contraste normal y animaciones normales. El

@@ -11,10 +11,10 @@ import { AiDeclaration } from './entities/ai-declaration.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
-import { Conversation } from './entities/conversation.entity';
+import { ForumPost } from './entities/forum-post.entity';
+import { ForumThread } from './entities/forum-thread.entity';
 import { Indicator } from './entities/indicator.entity';
 import { Logbook } from './entities/logbook.entity';
-import { Message } from './entities/message.entity';
 import { Notification } from './entities/notification.entity';
 import { NotificationPreference } from './entities/notification-preference.entity';
 import { PushSubscriptionEntity } from './entities/push-subscription.entity';
@@ -23,9 +23,9 @@ import { Submission } from './entities/submission.entity';
 import { User } from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
 import { EvaluationsModule } from './evaluations/evaluations.module';
+import { ForumModule } from './forum/forum.module';
 import { IndicatorsModule } from './indicators/indicators.module';
 import { LogbooksModule } from './logbooks/logbooks.module';
-import { MessagesModule } from './messages/messages.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RubricsModule } from './rubrics/rubrics.module';
@@ -50,8 +50,8 @@ const entities = [
   NotificationPreference,
   Notification,
   PushSubscriptionEntity,
-  Conversation,
-  Message,
+  ForumThread,
+  ForumPost,
 ];
 
 @Module({
@@ -97,7 +97,7 @@ const entities = [
     StudentModule,
     TeacherModule,
     UsersModule,
-    MessagesModule,
+    ForumModule,
   ],
   providers: [SeedService],
 })

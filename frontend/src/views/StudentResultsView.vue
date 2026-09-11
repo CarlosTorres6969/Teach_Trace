@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
 
@@ -20,8 +20,6 @@ type ResultsResponse = {
   valuations: ValuationItem[];
   finalScore: number | null;
   feedback: string;
-  submissionId?: number | null;
-  teacherId?: number | null;
 };
 
 const route = useRoute();
@@ -30,16 +28,6 @@ const activityId = Number(route.params.id);
 const results = ref<ResultsResponse | null>(null);
 const loading = ref(true);
 const error = ref('');
-
-// URL para "Consultar al docente" — pre-llena la conversación con submissionId
-const consultUrl = computed(() => {
-  if (!results.value) return '/student/messages';
-  const params = new URLSearchParams();
-  if (results.value.submissionId) params.set('submissionId', String(results.value.submissionId));
-  if (results.value.teacherId) params.set('teacherId', String(results.value.teacherId));
-  const qs = params.toString();
-  return `/student/messages${qs ? `?${qs}` : ''}`;
-});
 
 async function load() {
   try {
@@ -75,18 +63,9 @@ onMounted(load);
         <span class="eyebrow">Mis resultados</span>
         <h1>{{ results?.activity.title ?? 'Cargando…' }}</h1>
       </div>
-      <div class="page-heading-actions">
-        <RouterLink class="button secondary back-link" :to="`/student/activities/${activityId}`">
-          ← Volver
-        </RouterLink>
-        <RouterLink
-          v-if="results?.status === 'evaluated'"
-          class="button primary"
-          :to="consultUrl"
-        >
-          💬 Consultar al docente
-        </RouterLink>
-      </div>
+      <RouterLink class="button secondary back-link" :to="`/student/activities/${activityId}`">
+        ← Volver
+      </RouterLink>
     </section>
 
     <p v-if="loading" class="muted">Cargando resultados…</p>

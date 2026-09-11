@@ -16,6 +16,8 @@ El flujo base implementa:
 - Preferencias de notificación por evento y canal para estudiantes.
 - Modo claro, oscuro o automático sincronizado con la cuenta del usuario.
 - Accesibilidad global con texto ampliable, contraste AAA y movimiento reducido.
+- Dashboard estudiantil filtrado con progreso, alertas de vencimiento y actividades nuevas.
+- Foro de discusión por clase con búsqueda, respuestas, destacados y moderación docente.
 
 ## Inicio rápido
 
@@ -56,6 +58,7 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `ai-engine`: contrato del motor de IA; permanece como stub seguro.
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
+- `forum`: hilos y respuestas por clase con permisos por matrícula/propiedad y notificaciones.
 
 ## Seguridad de la sesión
 

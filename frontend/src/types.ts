@@ -19,7 +19,6 @@ export type User = {
 export type NotificationEventType =
   | 'NEW_ACTIVITY'
   | 'GRADE_PUBLISHED'
-  | 'MESSAGE_RECEIVED'
   | 'ACTIVITY_DUE_SOON'
   | 'SUBMISSION_STATUS_CHANGED';
 
@@ -32,12 +31,13 @@ export type NotificationPreference = {
 
 export type AppNotification = {
   id: number;
-  type: 'GRADE_PUBLISHED' | 'MESSAGE_RECEIVED';
+  type: 'GRADE_PUBLISHED' | 'FORUM_REPLY';
   title: string;
   message: string;
   read: boolean;
   activityId: number | null;
-  conversationId: number | null;
+  forumThreadId: number | null;
+  classId: number | null;
   createdAt: string;
 };
 
@@ -63,6 +63,52 @@ export type Activity = {
   learningOutcomes?: string[];
   submissionStatus?: string;
   rubric?: Rubric | null;
+  createdAt?: string;
+  isNew?: boolean;
+  logbookStatus?: 'not_started' | 'in_progress' | 'complete';
+  completionPercentage?: number;
+  missingSections?: string[];
+};
+
+export type ForumAuthor = {
+  id: number;
+  name: string;
+  role: Role;
+};
+
+export type ForumPost = {
+  id: number;
+  body: string;
+  parentPostId: number | null;
+  author: ForumAuthor;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ForumThreadSummary = {
+  id: number;
+  title: string;
+  description: string;
+  pinned: boolean;
+  resolved: boolean;
+  author: ForumAuthor;
+  postCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ForumThread = Omit<ForumThreadSummary, 'postCount'> & {
+  academicClass: Pick<AcademicClass, 'id' | 'name' | 'code' | 'subject'>;
+  posts: ForumPost[];
+};
+
+export type ForumThreadPage = {
+  academicClass: Pick<AcademicClass, 'id' | 'name' | 'code' | 'subject'>;
+  items: ForumThreadSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 };
 
 export type Criterion = {
@@ -113,25 +159,4 @@ export type PerformanceChart = {
   classAverage: (number | null)[];
   trendLine: (number | null)[];
   activities: PerformanceChartActivity[];
-};
-
-export type ConversationSummary = {
-  id: number;
-  subject: string;
-  status: 'open' | 'resolved';
-  createdAt: string;
-  updatedAt: string;
-  with: { id: number; name: string; role: Role };
-  submissionId: number | null;
-};
-
-export type MessageItem = {
-  id: number;
-  body: string;
-  createdAt: string;
-  sender: { id: number; name: string; role: Role };
-};
-
-export type ConversationThread = ConversationSummary & {
-  messages: MessageItem[];
 };

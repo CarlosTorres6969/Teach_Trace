@@ -3,7 +3,7 @@ import { User } from './user.entity';
 
 export enum NotificationType {
   GRADE_PUBLISHED = 'GRADE_PUBLISHED',
-  MESSAGE_RECEIVED = 'MESSAGE_RECEIVED',
+  FORUM_REPLY = 'FORUM_REPLY',
 }
 
 @Entity('notifications')
@@ -30,7 +30,10 @@ export class Notification {
   activityId: number | null;
 
   @Column({ type: 'integer', nullable: true })
-  conversationId: number | null;
+  forumThreadId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  classId: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -23,11 +23,6 @@ const eventDefinitions: Array<{
     description: 'Cuando esté disponible el resultado de una evaluación.',
   },
   {
-    type: 'MESSAGE_RECEIVED',
-    label: 'Mensaje docente',
-    description: 'Cuando recibas un mensaje o comentario de un docente.',
-  },
-  {
     type: 'ACTIVITY_DUE_SOON',
     label: 'Actividad próxima a vencer',
     description: 'Cuando se acerque la fecha límite de una actividad pendiente.',

@@ -14,6 +14,10 @@
 | HU-15 a HU-18 | Declaración de herramienta, nivel 1–3, propósito y prompts, guardada junto al producto. |
 | HU-19, HU-20 | Entrega de texto, enlace o archivo y visualización del estado y fecha. |
 | HU-21 | Consulta docente del producto, bitácora y declaración del estudiante. |
+| HU-22 | Dashboard con filtros para los próximos siete días, el mes y todas las actividades; contador de pendientes, fechas, urgencia y sección colapsada de completadas. |
+| HU-23 | Progreso calculado por actividad (bitácora 40 %, declaración IA 30 % y producto 30 %) con barra, semáforo y secciones faltantes. |
+| HU-24 | Contador de actividades nuevas en navegación, marca visual durante tres días y primera vista persistida por estudiante. |
+| HU-30 | Foro por clase para ambos roles con búsqueda, paginación, respuestas de un nivel, destacados, resolución, moderación y avisos al autor. |
 | EP07 — Preferencias de notificación | Configuración por evento de email, push y avisos en plataforma; este último canal es obligatorio. |
 | EP07 — Modo oscuro | Tema claro u oscuro instantáneo, persistido localmente y en la cuenta, con modo del sistema como valor inicial. |
 | HU-41 | Tamaño de texto, alto contraste y movimiento reducido sincronizados con la cuenta. |
@@ -29,6 +33,7 @@
 5. Consulta el estado y actualiza la entrega si es necesario.
 6. Configura sus canales por tipo de evento desde `/settings/notifications`.
 7. Alterna el modo claro u oscuro desde la barra de navegación.
+8. Consulta el foro de cada clase, publica preguntas y responde a otros participantes.
 
 ### Docente
 
@@ -37,6 +42,7 @@
 3. Crea una rúbrica de siete dimensiones y cuatro niveles.
 4. Asocia la rúbrica con la actividad.
 5. Consulta las entregas, descarga archivos y revisa toda la evidencia del estudiante.
+6. Participa en los foros, destaca hilos, resuelve dudas y modera publicaciones.
 
 ## Controles incluidos
 
@@ -51,6 +57,8 @@
 - Consultas de bitácora, declaración y entrega limitadas al estudiante autenticado.
 - Actividades, rúbricas y entregas docentes limitadas a su propietario.
 - Actividades estudiantiles limitadas a matrículas activas.
+- Foros limitados a estudiantes matriculados y al docente propietario de la clase; solo el autor o
+  el docente pueden resolver un hilo y únicamente el docente puede destacar o moderar.
 - Producto y declaración de IA guardados en una única transacción.
 - Nombre real de la herramienta de IA obligatorio, normalizado y limitado a 120 caracteres.
 - Nivel de uso de IA sin valor predeterminado y con selección explícita entre 1, 2 y 3.
@@ -83,6 +91,9 @@ declaraciones de IA inválidas, selección y persistencia de los tres niveles de
 resumen de prompts normalizados en declaración y entrega, bloqueo de cambios aislados tras la
 entrega, separación entre valor IA y docente, referencia de línea base y degradación a revisión
 manual.
+Las historias HU-22 a HU-24 verifican filtros, progreso 0/70/100, conteo de novedades y vista
+idempotente. HU-30 verifica creación y búsqueda de hilos, paginación de 20 elementos, anidación de
+un nivel, permisos de destacado/resolución, notificación al autor y moderación docente.
 También cubre los valores predeterminados de notificación, su actualización inmediata, la
 obligatoriedad del canal en plataforma y el acceso autenticado.
 Las pruebas de tema verifican la preferencia del sistema operativo, el cambio instantáneo, la

@@ -358,9 +358,14 @@ onBeforeUnmount(() => {
               <div><strong>{{ academicClass.studentCount }}</strong><span>Estudiantes</span></div>
               <div><strong>{{ classActivityCount(academicClass.id) }}</strong><span>Actividades</span></div>
             </div>
-            <button class="button secondary full" type="button" @click="openClassDetail(academicClass.id)">
-              Ver clase y matrícula
-            </button>
+            <div class="catalog-actions">
+              <button class="button secondary" type="button" @click="openClassDetail(academicClass.id)">
+                Ver clase y matrícula
+              </button>
+              <RouterLink class="button primary" :to="`/teacher/classes/${academicClass.id}/forum`">
+                Foro
+              </RouterLink>
+            </div>
           </article>
         </div>
         <div v-else class="panel empty-state">

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   ParseIntPipe,
   Put,
   Query,
@@ -29,8 +30,24 @@ export class StudentController {
   constructor(private readonly studentService: StudentService) {}
 
   @Get('activities')
-  listActivities(@CurrentUser() user: User) {
-    return this.studentService.listActivities(user.id);
+  listActivities(
+    @CurrentUser() user: User,
+    @Query('filter') filter?: string,
+  ) {
+    return this.studentService.listActivities(user.id, filter);
+  }
+
+  @Get('activities/new-count')
+  getNewActivityCount(@CurrentUser() user: User) {
+    return this.studentService.getNewActivityCount(user.id);
+  }
+
+  @Patch('activities/:activityId/mark-viewed')
+  markActivityViewed(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+  ) {
+    return this.studentService.markActivityViewed(user.id, activityId);
   }
 
   @Get('activities/:activityId/logbook')

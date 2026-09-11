@@ -11,7 +11,6 @@ vi.mock('../api', () => ({ api: apiMock }));
 const defaultPreferences = [
   'NEW_ACTIVITY',
   'GRADE_PUBLISHED',
-  'MESSAGE_RECEIVED',
   'ACTIVITY_DUE_SOON',
   'SUBMISSION_STATUS_CHANGED',
 ].map((eventType) => ({ eventType, channels: ['EMAIL', 'PUSH', 'IN_APP'] }));
@@ -33,13 +32,12 @@ describe('NotificationSettingsView', () => {
     });
     await flushPromises();
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(5);
+    expect(wrapper.findAll('tbody tr')).toHaveLength(4);
     expect(wrapper.text()).toContain('Nueva actividad');
     expect(wrapper.text()).toContain('Calificación publicada');
-    expect(wrapper.text()).toContain('Mensaje docente');
 
     const inAppCheckboxes = wrapper.findAll('input[aria-label$="En plataforma"]');
-    expect(inAppCheckboxes).toHaveLength(5);
+    expect(inAppCheckboxes).toHaveLength(4);
     for (const checkbox of inAppCheckboxes) {
       expect((checkbox.element as HTMLInputElement).checked).toBe(true);
       expect(checkbox.attributes('disabled')).toBeDefined();
