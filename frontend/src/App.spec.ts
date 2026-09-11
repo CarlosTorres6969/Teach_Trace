@@ -64,4 +64,35 @@ describe('App - selector de tema', () => {
     expect(auth.user?.theme).toBe('dark');
     expect(wrapper.get('.theme-toggle').attributes('aria-label')).toBe('Activar modo claro');
   });
+
+  it('revierte el cambio local si no puede persistir la preferencia', async () => {
+    let rejectPreference!: (reason: Error) => void;
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/users/me/preferences') {
+        return new Promise((_resolve, reject) => {
+          rejectPreference = reject;
+        });
+      }
+      return Promise.resolve({ count: 0 });
+    });
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          RouterLink: { template: '<a><slot /></a>' },
+          RouterView: { template: '<div />' },
+        },
+      },
+    });
+    await flushPromises();
+
+    await wrapper.get('.theme-toggle').trigger('click');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    rejectPreference(new Error('No se pudo guardar'));
+    await flushPromises();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(localStorage.getItem('teachtrace_theme')).toBe('light');
+    expect(auth.user?.theme).toBe('light');
+    expect(wrapper.get('.theme-toggle').attributes('aria-label')).toBe('Activar modo oscuro');
+  });
 });

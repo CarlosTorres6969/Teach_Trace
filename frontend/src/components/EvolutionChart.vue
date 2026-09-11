@@ -15,6 +15,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
+import { chartThemePalette } from '../chart-theme';
+import { resolvedTheme } from '../theme';
 import type { AcademicClass, PerformanceChart } from '../types';
 
 ChartJS.register(
@@ -58,7 +60,10 @@ onMounted(load);
 const lineChartData = computed(() => {
   if (!chartData.value) return null;
   const { labels, myGrades, classAverage, trendLine, activities } = chartData.value;
-  const highContrast = accessibilitySettings.value.highContrast;
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
   // Etiquetas legibles: título de actividad (fallback: fecha)
   const readableLabels = labels.map(
@@ -71,9 +76,9 @@ const lineChartData = computed(() => {
       {
         label: 'Mi nota (%)',
         data: myGrades,
-        borderColor: highContrast ? '#9bd8ff' : '#234f8f',
-        backgroundColor: highContrast ? 'rgba(155,216,255,0.16)' : 'rgba(35,79,143,0.10)',
-        pointBackgroundColor: highContrast ? '#9bd8ff' : '#234f8f',
+        borderColor: palette.primary,
+        backgroundColor: palette.primaryFill,
+        pointBackgroundColor: palette.primary,
         pointRadius: 5,
         pointHoverRadius: 7,
         tension: 0.35,
@@ -84,9 +89,9 @@ const lineChartData = computed(() => {
       {
         label: 'Promedio clase (%)',
         data: classAverage,
-        borderColor: highContrast ? '#ffffff' : 'rgba(100,120,150,0.55)',
-        backgroundColor: highContrast ? 'rgba(255,255,255,0.12)' : 'rgba(100,120,150,0.08)',
-        pointBackgroundColor: highContrast ? '#ffffff' : 'rgba(100,120,150,0.55)',
+        borderColor: palette.secondary,
+        backgroundColor: palette.secondaryFill,
+        pointBackgroundColor: palette.secondary,
         pointRadius: 3,
         tension: 0.35,
         fill: true,
@@ -96,7 +101,7 @@ const lineChartData = computed(() => {
       {
         label: 'Tendencia',
         data: trendLine,
-        borderColor: highContrast ? '#ffe66b' : '#f5a623',
+        borderColor: palette.accent,
         backgroundColor: 'transparent',
         pointRadius: 0,
         tension: 0,
@@ -111,10 +116,10 @@ const lineChartData = computed(() => {
 
 const chartOptions = computed(() => {
   const fontScale = accessibilitySettings.value.fontSize / 100;
-  const textColor = accessibilitySettings.value.highContrast ? '#ffffff' : '#666666';
-  const gridColor = accessibilitySettings.value.highContrast
-    ? 'rgba(255,255,255,0.35)'
-    : 'rgba(0,0,0,0.05)';
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
   return {
     responsive: true,
@@ -125,7 +130,7 @@ const chartOptions = computed(() => {
         position: 'bottom' as const,
         labels: {
           boxWidth: 14,
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
         },
       },
@@ -158,16 +163,16 @@ const chartOptions = computed(() => {
         min: 0,
         max: 100,
         ticks: {
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
           callback: (v: number | string) => `${v}%`,
           stepSize: 25,
         },
-        grid: { color: gridColor },
+        grid: { color: palette.grid },
       },
       x: {
         ticks: {
-          color: textColor,
+          color: palette.text,
           maxRotation: 30,
           font: { size: Math.round(11 * fontScale) },
           callback: (_val: unknown, index: number) => {
