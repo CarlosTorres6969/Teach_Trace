@@ -226,6 +226,14 @@ onBeforeUnmount(() => {
       <RouterLink
         v-if="auth.user.role === 'student'"
         class="button ghost"
+        to="/student/profile"
+        aria-label="Mi perfil académico"
+      >
+        📊 Mi perfil
+      </RouterLink>
+      <RouterLink
+        v-if="auth.user.role === 'student'"
+        class="button ghost"
         to="/settings/accessibility"
         aria-label="Configuración de accesibilidad"
       >

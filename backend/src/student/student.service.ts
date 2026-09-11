@@ -83,19 +83,54 @@ export class StudentService {
 
   // ─── Helpers privados ────────────────────────────────────────────────────────
 
+  /**
+   * Nota final publicada de un estudiante en una actividad.
+   * Solo cuenta si: submission.status === EVALUATED y todas las valoraciones usadas
+   * tienen confirmed === true. Devuelve null si la entrega no está publicada.
+   */
   private async getActivityFinalScore(studentId: number, activityId: number): Promise<number | null> {
     const submission = await this.submissions.findOne({
       where: { student: { id: studentId }, activity: { id: activityId } },
     });
-    if (!submission) return null;
+    // Solo contar notas de entregas completamente evaluadas
+    if (!submission || submission.status !== SubmissionStatus.EVALUATED) return null;
+
     const valuationList = await this.valuations.find({
       where: { submission: { id: submission.id } },
     });
-    const teacherValues = valuationList
-      .filter((v) => v.teacherValue !== null)
+    const confirmedValues = valuationList
+      .filter((v) => v.confirmed && v.teacherValue !== null)
       .map((v) => v.teacherValue as number);
-    if (!teacherValues.length) return null;
-    return teacherValues.reduce((a, b) => a + b, 0) / teacherValues.length;
+    if (!confirmedValues.length) return null;
+    return confirmedValues.reduce((a, b) => a + b, 0) / confirmedValues.length;
+  }
+
+  /**
+   * Versión batch de getActivityFinalScore para múltiples entregas en una sola consulta.
+   * Evita el patrón N+1 al calcular promedios de clase.
+   * Devuelve un Map<submissionId, avgScore> solo para entregas EVALUATED con confirmed values.
+   */
+  private async getBatchFinalScores(submissionIds: number[]): Promise<Map<number, number>> {
+    if (!submissionIds.length) return new Map();
+    const valuationList = await this.valuations.find({
+      where: submissionIds.map((id) => ({ submission: { id }, confirmed: true })),
+    });
+    const bySubmission = new Map<number, number[]>();
+    for (const v of valuationList) {
+      if (v.teacherValue === null) continue;
+      const sid = (v.submission as unknown as { id: number }).id ?? v.id;
+      // TypeORM en eager devuelve submission como objeto — accedemos al id del join
+      const subId = (v as unknown as { submissionId?: number }).submissionId
+        ?? (v.submission as unknown as { id: number })?.id;
+      if (!subId) continue;
+      if (!bySubmission.has(subId)) bySubmission.set(subId, []);
+      bySubmission.get(subId)!.push(v.teacherValue);
+    }
+    const result = new Map<number, number>();
+    for (const [subId, vals] of bySubmission) {
+      result.set(subId, vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    return result;
   }
 
   // ─── Proyección ───────────────────────────────────────────────────────────────
@@ -206,7 +241,6 @@ export class StudentService {
   async getPerformanceChart(studentId: number, classId?: number) {
     const toPercent = (score: number) => Math.round(((score - 1) / 3) * 100);
 
-    // Obtener actividades del estudiante, opcionalmente filtradas por clase
     const allActivities = await this.activitiesService.listForStudent(studentId);
     const activities = classId
       ? allActivities.filter((a) => a.academicClass?.id === classId)
@@ -214,6 +248,53 @@ export class StudentService {
 
     // Ordenar cronológicamente por dueDate
     const sorted = [...activities].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    // ─── Cargar todas las submissions de estas actividades en UNA sola query (evita N+1) ───
+    const activityIds = sorted.map((a) => a.id);
+    if (!activityIds.length) {
+      return { labels: [], myGrades: [], classAverage: [], trendLine: [], activities: [] };
+    }
+
+    const allSubmissions = await this.submissions.find({
+      where: activityIds.map((id) => ({ activity: { id } })),
+    });
+
+    // Separar submissions por actividad
+    const submsByActivity = new Map<number, typeof allSubmissions>();
+    for (const sub of allSubmissions) {
+      const aid = (sub.activity as unknown as { id: number }).id;
+      if (!submsByActivity.has(aid)) submsByActivity.set(aid, []);
+      submsByActivity.get(aid)!.push(sub);
+    }
+
+    // Cargar valoraciones de todas las submissions EVALUATED en una sola query
+    const evaluatedSubmIds = allSubmissions
+      .filter((s) => s.status === SubmissionStatus.EVALUATED)
+      .map((s) => s.id);
+
+    const allValuations = evaluatedSubmIds.length
+      ? await this.valuations.find({
+          where: evaluatedSubmIds.map((id) => ({ submission: { id }, confirmed: true })),
+        })
+      : [];
+
+    // Agrupar valoraciones por submissionId
+    const valsBySubmission = new Map<number, number[]>();
+    for (const v of allValuations) {
+      if (v.teacherValue === null) continue;
+      const subId = (v.submission as unknown as { id: number })?.id;
+      if (!subId) continue;
+      if (!valsBySubmission.has(subId)) valsBySubmission.set(subId, []);
+      valsBySubmission.get(subId)!.push(v.teacherValue);
+    }
+
+    // Helper: nota publicada de una submission (solo EVALUATED + confirmed)
+    const publishedScore = (sub: (typeof allSubmissions)[0]): number | null => {
+      if (sub.status !== SubmissionStatus.EVALUATED) return null;
+      const vals = valsBySubmission.get(sub.id);
+      if (!vals?.length) return null;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
 
     const labels: string[] = [];
     const myGrades: (number | null)[] = [];
@@ -224,32 +305,19 @@ export class StudentService {
       labels.push(activity.dueDate);
       activityMeta.push({ id: activity.id, title: activity.title, dueDate: activity.dueDate });
 
-      // Nota propia
-      const myScore = await this.getActivityFinalScore(studentId, activity.id);
+      const actSubs = submsByActivity.get(activity.id) ?? [];
+
+      // Nota propia — solo si está publicada
+      const mySub = actSubs.find((s) => s.student.id === studentId);
+      const myScore = mySub ? publishedScore(mySub) : null;
       myGrades.push(myScore !== null ? toPercent(myScore) : null);
 
-      // Promedio de la clase: solo estudiantes con entrega evaluada en esta actividad
-      const allSubmissions = await this.submissions.find({
-        where: { activity: { id: activity.id } },
-      });
-
+      // Promedio de clase — solo submissions EVALUATED de compañeros
       const classScores: number[] = [];
-      for (const sub of allSubmissions) {
-        if (sub.student.id === studentId) continue; // excluir el propio
-        const subValuations = await this.valuations.find({
-          where: { submission: { id: sub.id } },
-        });
-        const teacherVals = subValuations
-          .filter((v) => v.teacherValue !== null)
-          .map((v) => v.teacherValue as number);
-        if (teacherVals.length) {
-          const avg = teacherVals.reduce((a, b) => a + b, 0) / teacherVals.length;
-          classScores.push(toPercent(avg));
-        }
+      for (const sub of actSubs) {
+        const score = publishedScore(sub);
+        if (score !== null) classScores.push(toPercent(score));
       }
-      // Incluir la nota propia en el promedio de la clase si existe
-      if (myScore !== null) classScores.push(toPercent(myScore));
-
       classAverage.push(
         classScores.length > 0
           ? Math.round(classScores.reduce((a, b) => a + b, 0) / classScores.length)
@@ -257,16 +325,10 @@ export class StudentService {
       );
     }
 
-    // Regresión lineal simple sobre los puntos propios no nulos
-    const trendLine = this.linearRegression(myGrades);
+    // Tendencia solo sobre puntos reales (no pendientes) — null en actividades sin nota
+    const trendLine = this.linearRegressionOnlyReal(myGrades);
 
-    return {
-      labels,
-      myGrades,
-      classAverage,
-      trendLine,
-      activities: activityMeta,
-    };
+    return { labels, myGrades, classAverage, trendLine, activities: activityMeta };
   }
 
   // Regresión lineal simple: devuelve un punto por cada label (null si no hay datos suficientes)
@@ -289,6 +351,33 @@ export class StudentService {
     return values.map((_, i) => {
       const val = slope * i + intercept;
       return Math.round(Math.max(0, Math.min(100, val)));
+    });
+  }
+
+  /**
+   * Regresión lineal solo sobre puntos reales — los índices sin nota devuelven null.
+   * Esto evita extender la tendencia histórica sobre actividades pendientes.
+   */
+  private linearRegressionOnlyReal(values: (number | null)[]): (number | null)[] {
+    const points: Array<{ x: number; y: number }> = [];
+    values.forEach((v, i) => { if (v !== null) points.push({ x: i, y: v }); });
+    if (points.length < 2) return values.map(() => null);
+
+    const n = points.length;
+    const sumX = points.reduce((acc, p) => acc + p.x, 0);
+    const sumY = points.reduce((acc, p) => acc + p.y, 0);
+    const sumXY = points.reduce((acc, p) => acc + p.x * p.y, 0);
+    const sumX2 = points.reduce((acc, p) => acc + p.x * p.x, 0);
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) return values.map(() => null);
+
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Solo calcular para índices que tengan nota real, null en el resto
+    return values.map((v, i) => {
+      if (v === null) return null;
+      return Math.round(Math.max(0, Math.min(100, slope * i + intercept)));
     });
   }
 

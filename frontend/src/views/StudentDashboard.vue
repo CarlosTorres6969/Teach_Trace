@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
-import EvolutionChart from '../components/EvolutionChart.vue';
 import ProjectionWidget from '../components/ProjectionWidget.vue';
 import type { Activity } from '../types';
 
@@ -66,9 +65,6 @@ onMounted(async () => {
         :key="classId"
         :class-id="classId"
       />
-
-      <!-- Gráfico de evolución -->
-      <EvolutionChart v-if="uniqueClasses.length > 0" :classes="uniqueClasses" />
 
       <!-- Lista de actividades -->
       <section class="card-grid">

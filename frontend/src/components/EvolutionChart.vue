@@ -65,9 +65,9 @@ const lineChartData = computed(() => {
     accessibilitySettings.value.highContrast,
   );
 
-  // Etiquetas legibles: título de actividad (fallback: fecha)
+  // Etiquetas del eje X: ["2026-07-10", "Análisis de caso"] como dos líneas
   const readableLabels = labels.map(
-    (l, i) => activities[i]?.title ?? l,
+    (l, i) => [l, activities[i]?.title ?? ''] as [string, string],
   );
 
   return {
@@ -141,19 +141,13 @@ const chartOptions = computed(() => {
           title: (items: TooltipItem<'line'>[]) => {
             const idx = items[0]?.dataIndex ?? 0;
             const act = chartData.value?.activities[idx];
-            return act ? `${act.title}` : items[0]?.label ?? '';
+            const date = chartData.value?.labels[idx] ?? '';
+            return act ? `${act.title} · ${date}` : date;
           },
           label: (item: TooltipItem<'line'>) => {
             const val = item.parsed.y;
             if (val === null || val === undefined) return `${item.dataset.label}: —`;
             return `${item.dataset.label}: ${val}%`;
-          },
-          afterLabel: (item: TooltipItem<'line'>) => {
-            // Solo en el primer dataset (mi nota) mostramos la fecha
-            if (item.datasetIndex !== 0) return '';
-            const idx = item.dataIndex;
-            const dueDate = chartData.value?.activities[idx]?.dueDate;
-            return dueDate ? `Entrega: ${dueDate}` : '';
           },
         },
       },
@@ -176,8 +170,12 @@ const chartOptions = computed(() => {
           maxRotation: 30,
           font: { size: Math.round(11 * fontScale) },
           callback: (_val: unknown, index: number) => {
-            const label = lineChartData.value?.labels[index] ?? '';
-            return label.length > 16 ? label.slice(0, 15) + '…' : label;
+            const pair = lineChartData.value?.labels[index] as [string, string] | undefined;
+            if (!pair) return '';
+            const [date, title] = pair;
+            // Truncar título si es muy largo
+            const shortTitle = title.length > 14 ? title.slice(0, 13) + '…' : title;
+            return [date, shortTitle];
           },
         },
         grid: { display: false },
@@ -199,8 +197,8 @@ const hasData = computed(
         <h2>Mi progreso por actividad</h2>
       </div>
 
-      <!-- Selector de clase -->
-      <div v-if="props.classes.length > 1" class="evolution-selector">
+      <!-- Selector de clase — siempre visible cuando hay al menos una clase -->
+      <div v-if="props.classes.length > 0" class="evolution-selector">
         <label>
           Clase
           <select v-model="selectedClassId">
