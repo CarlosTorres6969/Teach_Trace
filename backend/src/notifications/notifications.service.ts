@@ -1,7 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, forwardRef, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Notification, NotificationType } from '../entities/notification.entity';
 import { PushSubscriptionEntity } from '../entities/push-subscription.entity';
 import { User } from '../entities/user.entity';
@@ -11,6 +11,7 @@ import {
 } from '../entities/notification-preference.entity';
 import { NotificationPreferencesService } from '../notification-preferences/notification-preferences.service';
 import { SavePushSubscriptionDto } from './notifications.dto';
+import { NotificationsSseService } from './notifications-sse.service';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const webpush = require('web-push') as typeof import('web-push');
@@ -29,6 +30,8 @@ export class NotificationsService {
     private readonly pushSubscriptions: Repository<PushSubscriptionEntity>,
     private readonly preferencesService: NotificationPreferencesService,
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => NotificationsSseService))
+    private readonly sseService: NotificationsSseService,
   ) {
     const publicKey = this.config.get<string>('VAPID_PUBLIC_KEY');
     const privateKey = this.config.get<string>('VAPID_PRIVATE_KEY');
@@ -54,6 +57,8 @@ export class NotificationsService {
       where: { endpoint: dto.endpoint },
     });
     if (existing) {
+      // Reasignar al usuario actual aunque venga de otra cuenta (dispositivo compartido)
+      existing.user = user;
       existing.p256dh = dto.p256dh;
       existing.auth = dto.auth;
       return this.pushSubscriptions.save(existing);
@@ -72,10 +77,9 @@ export class NotificationsService {
   async listForUser(userId: number) {
     const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
     const items = await this.notifications.find({
-      where: { user: { id: userId }, createdAt: LessThan(new Date()) },
+      where: { user: { id: userId }, read: false },
       order: { createdAt: 'DESC' },
     });
-    // Filtrar últimos 30 días en memoria (LessThan no admite date calc directo en sqljs)
     return items
       .filter((n) => n.createdAt >= cutoff)
       .map((n) => this.toResponse(n));
@@ -130,6 +134,10 @@ export class NotificationsService {
       }),
     );
 
+    // Emitir badge SSE inmediatamente
+    const newCount = await this.unreadCount(recipient.id);
+    this.sseService.emit(recipient.id, newCount);
+
     const pushEnabled = await this.preferencesService.isChannelEnabled(
       recipient.id,
       NotificationEventType.MESSAGE_RECEIVED,
@@ -147,8 +155,8 @@ export class NotificationsService {
   }
 
   async dispatchGradePublished(student: User, activityTitle: string, activityId: number) {
-    const title = 'Tu entrega ha sido calificada';
-    const message = `Tu entrega de "${activityTitle}" ya tiene retroalimentación del docente.`;
+    const title = `Tu entrega de "${activityTitle}" ha sido calificada`;
+    const message = `El docente publicó la calificación de tu entrega en "${activityTitle}".`;
 
     // Persistir notificación in-app siempre
     const notification = await this.notifications.save(
@@ -159,8 +167,13 @@ export class NotificationsService {
         message,
         read: false,
         activityId,
+        conversationId: null,
       }),
     );
+
+    // Emitir badge SSE inmediatamente
+    const newCount = await this.unreadCount(student.id);
+    this.sseService.emit(student.id, newCount);
 
     // Enviar push solo si el estudiante lo tiene habilitado
     const pushEnabled = await this.preferencesService.isChannelEnabled(

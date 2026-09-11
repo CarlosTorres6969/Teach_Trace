@@ -55,4 +55,7 @@ export class Submission {
 
   @Column({ type: 'text', nullable: true, select: false })
   fileBase64: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  notificationSentAt: Date | null;
 }

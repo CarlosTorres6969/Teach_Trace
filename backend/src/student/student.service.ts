@@ -298,9 +298,13 @@ export class StudentService {
       where: { student: { id: studentId }, activity: { id: activityId } },
     });
 
-    const valuationList = submission
-      ? await this.valuations.find({ where: { submission: { id: submission.id } } })
-      : [];
+    const isEvaluated = submission?.status === SubmissionStatus.EVALUATED;
+
+    // Solo exponer valoraciones cuando la evaluación está completamente publicada
+    const valuationList =
+      isEvaluated && submission
+        ? await this.valuations.find({ where: { submission: { id: submission.id } } })
+        : [];
 
     const confirmedValues = valuationList
       .filter((v) => v.teacherValue !== null)
@@ -314,6 +318,7 @@ export class StudentService {
     return {
       activity: { id: activity.id, title: activity.title },
       status: submission?.status ?? SubmissionStatus.NOT_SUBMITTED,
+      // Valoraciones vacías hasta que el docente publique la evaluación completa
       valuations: valuationList.map((v) => ({
         id: v.id,
         criterion: v.criterion,

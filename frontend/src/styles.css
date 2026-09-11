@@ -629,3 +629,18 @@ html.high-contrast .login-card .button.primary:hover:not(:disabled) {
   color: #ffffff;
   background: #003566;
 }
+
+/* ─── Panel de valoraciones docente ─────────────────────────────────────── */
+.valuation-panel-header { display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 .75rem; }
+.valuation-panel-header h3 { margin: 0; }
+.valuation-editor { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; margin-bottom: .85rem; display: grid; gap: .75rem; }
+.valuation-editor--confirmed { border-color: #8ab5e0; background: #f5f9ff; }
+.valuation-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+.valuation-editor-header strong { display: block; margin-top: .2rem; }
+.valuation-ai-hint { font-size: .82rem; color: var(--muted); background: #f4f7fc; padding: .4rem .7rem; border-radius: 6px; }
+.valuation-editor-fields { display: grid; gap: .6rem; }
+.valuation-close-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; border-top: 1px solid var(--line); margin-top: .5rem; }
+.valuation-close-hint { flex: 1; margin: 0; font-size: .85rem; }
+.valuation-empty-hint { text-align: center; }
+html.dark .valuation-editor--confirmed { background: #0d1f35; border-color: #3a6a9e; }
+html.dark .valuation-ai-hint { background: #101b2b; }

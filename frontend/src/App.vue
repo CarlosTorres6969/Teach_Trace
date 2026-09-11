@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from './api';
+import { API_URL } from './api-url';
 import { auth, clearSession } from './auth';
 import { applyTheme, oppositeResolvedTheme, resolvedTheme } from './theme';
 import type { AppNotification, ThemePreference } from './types';
@@ -15,6 +16,49 @@ const notifications = ref<AppNotification[]>([]);
 const unreadCount = ref(0);
 const bellOpen = ref(false);
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let sseSource: EventSource | null = null;
+
+function startNotificationServices() {
+  if (!auth.user || auth.user.role !== 'student') return;
+
+  // Contar no leídas de inmediato
+  void fetchUnreadCount();
+
+  // SSE para actualización instantánea del badge
+  stopNotificationServices();
+  const sseUrl = `${API_URL}/notifications/badge-stream`;
+  sseSource = new EventSource(sseUrl, { withCredentials: true });
+  sseSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data as string) as { count: number };
+      unreadCount.value = data.count;
+    } catch { /* silencioso */ }
+  };
+  sseSource.onerror = () => {
+    // SSE falló — cerrar y dejar que el polling lo cubra
+    sseSource?.close();
+    sseSource = null;
+  };
+
+  // Polling cada 30 segundos como respaldo si SSE falla
+  if (!pollInterval) {
+    pollInterval = setInterval(() => { void fetchUnreadCount(); }, 30000);
+  }
+
+  // Registrar service worker y suscripción push
+  void registerPushNotifications();
+}
+
+function stopNotificationServices() {
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
 
 async function fetchUnreadCount() {
   if (!auth.user || auth.user.role !== 'student') return;
@@ -129,21 +173,31 @@ async function logout() {
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  window.addEventListener('keydown', closeBellOnEscape);
+// Reacciona al login/logout sin necesitar recargar la página
+watch(
+  () => auth.user,
+  (user) => {
+    if (user?.role === 'student') {
+      startNotificationServices();
+    } else {
+      stopNotificationServices();
+      unreadCount.value = 0;
+      notifications.value = [];
+    }
+  },
+);
 
+onMounted(() => {
+  window.addEventListener('keydown', closeBellOnEscape);
+  // Si ya hay sesión activa al montar (recarga de página), iniciar servicios
   if (auth.user?.role === 'student') {
-    await fetchUnreadCount();
-    // Polling cada 30 segundos como fallback
-    pollInterval = setInterval(() => { void fetchUnreadCount(); }, 30000);
-    // Registrar service worker y suscripción push
-    void registerPushNotifications();
+    startNotificationServices();
   }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', closeBellOnEscape);
-  if (pollInterval) clearInterval(pollInterval);
+  stopNotificationServices();
 });
 </script>
 
