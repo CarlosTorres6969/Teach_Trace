@@ -105,6 +105,7 @@ export type PerformanceChartActivity = {
   id: number;
   title: string;
   dueDate: string;
+  submittedAt: string | null;
 };
 
 export type PerformanceChart = {

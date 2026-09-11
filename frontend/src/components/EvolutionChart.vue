@@ -142,7 +142,8 @@ const chartOptions = computed(() => {
             const idx = items[0]?.dataIndex ?? 0;
             const act = chartData.value?.activities[idx];
             const date = chartData.value?.labels[idx] ?? '';
-            return act ? `${act.title} · ${date}` : date;
+            const submittedAt = act?.submittedAt?.slice(0, 10) ?? 'Sin entrega';
+            return act ? `${act.title} · Entrega: ${submittedAt}` : date;
           },
           label: (item: TooltipItem<'line'>) => {
             const val = item.parsed.y;

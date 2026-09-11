@@ -299,16 +299,26 @@ export class StudentService {
     const labels: string[] = [];
     const myGrades: (number | null)[] = [];
     const classAverage: (number | null)[] = [];
-    const activityMeta: Array<{ id: number; title: string; dueDate: string }> = [];
+    const activityMeta: Array<{
+      id: number;
+      title: string;
+      dueDate: string;
+      submittedAt: string | null;
+    }> = [];
 
     for (const activity of sorted) {
       labels.push(activity.dueDate);
-      activityMeta.push({ id: activity.id, title: activity.title, dueDate: activity.dueDate });
 
       const actSubs = submsByActivity.get(activity.id) ?? [];
 
       // Nota propia — solo si está publicada
       const mySub = actSubs.find((s) => s.student.id === studentId);
+      activityMeta.push({
+        id: activity.id,
+        title: activity.title,
+        dueDate: activity.dueDate,
+        submittedAt: mySub?.submittedAt?.toISOString() ?? null,
+      });
       const myScore = mySub ? publishedScore(mySub) : null;
       myGrades.push(myScore !== null ? toPercent(myScore) : null);
 

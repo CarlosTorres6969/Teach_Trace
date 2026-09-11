@@ -2500,4 +2500,275 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(teacherSse.response.status).toBe(403);
   });
+
+  it('HU-34: el stream autenticado emite el nuevo conteo al publicar una calificación', async () => {
+    const { submId } = await createEvaluatedSubmission();
+    const abortController = new AbortController();
+    const response = await fetch(`${baseUrl}/api/notifications/badge-stream`, {
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        Origin: 'http://localhost:5173',
+      },
+      signal: abortController.signal,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+    expect(response.body).not.toBeNull();
+
+    const reader = response.body!.getReader();
+    try {
+      await request(`/api/teacher/submissions/${submId}/close`, {
+        method: 'PUT',
+        headers: sessionHeaders(teacher.sessionCookie),
+      });
+
+      const decoder = new TextDecoder();
+      let received = '';
+      for (let attempt = 0; attempt < 5 && !received.includes('"count"'); attempt += 1) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error('El evento SSE no fue recibido')), 3000);
+          }),
+        ]).finally(() => {
+          if (timeout) clearTimeout(timeout);
+        });
+
+        if (chunk.done) break;
+        received += decoder.decode(chunk.value, { stream: true });
+      }
+
+      expect(received).toMatch(/data:\s*\{\s*"count":\d+\s*\}/);
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      abortController.abort();
+    }
+  });
+
+  let hu33FixturePromise: Promise<{
+    classId: number;
+    submittedDates: [string, string];
+  }> | null = null;
+
+  function createHu33Fixture() {
+    if (hu33FixturePromise) return hu33FixturePromise;
+
+    hu33FixturePromise = (async () => {
+      const suffix = Date.now();
+      const users = dataSource.getRepository(User);
+      const classes = dataSource.getRepository(AcademicClass);
+      const enrollments = dataSource.getRepository(Enrollment);
+      const activities = dataSource.getRepository(Activity);
+      const submissions = dataSource.getRepository(Submission);
+      const valuations = dataSource.getRepository(Valuation);
+      const teacherEntity = await users.findOneByOrFail({ id: teacher.user.id });
+      const studentEntity = await users.findOneByOrFail({ id: student.user.id });
+      const peer = await users.save(users.create({
+        email: `hu33.peer.${suffix}@unah.edu.hn`,
+        name: 'Compañero HU-33',
+        passwordHash: 'sin-inicio-de-sesion',
+        role: UserRole.STUDENT,
+        active: true,
+      }));
+      const studentWithoutSubmission = await users.save(users.create({
+        email: `hu33.no-submission.${suffix}@unah.edu.hn`,
+        name: 'Estudiante sin entrega HU-33',
+        passwordHash: 'sin-inicio-de-sesion',
+        role: UserRole.STUDENT,
+        active: true,
+      }));
+      const academicClass = await classes.save(classes.create({
+        name: 'Clase exclusiva HU-33',
+        subject: 'Analítica académica',
+        code: `HU33-${suffix}`,
+        period: 'III PAC 2026',
+        teacher: teacherEntity,
+      }));
+
+      await enrollments.save([
+        enrollments.create({ student: studentEntity, academicClass, active: true }),
+        enrollments.create({ student: peer, academicClass, active: true }),
+        enrollments.create({ student: studentWithoutSubmission, academicClass, active: true }),
+      ]);
+
+      const activityDefinitions = [
+        {
+          title: 'Actividad posterior HU-33',
+          dueDate: '2026-04-20',
+          submittedAt: '2026-04-19T16:30:00.000Z',
+          studentValue: 2,
+          peerValue: 4,
+          status: SubmissionStatus.EVALUATED,
+        },
+        {
+          title: 'Actividad inicial HU-33',
+          dueDate: '2026-03-10',
+          submittedAt: '2026-03-08T14:00:00.000Z',
+          studentValue: 1,
+          peerValue: 3,
+          status: SubmissionStatus.EVALUATED,
+        },
+        {
+          title: 'Actividad pendiente HU-33',
+          dueDate: '2026-05-15',
+          submittedAt: '2026-05-14T12:00:00.000Z',
+          studentValue: 4,
+          peerValue: null,
+          status: SubmissionStatus.SUBMITTED,
+        },
+      ] as const;
+
+      const saveSubmission = async (
+        activity: Activity,
+        owner: User,
+        status: SubmissionStatus,
+        submittedAt: string,
+        teacherValue: number | null,
+      ) => {
+        const submission = await submissions.save(submissions.create({
+          student: owner,
+          activity,
+          status,
+          evaluationStatus:
+            status === SubmissionStatus.EVALUATED
+              ? EvaluationStatus.VALIDATED
+              : EvaluationStatus.ANALYZED,
+          manualReviewRequired: false,
+          submittedAt: new Date(submittedAt),
+          productText: 'Evidencia para HU-33',
+          productUrl: '',
+          fileName: null,
+          fileMimeType: null,
+          fileBase64: null,
+          notificationSentAt: null,
+        }));
+
+        if (teacherValue !== null) {
+          await valuations.save(valuations.create({
+            activity,
+            submission,
+            dimension: 'Análisis',
+            criterion: 'Criterio HU-33',
+            aiValue: null,
+            aiExplanation: '',
+            teacherValue,
+            teacherComment: 'Calificación para la gráfica',
+            confirmed: true,
+          }));
+        }
+      };
+
+      for (const definition of activityDefinitions) {
+        const activity = await activities.save(activities.create({
+          title: definition.title,
+          subject: academicClass.subject,
+          dueDate: definition.dueDate,
+          activityType: 'Proyecto',
+          evaluationPhase: ActivityPhase.PILOT,
+          learningOutcomes: [],
+          teacher: teacherEntity,
+          academicClass,
+          manualEvaluationRequired: false,
+          weight: 1,
+          rubric: null,
+        }));
+        await saveSubmission(
+          activity,
+          studentEntity,
+          definition.status,
+          definition.submittedAt,
+          definition.studentValue,
+        );
+        if (definition.peerValue !== null) {
+          await saveSubmission(
+            activity,
+            peer,
+            SubmissionStatus.EVALUATED,
+            definition.submittedAt,
+            definition.peerValue,
+          );
+        }
+      }
+
+      return {
+        classId: academicClass.id,
+        submittedDates: [
+          activityDefinitions[1].submittedAt,
+          activityDefinitions[0].submittedAt,
+        ],
+      };
+    })();
+
+    return hu33FixturePromise;
+  }
+
+  it('HU-33: devuelve notas y promedio cronológicos con tendencia y fecha real de entrega', async () => {
+    const fixture = await createHu33Fixture();
+    const response = await request(
+      `/api/student/performance-chart?classId=${fixture.classId}`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+
+    expect(response.response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      labels: ['2026-03-10', '2026-04-20', '2026-05-15'],
+      myGrades: [0, 33, null],
+      classAverage: [34, 67, null],
+      trendLine: [0, 33, null],
+    });
+
+    const body = response.body as {
+      labels: string[];
+      activities: Array<{ title: string; dueDate: string; submittedAt: string | null }>;
+    };
+    expect(body.activities).toHaveLength(body.labels.length);
+    expect(body.activities[0]).toMatchObject({
+      title: 'Actividad inicial HU-33',
+      dueDate: '2026-03-10',
+      submittedAt: fixture.submittedDates[0],
+    });
+    expect(body.activities[1].submittedAt).toBe(fixture.submittedDates[1]);
+  });
+
+  it('HU-33: filtra por clase, valida classId y protege el endpoint por rol', async () => {
+    const fixture = await createHu33Fixture();
+    const filtered = await request(
+      `/api/student/performance-chart?classId=${fixture.classId}`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+    expect(filtered.response.status).toBe(200);
+    expect((filtered.body as { labels: string[] }).labels).toHaveLength(3);
+
+    const notEnrolled = await request('/api/student/performance-chart?classId=999999', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(notEnrolled.response.status).toBe(200);
+    expect(notEnrolled.body).toEqual({
+      labels: [],
+      myGrades: [],
+      classAverage: [],
+      trendLine: [],
+      activities: [],
+    });
+
+    for (const classIdValue of ['abc', '0', '1.5']) {
+      const invalid = await request(
+        `/api/student/performance-chart?classId=${classIdValue}`,
+        { headers: sessionHeaders(student.sessionCookie) },
+      );
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const teacherAttempt = await request('/api/student/performance-chart', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+
+    const anonymousAttempt = await request('/api/student/performance-chart');
+    expect(anonymousAttempt.response.status).toBe(401);
+  });
 });

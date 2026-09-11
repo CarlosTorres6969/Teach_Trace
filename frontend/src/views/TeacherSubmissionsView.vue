@@ -70,7 +70,11 @@ async function openSubmission(id: number) {
   error.value = '';
   message.value = '';
   try {
-    selected.value = await api<SubmissionDetail>(`/teacher/submissions/${id}`);
+    const detail = await api<SubmissionDetail>(`/teacher/submissions/${id}`);
+    selected.value = {
+      ...detail,
+      valuations: Array.isArray(detail.valuations) ? detail.valuations : [],
+    };
     // Inicializar valores de edición con los ya confirmados (o vacíos)
     editingValues.value = {};
     for (const v of selected.value.valuations) {
