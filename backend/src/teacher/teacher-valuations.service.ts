@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -28,12 +27,7 @@ export class TeacherValuationsService {
     valuationId: number,
     dto: ConfirmValuationDto,
   ) {
-    // Verificar que la entrega existe y pertenece a una actividad del docente
-    const submission = await this.submissions.findOne({
-      where: { id: submissionId },
-    });
-    if (!submission) throw new NotFoundException('La entrega no existe');
-
+    const submission = await this.loadSubmission(submissionId);
     await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
 
     const valuation = await this.valuations.findOne({
@@ -46,14 +40,13 @@ export class TeacherValuationsService {
     valuation.confirmed = true;
     await this.valuations.save(valuation);
 
-    // Verificar si TODAS las valoraciones de esta entrega están confirmadas
+    // Cerrar si todos los criterios están confirmados
     const allValuations = await this.valuations.find({
       where: { submission: { id: submissionId } },
     });
     const allConfirmed = allValuations.length > 0 && allValuations.every((v) => v.confirmed);
-
     if (allConfirmed) {
-      await this.closeEvaluation(submission, teacherId);
+      await this.closeEvaluation(submission);
     }
 
     return {
@@ -68,34 +61,39 @@ export class TeacherValuationsService {
   }
 
   async closeEvaluationManually(teacherId: number, submissionId: number) {
-    const submission = await this.submissions.findOne({
-      where: { id: submissionId },
-    });
-    if (!submission) throw new NotFoundException('La entrega no existe');
+    const submission = await this.loadSubmission(submissionId);
     await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
-
-    const allValuations = await this.valuations.find({
-      where: { submission: { id: submissionId } },
-    });
-    if (!allValuations.length) {
-      throw new BadRequestException(
-        'No hay valoraciones registradas para cerrar la evaluación',
-      );
-    }
-
-    await this.closeEvaluation(submission, teacherId);
+    await this.closeEvaluation(submission);
     return { submissionId, status: SubmissionStatus.EVALUATED };
   }
 
-  private async closeEvaluation(submission: Submission, _teacherId: number) {
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  private async loadSubmission(submissionId: number): Promise<Submission> {
+    const submission = await this.submissions.findOne({
+      where: { id: submissionId },
+      relations: { activity: true, student: true },
+    });
+    if (!submission) throw new NotFoundException('La entrega no existe');
+    return submission;
+  }
+
+  private async closeEvaluation(submission: Submission) {
+    // Idempotente: solo notificar la primera vez que cambia a EVALUATED
+    const alreadyNotified = submission.notificationSentAt !== null;
+
     submission.status = SubmissionStatus.EVALUATED;
+    if (!alreadyNotified) {
+      submission.notificationSentAt = new Date();
+    }
     await this.submissions.save(submission);
 
-    // Disparar notificación push + in-app al estudiante
-    await this.notificationsService.dispatchGradePublished(
-      submission.student,
-      submission.activity.title,
-      submission.activity.id,
-    );
+    if (!alreadyNotified) {
+      await this.notificationsService.dispatchGradePublished(
+        submission.student,
+        submission.activity.title,
+        submission.activity.id,
+      );
+    }
   }
 }

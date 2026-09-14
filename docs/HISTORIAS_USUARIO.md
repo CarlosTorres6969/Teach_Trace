@@ -96,7 +96,8 @@ idempotente. HU-30 verifica creación y búsqueda de hilos, paginación de 20 el
 un nivel, permisos de destacado/resolución, notificación al autor y moderación docente.
 También cubre los valores predeterminados de notificación, su actualización inmediata, la
 obligatoriedad del canal en plataforma y el acceso autenticado.
-Las pruebas de tema verifican la preferencia del sistema operativo, el cambio instantáneo, la
-persistencia local y remota, los valores inválidos y contraste WCAG AA en colores principales.
+Las pruebas de tema verifican la preferencia del sistema operativo y sus cambios en tiempo real,
+el cambio instantáneo, la reversión ante errores, la persistencia local y remota, los valores
+inválidos y contraste WCAG AA en colores principales, controles y gráficos.
 Las pruebas de accesibilidad verifican límites, persistencia, vista previa, movimiento reducido y
 contraste WCAG AAA de la paleta alternativa.

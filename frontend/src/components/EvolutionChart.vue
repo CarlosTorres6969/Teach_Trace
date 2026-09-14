@@ -15,6 +15,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
+import { chartThemePalette } from '../chart-theme';
+import { resolvedTheme } from '../theme';
 import type { AcademicClass, PerformanceChart } from '../types';
 
 ChartJS.register(
@@ -58,11 +60,14 @@ onMounted(load);
 const lineChartData = computed(() => {
   if (!chartData.value) return null;
   const { labels, myGrades, classAverage, trendLine, activities } = chartData.value;
-  const highContrast = accessibilitySettings.value.highContrast;
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
-  // Etiquetas legibles: título de actividad (fallback: fecha)
+  // Etiquetas del eje X: ["2026-07-10", "Análisis de caso"] como dos líneas
   const readableLabels = labels.map(
-    (l, i) => activities[i]?.title ?? l,
+    (l, i) => [l, activities[i]?.title ?? ''] as [string, string],
   );
 
   return {
@@ -71,9 +76,9 @@ const lineChartData = computed(() => {
       {
         label: 'Mi nota (%)',
         data: myGrades,
-        borderColor: highContrast ? '#9bd8ff' : '#234f8f',
-        backgroundColor: highContrast ? 'rgba(155,216,255,0.16)' : 'rgba(35,79,143,0.10)',
-        pointBackgroundColor: highContrast ? '#9bd8ff' : '#234f8f',
+        borderColor: palette.primary,
+        backgroundColor: palette.primaryFill,
+        pointBackgroundColor: palette.primary,
         pointRadius: 5,
         pointHoverRadius: 7,
         tension: 0.35,
@@ -84,9 +89,9 @@ const lineChartData = computed(() => {
       {
         label: 'Promedio clase (%)',
         data: classAverage,
-        borderColor: highContrast ? '#ffffff' : 'rgba(100,120,150,0.55)',
-        backgroundColor: highContrast ? 'rgba(255,255,255,0.12)' : 'rgba(100,120,150,0.08)',
-        pointBackgroundColor: highContrast ? '#ffffff' : 'rgba(100,120,150,0.55)',
+        borderColor: palette.secondary,
+        backgroundColor: palette.secondaryFill,
+        pointBackgroundColor: palette.secondary,
         pointRadius: 3,
         tension: 0.35,
         fill: true,
@@ -96,7 +101,7 @@ const lineChartData = computed(() => {
       {
         label: 'Tendencia',
         data: trendLine,
-        borderColor: highContrast ? '#ffe66b' : '#f5a623',
+        borderColor: palette.accent,
         backgroundColor: 'transparent',
         pointRadius: 0,
         tension: 0,
@@ -111,10 +116,10 @@ const lineChartData = computed(() => {
 
 const chartOptions = computed(() => {
   const fontScale = accessibilitySettings.value.fontSize / 100;
-  const textColor = accessibilitySettings.value.highContrast ? '#ffffff' : '#666666';
-  const gridColor = accessibilitySettings.value.highContrast
-    ? 'rgba(255,255,255,0.35)'
-    : 'rgba(0,0,0,0.05)';
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
   return {
     responsive: true,
@@ -125,7 +130,7 @@ const chartOptions = computed(() => {
         position: 'bottom' as const,
         labels: {
           boxWidth: 14,
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
         },
       },
@@ -136,19 +141,14 @@ const chartOptions = computed(() => {
           title: (items: TooltipItem<'line'>[]) => {
             const idx = items[0]?.dataIndex ?? 0;
             const act = chartData.value?.activities[idx];
-            return act ? `${act.title}` : items[0]?.label ?? '';
+            const date = chartData.value?.labels[idx] ?? '';
+            const submittedAt = act?.submittedAt?.slice(0, 10) ?? 'Sin entrega';
+            return act ? `${act.title} · Entrega: ${submittedAt}` : date;
           },
           label: (item: TooltipItem<'line'>) => {
             const val = item.parsed.y;
             if (val === null || val === undefined) return `${item.dataset.label}: —`;
             return `${item.dataset.label}: ${val}%`;
-          },
-          afterLabel: (item: TooltipItem<'line'>) => {
-            // Solo en el primer dataset (mi nota) mostramos la fecha
-            if (item.datasetIndex !== 0) return '';
-            const idx = item.dataIndex;
-            const dueDate = chartData.value?.activities[idx]?.dueDate;
-            return dueDate ? `Entrega: ${dueDate}` : '';
           },
         },
       },
@@ -158,21 +158,25 @@ const chartOptions = computed(() => {
         min: 0,
         max: 100,
         ticks: {
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
           callback: (v: number | string) => `${v}%`,
           stepSize: 25,
         },
-        grid: { color: gridColor },
+        grid: { color: palette.grid },
       },
       x: {
         ticks: {
-          color: textColor,
+          color: palette.text,
           maxRotation: 30,
           font: { size: Math.round(11 * fontScale) },
           callback: (_val: unknown, index: number) => {
-            const label = lineChartData.value?.labels[index] ?? '';
-            return label.length > 16 ? label.slice(0, 15) + '…' : label;
+            const pair = lineChartData.value?.labels[index] as [string, string] | undefined;
+            if (!pair) return '';
+            const [date, title] = pair;
+            // Truncar título si es muy largo
+            const shortTitle = title.length > 14 ? title.slice(0, 13) + '…' : title;
+            return [date, shortTitle];
           },
         },
         grid: { display: false },
@@ -194,8 +198,8 @@ const hasData = computed(
         <h2>Mi progreso por actividad</h2>
       </div>
 
-      <!-- Selector de clase -->
-      <div v-if="props.classes.length > 1" class="evolution-selector">
+      <!-- Selector de clase — siempre visible cuando hay al menos una clase -->
+      <div v-if="props.classes.length > 0" class="evolution-selector">
         <label>
           Clase
           <select v-model="selectedClassId">

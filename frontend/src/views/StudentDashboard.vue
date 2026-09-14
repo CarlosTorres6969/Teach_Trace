@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
-import EvolutionChart from '../components/EvolutionChart.vue';
 import ProjectionWidget from '../components/ProjectionWidget.vue';
 import type { Activity } from '../types';
 
@@ -159,6 +158,14 @@ onMounted(() => loadActivities());
     <p v-else-if="error" class="alert error">{{ error }}</p>
 
     <template v-else>
+      <!-- Widget de proyección — uno por clase -->
+      <ProjectionWidget
+        v-for="classId in uniqueClassIds"
+        :key="classId"
+        :class-id="classId"
+      />
+
+      <!-- Entregas pendientes -->
       <section class="card-grid activity-dashboard-grid" aria-label="Entregas pendientes">
         <article
           v-for="activity in pendingActivities"
@@ -259,9 +266,6 @@ onMounted(() => loadActivities());
           </article>
         </div>
       </section>
-
-      <ProjectionWidget v-for="classId in uniqueClassIds" :key="classId" :class-id="classId" />
-      <EvolutionChart v-if="uniqueClasses.length > 0" :classes="uniqueClasses" />
     </template>
   </main>
 </template>

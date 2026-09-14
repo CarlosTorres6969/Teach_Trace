@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from './api';
+import { API_URL } from './api-url';
 import { auth, clearSession } from './auth';
 import { applyTheme, oppositeResolvedTheme, resolvedTheme } from './theme';
 import type { AppNotification, ThemePreference } from './types';
@@ -16,6 +17,52 @@ const notifications = ref<AppNotification[]>([]);
 const unreadCount = ref(0);
 const bellOpen = ref(false);
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let sseSource: EventSource | null = null;
+
+function startNotificationServices() {
+  if (!auth.user || auth.user.role !== 'student') return;
+
+  // Contar no leídas de inmediato
+  void fetchUnreadCount();
+
+  // SSE para actualización instantánea del badge
+  stopNotificationServices();
+  const sseUrl = `${API_URL}/notifications/badge-stream`;
+  sseSource = new EventSource(sseUrl, { withCredentials: true });
+  sseSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data as string) as { count: number };
+      unreadCount.value = data.count;
+    } catch { /* silencioso */ }
+  };
+  sseSource.onerror = () => {
+    // SSE falló — cerrar y dejar que el polling lo cubra
+    sseSource?.close();
+    sseSource = null;
+  };
+
+  // Polling cada 30 segundos como respaldo si SSE falla
+  if (!pollInterval) {
+    pollInterval = setInterval(() => {
+      void fetchUnreadCount();
+      void fetchNewActivityCount();
+    }, 30000);
+  }
+
+  // Registrar service worker y suscripción push
+  void registerPushNotifications();
+}
+
+function stopNotificationServices() {
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
 
 async function fetchUnreadCount() {
   if (!auth.user || auth.user.role !== 'student') return;
@@ -147,25 +194,36 @@ async function logout() {
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  window.addEventListener('keydown', closeBellOnEscape);
+// Reacciona al login/logout sin necesitar recargar la página
+watch(
+  () => auth.user,
+  (user) => {
+    if (user?.role === 'student') {
+      startNotificationServices();
+      void fetchNewActivityCount();
+    } else {
+      stopNotificationServices();
+      unreadCount.value = 0;
+      notifications.value = [];
+      newActivityCount.value = 0;
+    }
+  },
+);
 
+onMounted(() => {
+  window.addEventListener('keydown', closeBellOnEscape);
+  // Si ya hay sesión activa al montar (recarga de página), iniciar servicios
   if (auth.user?.role === 'student') {
-    await Promise.all([fetchUnreadCount(), fetchNewActivityCount()]);
+    startNotificationServices();
+    void fetchNewActivityCount();
     window.addEventListener('teachtrace:activity-viewed', refreshActivityCount);
-    // Polling cada 30 segundos como fallback
-    pollInterval = setInterval(() => {
-      void Promise.all([fetchUnreadCount(), fetchNewActivityCount()]);
-    }, 30000);
-    // Registrar service worker y suscripción push
-    void registerPushNotifications();
   }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', closeBellOnEscape);
   window.removeEventListener('teachtrace:activity-viewed', refreshActivityCount);
-  if (pollInterval) clearInterval(pollInterval);
+  stopNotificationServices();
 });
 </script>
 
@@ -189,6 +247,14 @@ onBeforeUnmount(() => {
         :aria-label="`Mis actividades${newActivityCount ? `, ${newActivityCount} nuevas` : ''}`"
       >
         Actividades<span v-if="newActivityCount > 0" class="activities-nav-badge">{{ newActivityCount }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="auth.user.role === 'student'"
+        class="button ghost"
+        to="/student/profile"
+        aria-label="Mi perfil académico"
+      >
+        📊 Mi perfil
       </RouterLink>
       <RouterLink
         v-if="auth.user.role === 'student'"

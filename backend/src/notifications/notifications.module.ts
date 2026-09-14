@@ -5,6 +5,7 @@ import { Notification } from '../entities/notification.entity';
 import { PushSubscriptionEntity } from '../entities/push-subscription.entity';
 import { NotificationPreferencesModule } from '../notification-preferences/notification-preferences.module';
 import { NotificationsController, VapidController } from './notifications.controller';
+import { NotificationsSseService } from './notifications-sse.service';
 import { NotificationsService } from './notifications.service';
 
 @Module({
@@ -14,7 +15,7 @@ import { NotificationsService } from './notifications.service';
     NotificationPreferencesModule,
   ],
   controllers: [NotificationsController, VapidController],
-  providers: [NotificationsService],
-  exports: [NotificationsService],
+  providers: [NotificationsService, NotificationsSseService],
+  exports: [NotificationsService, NotificationsSseService],
 })
 export class NotificationsModule {}

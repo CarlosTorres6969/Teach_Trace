@@ -81,6 +81,8 @@ const entities = [
       Logbook,
       AiDeclaration,
       Submission,
+      Valuation,
+      Notification,
     ]),
     AuthModule,
     ClassesModule,

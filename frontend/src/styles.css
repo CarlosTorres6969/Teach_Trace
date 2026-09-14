@@ -120,7 +120,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .logbook-step-button small { margin-bottom: .12rem; font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
 .logbook-step-button strong { font-size: .84rem; }
 .logbook-step-number { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border: 1px solid #bcc4d2; border-radius: 50%; background: white; color: var(--muted); font-size: .78rem; font-weight: 700; }
-.logbook-step-button.active .logbook-step-number { border-color: var(--green); color: white; background: var(--green); }
+.logbook-step-button.active .logbook-step-number { border-color: var(--primary-solid); color: white; background: var(--primary-solid); }
 .logbook-step-button.completed:not(.active) .logbook-step-number { border-color: #3a6bb0; color: #24549c; background: #e0ecfb; }
 .logbook-step-content { min-height: 390px; padding: clamp(1.25rem, 4vw, 2rem); border: 1px solid #dde4ee; border-radius: 14px 4px 14px 4px; background: #f7fafd; }
 .logbook-step-content h3 { margin: .3rem 0 .55rem; font: 650 1.55rem 'Fraunces', Georgia, serif; }
@@ -210,7 +210,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .excel-file-picker > span:not(.excel-file-icon) { display: grid; gap: .25rem; min-width: 0; }
 .excel-file-picker strong { overflow-wrap: anywhere; }
 .excel-file-picker small { color: var(--muted); font-weight: 500; }
-.excel-file-icon { flex: 0 0 54px; height: 54px; display: grid; place-items: center; color: white; background: var(--green); border-radius: 11px 3px 11px 3px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; }
+.excel-file-icon { flex: 0 0 54px; height: 54px; display: grid; place-items: center; color: white; background: var(--primary-solid); border-radius: 11px 3px 11px 3px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; }
 .bulk-enrollment-result { display: grid; gap: .75rem; padding: 1rem; color: #1d4e89; background: #dfecfa; border: 1px solid #bcd4f0; border-radius: 11px 3px 11px 3px; }
 .bulk-result-stats { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; background: rgba(255,255,255,.7); border-radius: 8px; }
 .bulk-result-stats span { display: grid; gap: .1rem; padding: .65rem; color: var(--muted); font-size: .7rem; text-align: center; }
@@ -255,7 +255,7 @@ dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
 .notification-checkbox { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .notification-checkbox input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .notification-checkbox span { width: 24px; height: 24px; display: grid; place-items: center; border: 2px solid #a8b5c8; border-radius: 7px 2px 7px 2px; background: white; transition: .15s; }
-.notification-checkbox input:checked + span { border-color: var(--green); background: var(--green); }
+.notification-checkbox input:checked + span { border-color: var(--primary-solid); background: var(--primary-solid); }
 .notification-checkbox input:checked + span::after { content: '✓'; color: white; font-size: .88rem; font-weight: 700; }
 .notification-checkbox input:focus-visible + span { box-shadow: 0 0 0 3px rgba(35,79,143,.18); }
 .notification-checkbox input:disabled + span { border-color: #7d9ac2; background: #6f8fba; cursor: not-allowed; opacity: .8; }
@@ -508,7 +508,7 @@ html.dark .projection-message--neutral { color: var(--muted); background: var(--
 .evolution-chart { display: grid; gap: 1.25rem; margin-bottom: 2rem; }
 .evolution-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
 .evolution-header h2 { margin-bottom: 0; font-size: clamp(1.2rem, 2.5vw, 1.6rem); }
-.evolution-selector label { display: grid; gap: .3rem; font-size: .85rem; font-weight: 600; color: #33455f; }
+.evolution-selector label { display: grid; gap: .3rem; font-size: .85rem; font-weight: 600; color: var(--ink); }
 .evolution-selector select { min-width: 200px; }
 .evolution-chart-area { height: 260px; }
 .evolution-loading { text-align: center; padding: 2rem 0; }
@@ -701,3 +701,18 @@ html.high-contrast .activities-nav-badge {
   background: #003566 !important;
   border: 1px solid #ffffff !important;
 }
+
+/* ─── Panel de valoraciones docente ─────────────────────────────────────── */
+.valuation-panel-header { display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 .75rem; }
+.valuation-panel-header h3 { margin: 0; }
+.valuation-editor { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; margin-bottom: .85rem; display: grid; gap: .75rem; }
+.valuation-editor--confirmed { border-color: #8ab5e0; background: #f5f9ff; }
+.valuation-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+.valuation-editor-header strong { display: block; margin-top: .2rem; }
+.valuation-ai-hint { font-size: .82rem; color: var(--muted); background: #f4f7fc; padding: .4rem .7rem; border-radius: 6px; }
+.valuation-editor-fields { display: grid; gap: .6rem; }
+.valuation-close-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; border-top: 1px solid var(--line); margin-top: .5rem; }
+.valuation-close-hint { flex: 1; margin: 0; font-size: .85rem; }
+.valuation-empty-hint { text-align: center; }
+html.dark .valuation-editor--confirmed { background: #0d1f35; border-color: #3a6a9e; }
+html.dark .valuation-ai-hint { background: #101b2b; }

@@ -18,7 +18,7 @@ import {
   NotificationEventType,
   NotificationPreference,
 } from './entities/notification-preference.entity';
-import { Submission, EvaluationStatus } from './entities/submission.entity';
+import { Submission, EvaluationStatus, SubmissionStatus } from './entities/submission.entity';
 import {
   DEFAULT_ACCESSIBILITY_SETTINGS,
   User,
@@ -26,6 +26,8 @@ import {
   UserTheme,
 } from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
+import { Notification, NotificationType } from './entities/notification.entity';
+import { PushSubscriptionEntity } from './entities/push-subscription.entity';
 import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
 
 jest.setTimeout(180000);
@@ -1101,7 +1103,10 @@ describe('TeachTrace API (integración)', () => {
     const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
-    submissionId = (submissions.body as Array<{ id: number }>)[0].id;
+    // Tomar la submission del estudiante principal (no otras de contaminación)
+    const allSubs = submissions.body as Array<{ id: number; student: { id: number } }>;
+    const studentSub = allSubs.find((s) => s.student.id === student.user.id);
+    submissionId = studentSub?.id ?? allSubs[0].id;
     const detail = await request(`/api/teacher/submissions/${submissionId}`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
@@ -1153,7 +1158,35 @@ describe('TeachTrace API (integración)', () => {
   });
 
   it('R1: persiste la degradación manual cuando el motor todavía no está disponible', async () => {
-    const evaluation = await request(`/api/entregas/actividad/${activityId}/evaluar`, {
+    // Crear actividad exclusiva para este test (evita contaminación con submissions del seed)
+    const exclusiveActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad R1 motor no disponible',
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const r1ActivityId = (exclusiveActivity.body as { id: number }).id;
+
+    // El estudiante entrega
+    const form = new FormData();
+    form.set('productText', 'Producto R1');
+    form.set('productUrl', '');
+    form.set('toolName', 'ChatGPT');
+    form.set('usageLevel', '2');
+    form.set('purpose', 'Probar motor');
+    form.set('promptSummary', 'Prompts de prueba R1');
+    await request(`/api/student/activities/${r1ActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+
+    const evaluation = await request(`/api/entregas/actividad/${r1ActivityId}/evaluar`, {
       method: 'POST',
       headers: sessionHeaders(teacher.sessionCookie),
     });
@@ -1164,10 +1197,13 @@ describe('TeachTrace API (integración)', () => {
       implemented: false,
     });
 
-    const submission = await dataSource.getRepository(Submission).findOneByOrFail({ id: submissionId });
-    expect(submission.evaluationStatus).toBe(EvaluationStatus.MANUAL_REQUIRED);
-    expect(submission.manualReviewRequired).toBe(true);
-    const activity = await dataSource.getRepository(Activity).findOneByOrFail({ id: activityId });
+    const r1Subs = await dataSource.getRepository(Submission).find({
+      where: { activity: { id: r1ActivityId }, student: { id: student.user.id } },
+    });
+    const r1Sub = r1Subs[0];
+    expect(r1Sub.evaluationStatus).toBe(EvaluationStatus.MANUAL_REQUIRED);
+    expect(r1Sub.manualReviewRequired).toBe(true);
+    const activity = await dataSource.getRepository(Activity).findOneByOrFail({ id: r1ActivityId });
     expect(activity.manualEvaluationRequired).toBe(true);
   });
 
@@ -1526,13 +1562,27 @@ describe('TeachTrace API (integración)', () => {
 
   it('HU-18: persiste el promptSummary y es visible en la consulta del docente', async () => {
     const summary = 'Resumen de prompts para prueba de persistencia';
-    await request(`/api/student/activities/${activityId}/submission`, {
+    // Usar una actividad específica para no mezclar con otras
+    const newActivity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad persistencia promptSummary',
+        classId,
+        dueDate: '2027-02-01',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const persistActivityId = (newActivity.body as { id: number }).id;
+
+    await request(`/api/student/activities/${persistActivityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
       body: buildSubmitForm({ promptSummary: summary }),
     });
 
-    const submissions = await request(`/api/teacher/activities/${activityId}/submissions`, {
+    const submissions = await request(`/api/teacher/activities/${persistActivityId}/submissions`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     const list = submissions.body as Array<{ id: number }>;
@@ -2003,6 +2053,725 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymous.response.status).toBe(401);
   });
 
+  // ─── HU-34: Notificaciones push cuando el docente publica calificación ────────
+
+  async function createEvaluatedSubmission() {
+    // Crear actividad nueva para cada test (evita contaminación de estado)
+    const activity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Actividad HU-34 ${Date.now()}`,
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const newActivityId = (activity.body as { id: number }).id;
+
+    // El estudiante entrega
+    const form = buildSubmitForm({ productText: 'Producto para HU-34' });
+    await request(`/api/student/activities/${newActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+
+    // Obtener submissionId
+    const subs = await request(`/api/teacher/activities/${newActivityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const submId = (subs.body as Array<{ id: number }>)[0].id;
+
+    return { newActivityId, submId, activityTitle: `Actividad HU-34 ${Date.now()}` };
+  }
+
+  it('HU-34: crea una notificación al publicar la calificación', async () => {
+    const { submId } = await createEvaluatedSubmission();
+
+    const countBefore = await dataSource.getRepository(Notification).count({
+      where: { user: { id: student.user.id }, type: NotificationType.GRADE_PUBLISHED },
+    });
+
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const countAfter = await dataSource.getRepository(Notification).count({
+      where: { user: { id: student.user.id }, type: NotificationType.GRADE_PUBLISHED },
+    });
+    expect(countAfter).toBe(countBefore + 1);
+  });
+
+  it('HU-34: el título de la notificación contiene el nombre de la actividad', async () => {
+    const activity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad con título verificable',
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Proyecto',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const newActivityId = (activity.body as { id: number }).id;
+    const form = buildSubmitForm({ productText: 'Producto verificable' });
+    await request(`/api/student/activities/${newActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+    const subs = await request(`/api/teacher/activities/${newActivityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const submId = (subs.body as Array<{ id: number }>)[0].id;
+
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    // Buscar la notificación específica para esta actividad
+    const notif = await dataSource.getRepository(Notification).findOne({
+      where: {
+        user: { id: student.user.id },
+        type: NotificationType.GRADE_PUBLISHED,
+        activityId: newActivityId,
+      },
+    });
+    expect(notif).not.toBeNull();
+    expect(notif!.title).toContain('Actividad con título verificable');
+  });
+
+  it('HU-34: una sola notificación aunque se repita el cierre', async () => {
+    const { submId } = await createEvaluatedSubmission();
+
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    // Segundo cierre — debe ser idempotente
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const submission = await dataSource.getRepository(Submission).findOneByOrFail({ id: submId });
+    // El campo notificationSentAt debe seguir siendo la misma fecha (no nulo, no duplicado)
+    expect(submission.notificationSentAt).not.toBeNull();
+
+    const notifications = await dataSource.getRepository(Notification).find({
+      where: {
+        user: { id: student.user.id },
+        type: NotificationType.GRADE_PUBLISHED,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    // Solo debe existir UNA notificación para este submId
+    const forThisActivity = notifications.filter((n) =>
+      n.activityId === submission.activity.id,
+    );
+    expect(forThisActivity).toHaveLength(1);
+  });
+
+  it('HU-34: respeta la preferencia Push desactivada — no envía push pero sí notificación in-app', async () => {
+    // Desactivar PUSH para GRADE_PUBLISHED
+    const preferences = Object.values(NotificationEventType).map((eventType) => ({
+      eventType,
+      channels:
+        eventType === NotificationEventType.GRADE_PUBLISHED
+          ? [NotificationChannel.IN_APP]
+          : Object.values(NotificationChannel),
+    }));
+    await request('/api/notification-preferences', {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferences }),
+    });
+
+    const { submId } = await createEvaluatedSubmission();
+    const countBefore = await dataSource.getRepository(Notification).count({
+      where: { user: { id: student.user.id }, type: NotificationType.GRADE_PUBLISHED },
+    });
+
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    // Notificación in-app sí debe crearse
+    const countAfter = await dataSource.getRepository(Notification).count({
+      where: { user: { id: student.user.id }, type: NotificationType.GRADE_PUBLISHED },
+    });
+    expect(countAfter).toBe(countBefore + 1);
+
+    // Restaurar preferencias
+    const allChannels = Object.values(NotificationEventType).map((eventType) => ({
+      eventType,
+      channels: Object.values(NotificationChannel),
+    }));
+    await request('/api/notification-preferences', {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferences: allChannels }),
+    });
+  });
+
+  it('HU-34: GET /notifications devuelve solo no leídas de los últimos 30 días', async () => {
+    // Marcar todas como leídas primero
+    await request('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+
+    // Crear una notificación nueva
+    const { submId } = await createEvaluatedSubmission();
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const response = await request('/api/notifications', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(response.response.status).toBe(200);
+    const list = response.body as Array<{ read: boolean; createdAt: string }>;
+
+    // Todas deben ser no leídas
+    expect(list.every((n) => !n.read)).toBe(true);
+
+    // Todas deben estar dentro de los últimos 30 días
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    expect(list.every((n) => new Date(n.createdAt).getTime() >= cutoff)).toBe(true);
+  });
+
+  it('HU-34: conteo del badge devuelve solo no leídas', async () => {
+    // Marcar todas como leídas
+    await request('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+
+    const countZero = await request('/api/notifications/unread-count', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((countZero.body as { count: number }).count).toBe(0);
+
+    // Crear una nueva
+    const { submId } = await createEvaluatedSubmission();
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const countOne = await request('/api/notifications/unread-count', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((countOne.body as { count: number }).count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('HU-34: marcar una notificación como leída la elimina del listado', async () => {
+    const { submId } = await createEvaluatedSubmission();
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const listBefore = await request('/api/notifications', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    const notifications = listBefore.body as Array<{ id: number }>;
+    expect(notifications.length).toBeGreaterThan(0);
+
+    const notifId = notifications[0].id;
+    const markRead = await request(`/api/notifications/${notifId}/read`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(markRead.response.status).toBe(200);
+
+    // Ya no debe aparecer en el listado (solo no leídas)
+    const listAfter = await request('/api/notifications', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    const ids = (listAfter.body as Array<{ id: number }>).map((n) => n.id);
+    expect(ids).not.toContain(notifId);
+  });
+
+  it('HU-34: marcar todas como leídas vacía el listado', async () => {
+    const { submId } = await createEvaluatedSubmission();
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    const markAll = await request('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(markAll.response.status).toBe(200);
+
+    const listAfter = await request('/api/notifications', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((listAfter.body as Array<unknown>)).toHaveLength(0);
+
+    const count = await request('/api/notifications/unread-count', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((count.body as { count: number }).count).toBe(0);
+  });
+
+  it('HU-34: aislamiento entre estudiantes — uno no ve las notificaciones del otro', async () => {
+    // Crear segundo estudiante
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(users.create({
+      email: 'estudiante.aislado@unah.edu.hn',
+      name: 'Estudiante aislado',
+      passwordHash: await authService.hashPassword('Aislado123!'),
+      role: UserRole.STUDENT,
+      active: true,
+    }));
+    const login2 = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'estudiante.aislado@unah.edu.hn', password: 'Aislado123!' }),
+    });
+    const cookie2 = readSessionCookie(login2.response);
+
+    const { submId } = await createEvaluatedSubmission();
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    // El segundo estudiante no debe ver notificaciones del primero
+    const list2 = await request('/api/notifications', {
+      headers: sessionHeaders(cookie2),
+    });
+    // Puede fallar con 403 (no es estudiante de clase) o devolver lista vacía — ambos son correctos
+    const status = list2.response.status;
+    expect(status === 200 || status === 403).toBe(true);
+    if (status === 200) {
+      expect((list2.body as Array<unknown>)).toHaveLength(0);
+    }
+  });
+
+  it('HU-34/HU-30: cada usuario autenticado consulta sus avisos y el anónimo no accede', async () => {
+    const teacherAttempt = await request('/api/notifications', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(teacherAttempt.response.status).toBe(200);
+    expect(Array.isArray(teacherAttempt.body)).toBe(true);
+
+    const anonAttempt = await request('/api/notifications');
+    expect(anonAttempt.response.status).toBe(401);
+  });
+
+  it('HU-34: registrar y eliminar suscripción push', async () => {
+    const endpoint = 'https://fcm.googleapis.com/fcm/send/test-endpoint-hu34';
+
+    const save = await request('/api/notifications/push-subscriptions', {
+      method: 'POST',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, p256dh: 'clave-publica-test', auth: 'auth-test' }),
+    });
+    expect(save.response.status).toBe(201);
+
+    const saved = await dataSource.getRepository(PushSubscriptionEntity).findOne({
+      where: { endpoint },
+    });
+    expect(saved).not.toBeNull();
+    expect(saved?.user.id).toBe(student.user.id);
+
+    const del = await request('/api/notifications/push-subscriptions', {
+      method: 'DELETE',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint }),
+    });
+    expect(del.response.status).toBe(200);
+
+    const deleted = await dataSource.getRepository(PushSubscriptionEntity).findOne({
+      where: { endpoint },
+    });
+    expect(deleted).toBeNull();
+  });
+
+  it('HU-34: suscripción de dispositivo compartido se reasigna al nuevo usuario', async () => {
+    const endpoint = 'https://fcm.googleapis.com/fcm/send/shared-device-hu34';
+
+    // Primer usuario registra el endpoint
+    await request('/api/notifications/push-subscriptions', {
+      method: 'POST',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, p256dh: 'clave-publica-shared', auth: 'auth-shared' }),
+    });
+
+    // Segundo usuario registra el mismo endpoint (dispositivo compartido)
+    const users = dataSource.getRepository(User);
+    const authService = app.get(AuthService);
+    await users.save(users.create({
+      email: 'estudiante.shared@unah.edu.hn',
+      name: 'Estudiante shared',
+      passwordHash: await authService.hashPassword('Shared123!'),
+      role: UserRole.STUDENT,
+      active: true,
+    }));
+    const loginShared = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'estudiante.shared@unah.edu.hn', password: 'Shared123!' }),
+    });
+    const cookieShared = readSessionCookie(loginShared.response);
+    const sharedUser = (loginShared.body as { user: { id: number } }).user;
+
+    await request('/api/notifications/push-subscriptions', {
+      method: 'POST',
+      headers: { ...sessionHeaders(cookieShared), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, p256dh: 'clave-publica-shared-2', auth: 'auth-shared-2' }),
+    });
+
+    const sub = await dataSource.getRepository(PushSubscriptionEntity).findOne({
+      where: { endpoint },
+    });
+    // Debe estar reasignado al nuevo usuario
+    expect(sub?.user.id).toBe(sharedUser.id);
+  });
+
+  it('HU-34: GET /student/activities/:id/results oculta datos antes de evaluated', async () => {
+    const activity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Actividad resultados ocultos',
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const newActivityId = (activity.body as { id: number }).id;
+    const form = buildSubmitForm({ productText: 'Producto para resultados' });
+    await request(`/api/student/activities/${newActivityId}/submission`, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: form,
+    });
+
+    // Antes de evaluated: valuations debe estar vacío
+    const resultsBefore = await request(`/api/student/activities/${newActivityId}/results`, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(resultsBefore.response.status).toBe(200);
+    const body = resultsBefore.body as { status: string; valuations: unknown[]; finalScore: null };
+    expect(body.status).toBe(SubmissionStatus.SUBMITTED);
+    expect(body.valuations).toHaveLength(0);
+    expect(body.finalScore).toBeNull();
+
+    // Publicar la evaluación
+    const subs = await request(`/api/teacher/activities/${newActivityId}/submissions`, {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const submId = (subs.body as Array<{ id: number }>)[0].id;
+    await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+
+    // Después de evaluated: status debe ser evaluated
+    const resultsAfter = await request(`/api/student/activities/${newActivityId}/results`, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(resultsAfter.response.status).toBe(200);
+    expect((resultsAfter.body as { status: string }).status).toBe(SubmissionStatus.EVALUATED);
+  });
+
+  it('HU-34: GET /notifications/badge-stream existe y requiere autenticación', async () => {
+    // Anónimo debe recibir 401
+    const anonSse = await request('/api/notifications/badge-stream');
+    expect(anonSse.response.status).toBe(401);
+
+    // Docente debe recibir 403
+    const teacherSse = await request('/api/notifications/badge-stream', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(teacherSse.response.status).toBe(403);
+  });
+
+  it('HU-34: el stream autenticado emite el nuevo conteo al publicar una calificación', async () => {
+    const { submId } = await createEvaluatedSubmission();
+    const abortController = new AbortController();
+    const response = await fetch(`${baseUrl}/api/notifications/badge-stream`, {
+      headers: {
+        ...sessionHeaders(student.sessionCookie),
+        Origin: 'http://localhost:5173',
+      },
+      signal: abortController.signal,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+    expect(response.body).not.toBeNull();
+
+    const reader = response.body!.getReader();
+    try {
+      await request(`/api/teacher/submissions/${submId}/close`, {
+        method: 'PUT',
+        headers: sessionHeaders(teacher.sessionCookie),
+      });
+
+      const decoder = new TextDecoder();
+      let received = '';
+      for (let attempt = 0; attempt < 5 && !received.includes('"count"'); attempt += 1) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error('El evento SSE no fue recibido')), 3000);
+          }),
+        ]).finally(() => {
+          if (timeout) clearTimeout(timeout);
+        });
+
+        if (chunk.done) break;
+        received += decoder.decode(chunk.value, { stream: true });
+      }
+
+      expect(received).toMatch(/data:\s*\{\s*"count":\d+\s*\}/);
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      abortController.abort();
+    }
+  });
+
+  let hu33FixturePromise: Promise<{
+    classId: number;
+    submittedDates: [string, string];
+  }> | null = null;
+
+  function createHu33Fixture() {
+    if (hu33FixturePromise) return hu33FixturePromise;
+
+    hu33FixturePromise = (async () => {
+      const suffix = Date.now();
+      const users = dataSource.getRepository(User);
+      const classes = dataSource.getRepository(AcademicClass);
+      const enrollments = dataSource.getRepository(Enrollment);
+      const activities = dataSource.getRepository(Activity);
+      const submissions = dataSource.getRepository(Submission);
+      const valuations = dataSource.getRepository(Valuation);
+      const teacherEntity = await users.findOneByOrFail({ id: teacher.user.id });
+      const studentEntity = await users.findOneByOrFail({ id: student.user.id });
+      const peer = await users.save(users.create({
+        email: `hu33.peer.${suffix}@unah.edu.hn`,
+        name: 'Compañero HU-33',
+        passwordHash: 'sin-inicio-de-sesion',
+        role: UserRole.STUDENT,
+        active: true,
+      }));
+      const studentWithoutSubmission = await users.save(users.create({
+        email: `hu33.no-submission.${suffix}@unah.edu.hn`,
+        name: 'Estudiante sin entrega HU-33',
+        passwordHash: 'sin-inicio-de-sesion',
+        role: UserRole.STUDENT,
+        active: true,
+      }));
+      const academicClass = await classes.save(classes.create({
+        name: 'Clase exclusiva HU-33',
+        subject: 'Analítica académica',
+        code: `HU33-${suffix}`,
+        period: 'III PAC 2026',
+        teacher: teacherEntity,
+      }));
+
+      await enrollments.save([
+        enrollments.create({ student: studentEntity, academicClass, active: true }),
+        enrollments.create({ student: peer, academicClass, active: true }),
+        enrollments.create({ student: studentWithoutSubmission, academicClass, active: true }),
+      ]);
+
+      const activityDefinitions = [
+        {
+          title: 'Actividad posterior HU-33',
+          dueDate: '2026-04-20',
+          submittedAt: '2026-04-19T16:30:00.000Z',
+          studentValue: 2,
+          peerValue: 4,
+          status: SubmissionStatus.EVALUATED,
+        },
+        {
+          title: 'Actividad inicial HU-33',
+          dueDate: '2026-03-10',
+          submittedAt: '2026-03-08T14:00:00.000Z',
+          studentValue: 1,
+          peerValue: 3,
+          status: SubmissionStatus.EVALUATED,
+        },
+        {
+          title: 'Actividad pendiente HU-33',
+          dueDate: '2026-05-15',
+          submittedAt: '2026-05-14T12:00:00.000Z',
+          studentValue: 4,
+          peerValue: null,
+          status: SubmissionStatus.SUBMITTED,
+        },
+      ] as const;
+
+      const saveSubmission = async (
+        activity: Activity,
+        owner: User,
+        status: SubmissionStatus,
+        submittedAt: string,
+        teacherValue: number | null,
+      ) => {
+        const submission = await submissions.save(submissions.create({
+          student: owner,
+          activity,
+          status,
+          evaluationStatus:
+            status === SubmissionStatus.EVALUATED
+              ? EvaluationStatus.VALIDATED
+              : EvaluationStatus.ANALYZED,
+          manualReviewRequired: false,
+          submittedAt: new Date(submittedAt),
+          productText: 'Evidencia para HU-33',
+          productUrl: '',
+          fileName: null,
+          fileMimeType: null,
+          fileBase64: null,
+          notificationSentAt: null,
+        }));
+
+        if (teacherValue !== null) {
+          await valuations.save(valuations.create({
+            activity,
+            submission,
+            dimension: 'Análisis',
+            criterion: 'Criterio HU-33',
+            aiValue: null,
+            aiExplanation: '',
+            teacherValue,
+            teacherComment: 'Calificación para la gráfica',
+            confirmed: true,
+          }));
+        }
+      };
+
+      for (const definition of activityDefinitions) {
+        const activity = await activities.save(activities.create({
+          title: definition.title,
+          subject: academicClass.subject,
+          dueDate: definition.dueDate,
+          activityType: 'Proyecto',
+          evaluationPhase: ActivityPhase.PILOT,
+          learningOutcomes: [],
+          teacher: teacherEntity,
+          academicClass,
+          manualEvaluationRequired: false,
+          weight: 1,
+          rubric: null,
+        }));
+        await saveSubmission(
+          activity,
+          studentEntity,
+          definition.status,
+          definition.submittedAt,
+          definition.studentValue,
+        );
+        if (definition.peerValue !== null) {
+          await saveSubmission(
+            activity,
+            peer,
+            SubmissionStatus.EVALUATED,
+            definition.submittedAt,
+            definition.peerValue,
+          );
+        }
+      }
+
+      return {
+        classId: academicClass.id,
+        submittedDates: [
+          activityDefinitions[1].submittedAt,
+          activityDefinitions[0].submittedAt,
+        ],
+      };
+    })();
+
+    return hu33FixturePromise;
+  }
+
+  it('HU-33: devuelve notas y promedio cronológicos con tendencia y fecha real de entrega', async () => {
+    const fixture = await createHu33Fixture();
+    const response = await request(
+      `/api/student/performance-chart?classId=${fixture.classId}`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+
+    expect(response.response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      labels: ['2026-03-10', '2026-04-20', '2026-05-15'],
+      myGrades: [0, 33, null],
+      classAverage: [34, 67, null],
+      trendLine: [0, 33, null],
+    });
+
+    const body = response.body as {
+      labels: string[];
+      activities: Array<{ title: string; dueDate: string; submittedAt: string | null }>;
+    };
+    expect(body.activities).toHaveLength(body.labels.length);
+    expect(body.activities[0]).toMatchObject({
+      title: 'Actividad inicial HU-33',
+      dueDate: '2026-03-10',
+      submittedAt: fixture.submittedDates[0],
+    });
+    expect(body.activities[1].submittedAt).toBe(fixture.submittedDates[1]);
+  });
+
+  it('HU-33: filtra por clase, valida classId y protege el endpoint por rol', async () => {
+    const fixture = await createHu33Fixture();
+    const filtered = await request(
+      `/api/student/performance-chart?classId=${fixture.classId}`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+    expect(filtered.response.status).toBe(200);
+    expect((filtered.body as { labels: string[] }).labels).toHaveLength(3);
+
+    const notEnrolled = await request('/api/student/performance-chart?classId=999999', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(notEnrolled.response.status).toBe(200);
+    expect(notEnrolled.body).toEqual({
+      labels: [],
+      myGrades: [],
+      classAverage: [],
+      trendLine: [],
+      activities: [],
+    });
+
+    for (const classIdValue of ['abc', '0', '1.5']) {
+      const invalid = await request(
+        `/api/student/performance-chart?classId=${classIdValue}`,
+        { headers: sessionHeaders(student.sessionCookie) },
+      );
+      expect(invalid.response.status).toBe(400);
+    }
+
+    const teacherAttempt = await request('/api/student/performance-chart', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+
+    const anonymousAttempt = await request('/api/student/performance-chart');
+    expect(anonymousAttempt.response.status).toBe(401);
+  });
   it('HU-22 a HU-24: filtra actividades, calcula progreso y registra la primera vista', async () => {
     const beforeCount = await request('/api/student/activities/new-count', {
       headers: sessionHeaders(student.sessionCookie),

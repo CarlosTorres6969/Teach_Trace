@@ -22,6 +22,7 @@ import { UpdateLogbookDto } from '../logbooks/update-logbook.dto';
 import { UpdateAiDeclarationDto } from '../ai-declarations/update-ai-declaration.dto';
 import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
 import { UploadedAcademicFile } from '../submissions/submissions.service';
+import { PerformanceChartQueryDto } from './performance-chart-query.dto';
 
 @Controller('student')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -122,9 +123,8 @@ export class StudentController {
   @Get('performance-chart')
   getPerformanceChart(
     @CurrentUser() user: User,
-    @Query('classId') classIdStr?: string,
+    @Query() query: PerformanceChartQueryDto,
   ) {
-    const classId = classIdStr ? parseInt(classIdStr, 10) : undefined;
-    return this.studentService.getPerformanceChart(user.id, classId);
+    return this.studentService.getPerformanceChart(user.id, query.classId);
   }
 }

@@ -15,6 +15,8 @@ import { computed, onMounted, ref } from 'vue';
 import { Line } from 'vue-chartjs';
 import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
+import { chartThemePalette } from '../chart-theme';
+import { resolvedTheme } from '../theme';
 import type { ProjectionData } from '../types';
 
 ChartJS.register(
@@ -50,7 +52,10 @@ async function load() {
 // ─── Datos del gráfico ────────────────────────────────────────────────────────
 const chartData = computed(() => {
   if (!projection.value) return null;
-  const highContrast = accessibilitySettings.value.highContrast;
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
   const acts = projection.value.activities;
   const labels = acts.map((a, i) => `Act. ${i + 1}`);
@@ -70,9 +75,9 @@ const chartData = computed(() => {
       {
         label: 'Nota real (%)',
         data: realPoints,
-        borderColor: highContrast ? '#9bd8ff' : '#234f8f',
-        backgroundColor: highContrast ? 'rgba(155,216,255,0.16)' : 'rgba(35,79,143,0.08)',
-        pointBackgroundColor: highContrast ? '#9bd8ff' : '#234f8f',
+        borderColor: palette.primary,
+        backgroundColor: palette.primaryFill,
+        pointBackgroundColor: palette.primary,
         pointRadius: 5,
         tension: 0.3,
         fill: false,
@@ -81,9 +86,9 @@ const chartData = computed(() => {
       {
         label: 'Proyección (%)',
         data: projectionPoints,
-        borderColor: highContrast ? '#ffe66b' : '#f5a623',
-        backgroundColor: highContrast ? 'rgba(255,230,107,0.12)' : 'rgba(245,166,35,0.07)',
-        pointBackgroundColor: highContrast ? '#ffe66b' : '#f5a623',
+        borderColor: palette.accent,
+        backgroundColor: palette.accentFill,
+        pointBackgroundColor: palette.accent,
         pointRadius: 4,
         tension: 0.3,
         borderDash: [6, 4],
@@ -96,10 +101,10 @@ const chartData = computed(() => {
 
 const chartOptions = computed(() => {
   const fontScale = accessibilitySettings.value.fontSize / 100;
-  const textColor = accessibilitySettings.value.highContrast ? '#ffffff' : '#666666';
-  const gridColor = accessibilitySettings.value.highContrast
-    ? 'rgba(255,255,255,0.35)'
-    : 'rgba(0,0,0,0.06)';
+  const palette = chartThemePalette(
+    resolvedTheme.value,
+    accessibilitySettings.value.highContrast,
+  );
 
   return {
     responsive: true,
@@ -109,7 +114,7 @@ const chartOptions = computed(() => {
         position: 'bottom' as const,
         labels: {
           boxWidth: 14,
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
         },
       },
@@ -129,16 +134,16 @@ const chartOptions = computed(() => {
         min: 0,
         max: 100,
         ticks: {
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(12 * fontScale) },
           callback: (v: number | string) => `${v}%`,
           stepSize: 25,
         },
-        grid: { color: gridColor },
+        grid: { color: palette.grid },
       },
       x: {
         ticks: {
-          color: textColor,
+          color: palette.text,
           font: { size: Math.round(11 * fontScale) },
         },
         grid: { display: false },
