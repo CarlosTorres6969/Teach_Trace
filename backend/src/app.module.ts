@@ -83,6 +83,8 @@ const entities = [
       Submission,
       Valuation,
       Notification,
+      ForumThread,
+      ForumPost,
     ]),
     AuthModule,
     ClassesModule,

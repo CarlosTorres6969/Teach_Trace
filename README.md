@@ -38,8 +38,9 @@ API: http://localhost:3000/api
 - Estudiante: `estudiante@unah.edu.hn` / `Estudiante123!`
 - Docente: `docente@unah.edu.hn` / `Docente123!`
 
-Al iniciar por primera vez se crea una clase con matrícula, una actividad, una rúbrica de siete
-dimensiones, una bitácora, una declaración y una entrega de demostración. Consulta
+Al iniciar se prepara un escenario local idempotente con tres clases, cinco estudiantes, actividades
+con fechas relativas al día actual, avances de 0 %, 40 %, 70 % y 100 %, entregas en distintos estados,
+calificaciones históricas, notificaciones y conversaciones de foro. Consulta
 [docs/HISTORIAS_USUARIO.md](docs/HISTORIAS_USUARIO.md) para ver la cobertura funcional.
 
 ## Estructura del backend

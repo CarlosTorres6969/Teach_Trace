@@ -30,7 +30,11 @@ ChartJS.register(
   Filler,
 );
 
-const props = defineProps<{ classId: number }>();
+const props = defineProps<{
+  classId: number;
+  className?: string;
+  classCode?: string;
+}>();
 
 const projection = ref<ProjectionData | null>(null);
 const loading = ref(true);
@@ -200,7 +204,11 @@ onMounted(load);
     <!-- Encabezado con el número clave -->
     <div class="projection-header">
       <div>
-        <span class="eyebrow">Rendimiento académico</span>
+        <span class="eyebrow">
+          {{ props.classCode && props.className
+            ? `${props.classCode} · ${props.className}`
+            : 'Rendimiento académico' }}
+        </span>
         <h2 class="projection-title">
           {{ projectedLabel ?? 'Proyección de nota' }}
         </h2>

@@ -63,7 +63,6 @@ const uniqueClasses = computed(() => {
   }
   return [...seen.values()];
 });
-const uniqueClassIds = computed(() => uniqueClasses.value.map((academicClass) => academicClass.id));
 
 async function loadActivities(filter = selectedFilter.value) {
   loading.value = true;
@@ -160,9 +159,11 @@ onMounted(() => loadActivities());
     <template v-else>
       <!-- Widget de proyección — uno por clase -->
       <ProjectionWidget
-        v-for="classId in uniqueClassIds"
-        :key="classId"
-        :class-id="classId"
+        v-for="academicClass in uniqueClasses"
+        :key="academicClass.id"
+        :class-id="academicClass.id"
+        :class-name="academicClass.name"
+        :class-code="academicClass.code"
       />
 
       <!-- Entregas pendientes -->

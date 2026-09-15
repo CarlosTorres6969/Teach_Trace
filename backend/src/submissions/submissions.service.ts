@@ -12,6 +12,7 @@ import {
   SubmissionStatus,
 } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
+import { Valuation } from '../entities/valuation.entity';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 
 export type UploadedAcademicFile = {
@@ -27,6 +28,7 @@ export class SubmissionsService {
     @InjectRepository(Submission) private readonly submissions: Repository<Submission>,
     @InjectRepository(Logbook) private readonly logbooks: Repository<Logbook>,
     @InjectRepository(AiDeclaration) private readonly declarations: Repository<AiDeclaration>,
+    @InjectRepository(Valuation) private readonly valuations: Repository<Valuation>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly aiEngine: AiEngineService,
@@ -159,12 +161,16 @@ export class SubmissionsService {
     const submission = await this.submissions.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('La entrega no existe');
     await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
-    const [logbook, declaration] = await Promise.all([
+    const [logbook, declaration, valuations] = await Promise.all([
       this.logbooks.findOne({
         where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
       }),
       this.declarations.findOne({
         where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
+      }),
+      this.valuations.find({
+        where: { submission: { id: submission.id } },
+        order: { id: 'ASC' },
       }),
     ]);
     return {
@@ -182,6 +188,15 @@ export class SubmissionsService {
       productText: submission.productText,
       productUrl: submission.productUrl,
       fileName: submission.fileName,
+      valuations: valuations.map((valuation) => ({
+        id: valuation.id,
+        criterion: valuation.criterion,
+        dimension: valuation.dimension,
+        aiValue: valuation.aiValue,
+        teacherValue: valuation.teacherValue,
+        teacherComment: valuation.teacherComment,
+        confirmed: valuation.confirmed,
+      })),
       logbook: logbook
         ? {
             initialIdeas: logbook.initialIdeas,
