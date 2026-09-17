@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -52,6 +52,23 @@ describe('JwtAuthGuard', () => {
       UnauthorizedException,
     );
     expect(currentRequest.res.clearCookie).toHaveBeenCalled();
+  });
+
+  it('bloquea las rutas académicas mientras la contraseña siga siendo temporal', async () => {
+    const currentRequest = { ...request(), path: '/api/student/activities' };
+    const session = {
+      id: 'session-1',
+      user: { id: 4, active: true, mustChangePassword: true },
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60000),
+    };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };
+    const sessions = { findOne: jest.fn().mockResolvedValue(session) };
+    const guard = new JwtAuthGuard(jwt as never, sessions as never, config);
+
+    await expect(guard.canActivate(context(currentRequest))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('rechaza la sesión si el docente fue desactivado', async () => {

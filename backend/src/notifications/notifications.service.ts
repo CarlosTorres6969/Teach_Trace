@@ -147,35 +147,6 @@ export class NotificationsService {
     return notification;
   }
 
-  async dispatchForumReply(
-    recipient: User,
-    senderName: string,
-    threadTitle: string,
-    forumThreadId: number,
-    classId: number,
-  ) {
-    const title = `Nueva respuesta de ${senderName}`;
-    const message = `Respondieron al hilo "${threadTitle}".`;
-    const notification = await this.notifications.save(
-      this.notifications.create({
-        user: recipient,
-        type: NotificationType.FORUM_REPLY,
-        title,
-        message,
-        read: false,
-        activityId: null,
-        forumThreadId,
-        classId,
-      }),
-    );
-
-    // Emitir badge SSE inmediatamente, igual que en la publicación de calificaciones
-    const newCount = await this.unreadCount(recipient.id);
-    this.sseService.emit(recipient.id, newCount);
-
-    return notification;
-  }
-
   // ─── Internos ────────────────────────────────────────────────────────────────
 
   private async sendPush(userId: number, title: string, body: string, url: string) {
@@ -215,8 +186,6 @@ export class NotificationsService {
       message: n.message,
       read: n.read,
       activityId: n.activityId,
-      forumThreadId: n.forumThreadId,
-      classId: n.classId,
       createdAt: n.createdAt,
     };
   }

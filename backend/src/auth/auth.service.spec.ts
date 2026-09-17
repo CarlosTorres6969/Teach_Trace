@@ -45,6 +45,7 @@ describe('AuthService', () => {
         reducedMotion: false,
       },
       active: true,
+      mustChangePassword: false,
       passwordHash,
       sessions: [],
     });
@@ -74,6 +75,42 @@ describe('AuthService', () => {
       service.login({ email: 'estudiante@unah.edu.hn', password: 'Incorrecta123!' }, '127.0.0.1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(loginAttempts.recordFailure).toHaveBeenCalledWith('estudiante@unah.edu.hn', expect.any(Number));
+  });
+
+  it('reemplaza la contraseña temporal y conserva únicamente la sesión actual', async () => {
+    const users = { findOne: jest.fn(), save: jest.fn(async (value) => value) };
+    const sessions = {
+      create: jest.fn(),
+      save: jest.fn(async (value) => value),
+      find: jest.fn(),
+    };
+    const service = createService({ users, sessions });
+    const user = {
+      id: 9,
+      email: 'nuevo@unah.hn',
+      name: 'Nuevo estudiante',
+      role: UserRole.STUDENT,
+      theme: UserTheme.SYSTEM,
+      accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
+      active: true,
+      mustChangePassword: true,
+      passwordHash: await service.hashPassword('Temporal123!'),
+      sessions: [],
+    };
+    const currentSession = { id: 'actual', user, revokedAt: null };
+    const otherSession = { id: 'otra', user, revokedAt: null };
+    sessions.find.mockResolvedValue([currentSession, otherSession]);
+
+    const result = await service.changeTemporaryPassword(
+      user as never,
+      currentSession as never,
+      { currentPassword: 'Temporal123!', newPassword: 'NuevaSegura123!' },
+    );
+
+    expect(result.user.mustChangePassword).toBe(false);
+    expect(users.save).toHaveBeenCalled();
+    expect(currentSession.revokedAt).toBeNull();
+    expect(otherSession.revokedAt).toBeInstanceOf(Date);
   });
 
   it('bloquea tras múltiples intentos fallidos (429)', async () => {

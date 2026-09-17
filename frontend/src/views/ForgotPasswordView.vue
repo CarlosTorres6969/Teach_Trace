@@ -49,3 +49,67 @@ async function requestReset() {
     </section>
   </main>
 </template>
+
+<style scoped>
+.login-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 460px);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2rem, 6vw, 5rem);
+  padding: clamp(1.25rem, 4vw, 3rem);
+  background: #173f78;
+}
+.identity-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: 0;
+  color: white;
+  text-align: center;
+}
+.career-logo { width: clamp(140px, 16vw, 200px); max-width: 100%; height: auto; }
+.institution { display: block; margin-bottom: .75rem; color: #cbd9eb; font-size: .72rem; font-weight: 600; line-height: 1.6; letter-spacing: .08em; text-transform: uppercase; }
+.identity-panel h1 { margin: 0 0 .75rem; color: white; font-family: inherit; font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; }
+.identity-panel p { margin: 0; color: #dbe5f1; line-height: 1.6; }
+.career-name { color: #f5a623; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.login-panel { width: 100%; min-width: 0; }
+.login-card {
+  width: 100%;
+  margin: 0;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .12);
+}
+.access-label { display: block; margin-bottom: .75rem; color: var(--green); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.login-card h2 { margin: 0 0 .75rem; font-family: inherit; font-size: clamp(1.4rem, 3vw, 1.75rem); line-height: 1.25; }
+.muted { margin: 0; line-height: 1.6; }
+.login-card form { display: grid; gap: 1.25rem; margin-top: 1.75rem; }
+.login-card label { color: var(--ink); }
+.login-card input { min-width: 0; min-height: 48px; border-radius: 6px; }
+.login-card .button.primary { min-height: 48px; border-radius: 6px; background: #f5a623; color: #0c2340; }
+.login-card .button.primary:hover:not(:disabled) { background: #e0941a; }
+.alert { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.alert.success { margin-top: 1.75rem; }
+.back-link { display: block; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); text-align: center; line-height: 1.5; }
+.back-link:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+@media (max-width: 800px) {
+  .login-shell { grid-template-columns: minmax(0, 460px); align-content: center; gap: 2rem; }
+  .identity-panel { flex-direction: row; text-align: left; gap: 1rem; }
+  .career-logo { width: 80px; flex-shrink: 0; }
+  .identity-panel h1 { margin: 0; font-size: 2rem; }
+  .institution { font-size: .65rem; margin-bottom: .4rem; }
+  .identity-panel p, .career-name { display: none; }
+}
+@media (max-width: 400px) {
+  .login-shell { padding: 1rem; gap: 1.5rem; }
+  .career-logo { width: 60px; }
+  .identity-panel h1 { font-size: 1.75rem; }
+  .login-card { padding: 1.25rem; }
+}
+</style>

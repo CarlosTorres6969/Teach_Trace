@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEmail,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
@@ -34,6 +35,12 @@ export class CreateClassDto {
 export class EnrollStudentDto {
   @IsEmail()
   email: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name?: string;
 }
 
 export class EnrollStudentsDto {

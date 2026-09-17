@@ -17,6 +17,7 @@ const message = ref('');
 const section = ref<'classes' | 'activities' | 'rubrics'>('classes');
 const classForm = reactive({ name: '', subject: '', code: '', period: '' });
 const enrollmentEmails = reactive<Record<number, string>>({});
+const enrollmentNames = reactive<Record<number, string>>({});
 const activityForm = reactive({
   title: '',
   classId: 0,
@@ -113,15 +114,26 @@ async function createClass() {
 
 async function enrollStudent(classId: number) {
   const email = enrollmentEmails[classId]?.trim();
-  if (!email) return;
-  await act('Estudiante matriculado', async () => {
-    await api(`/teacher/classes/${classId}/enrollments`, {
+  const name = enrollmentNames[classId]?.trim();
+  if (!email || !name) return;
+  error.value = '';
+  message.value = '';
+  try {
+    const result = await api<{ accountCreated: boolean; invitationEmailSent: boolean | null }>(`/teacher/classes/${classId}/enrollments`, {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, name }),
     });
     enrollmentEmails[classId] = '';
+    enrollmentNames[classId] = '';
     await load();
-  });
+    message.value = result.accountCreated
+      ? result.invitationEmailSent
+        ? 'Estudiante creado y matriculado. La contraseña temporal fue enviada por correo.'
+        : 'Estudiante creado y matriculado, pero no fue posible enviar el correo con la contraseña temporal.'
+      : 'Estudiante matriculado.';
+  } catch (cause) {
+    showError(cause);
+  }
 }
 
 function selectEnrollmentFile(event: Event) {
@@ -363,9 +375,6 @@ onBeforeUnmount(() => {
               <button class="button secondary" type="button" @click="openClassDetail(academicClass.id)">
                 Ver clase y matrícula
               </button>
-              <RouterLink class="button primary" :to="`/teacher/classes/${academicClass.id}/forum`">
-                Foro
-              </RouterLink>
             </div>
           </article>
         </div>
@@ -559,6 +568,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <p v-if="error" class="alert error">{{ error }}</p>
+            <p v-if="message" class="alert success">{{ message }}</p>
 
             <div v-if="enrollmentMode === 'excel'" class="excel-enrollment">
               <div class="excel-format-note">
@@ -611,16 +621,28 @@ onBeforeUnmount(() => {
             </div>
 
             <form v-else class="individual-enrollment" @submit.prevent="enrollStudent(selectedClass.id)">
+              <p class="muted">
+                Si el correo no tiene una cuenta, se creará como estudiante y recibirá una contraseña temporal por correo.
+                Al iniciar sesión deberá cambiarla antes de acceder al sistema.
+              </p>
               <div class="association-row">
+                <label>Nombre completo
+                  <input
+                    v-model="enrollmentNames[selectedClass.id]"
+                    type="text"
+                    maxlength="120"
+                    required
+                  />
+                </label>
                 <label>Correo institucional
                   <input
                     v-model="enrollmentEmails[selectedClass.id]"
                     type="email"
-                    placeholder="estudiante@unah.edu.hn"
+                    placeholder="correo@institucion.edu"
                     required
                   />
                 </label>
-                <button class="button primary">Matricular</button>
+                <button class="button primary">Crear o matricular</button>
               </div>
             </form>
           </section>

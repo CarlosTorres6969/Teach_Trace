@@ -25,6 +25,7 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
       email: 'estudiante@unah.edu.hn',
       name: 'Ana',
       role: 'student',
+      mustChangePassword: false,
       theme: 'light',
       accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
     }, false);

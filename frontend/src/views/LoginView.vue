@@ -19,7 +19,11 @@ async function login() {
       body: JSON.stringify(form),
     });
     setSession(result.user);
-    await router.push(result.user.role === 'student' ? '/student' : '/teacher');
+    await router.push(
+      result.user.mustChangePassword
+        ? '/change-password'
+        : result.user.role === 'student' ? '/student' : '/teacher',
+    );
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No fue posible iniciar sesión';
   } finally {
@@ -27,10 +31,6 @@ async function login() {
   }
 }
 
-function useDemo(role: 'student' | 'teacher') {
-  form.email = role === 'student' ? 'estudiante@unah.edu.hn' : 'docente@unah.edu.hn';
-  form.password = role === 'student' ? 'Estudiante123!' : 'Docente123!';
-}
 </script>
 
 <template>
@@ -63,11 +63,6 @@ function useDemo(role: 'student' | 'teacher') {
             {{ loading ? 'Ingresando…' : 'Ingresar al sistema' }}
           </button>
         </form>
-        <div class="demo-box">
-          <span>Acceso de demostración</span>
-          <button class="text-button" type="button" @click="useDemo('student')">Usar estudiante</button>
-          <button class="text-button" type="button" @click="useDemo('teacher')">Usar docente</button>
-        </div>
       </div>
     </section>
   </main>
@@ -157,18 +152,6 @@ function useDemo(role: 'student' | 'teacher') {
   font-family: 'Inter', system-ui, sans-serif;
   border-radius: 6px;
 }
-.demo-box {
-  border-top-color: var(--line);
-  font-family: 'Inter', system-ui, sans-serif;
-}
-.demo-box span {
-  color: var(--muted);
-}
-.demo-box .text-button {
-  color: var(--green);
-  font-weight: 700;
-}
-
 @media (max-width: 800px) {
   .login-shell { grid-template-columns: 1fr; }
   .identity-panel { max-width: 460px; flex-direction: row; justify-content: center; gap: 1rem; text-align: left; }
@@ -186,8 +169,6 @@ function useDemo(role: 'student' | 'teacher') {
   .institution { font-size: .58rem; }
   .identity-panel h1 { font-size: 2rem; }
   .login-card { padding: 1.5rem; }
-  .demo-box { display: grid; grid-template-columns: 1fr 1fr; }
-  .demo-box span { grid-column: 1 / -1; }
 }
 
 @media (min-width: 801px) and (max-height: 720px) {
@@ -195,6 +176,5 @@ function useDemo(role: 'student' | 'teacher') {
   .identity-panel h1 { font-size: 2.7rem; }
   .login-card { padding: 1.8rem 2.2rem; }
   .login-card form { margin-top: 1.25rem; gap: .85rem; }
-  .demo-box { margin-top: 1rem; }
 }
 </style>

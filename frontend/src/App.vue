@@ -113,12 +113,7 @@ async function markRead(notification: AppNotification) {
 
 function navigateToNotification(notification: AppNotification) {
   bellOpen.value = false;
-  if (notification.type === 'FORUM_REPLY' && notification.forumThreadId && notification.classId) {
-    void router.push({
-      path: `/student/classes/${notification.classId}/forum`,
-      query: { thread: String(notification.forumThreadId) },
-    });
-  } else if (notification.activityId) {
+  if (notification.activityId) {
     void router.push(`/student/activities/${notification.activityId}/results`);
   }
 }
@@ -198,7 +193,7 @@ async function logout() {
 watch(
   () => auth.user,
   (user) => {
-    if (user?.role === 'student') {
+    if (user?.role === 'student' && !user.mustChangePassword) {
       startNotificationServices();
       void fetchNewActivityCount();
     } else {
@@ -213,7 +208,7 @@ watch(
 onMounted(() => {
   window.addEventListener('keydown', closeBellOnEscape);
   // Si ya hay sesión activa al montar (recarga de página), iniciar servicios
-  if (auth.user?.role === 'student') {
+  if (auth.user?.role === 'student' && !auth.user.mustChangePassword) {
     startNotificationServices();
     void fetchNewActivityCount();
     window.addEventListener('teachtrace:activity-viewed', refreshActivityCount);
@@ -228,7 +223,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header v-if="auth.user" class="topbar">
+  <header v-if="auth.user && !auth.user.mustChangePassword" class="topbar">
     <RouterLink :to="auth.user.role === 'student' ? '/student' : '/teacher'" class="brand">
       <span class="brand-mark">T</span>
       <span>TeachTrace <small>UNAH</small></span>

@@ -6,8 +6,6 @@ import { Activity, ActivityPhase } from './entities/activity.entity';
 import { AiDeclaration } from './entities/ai-declaration.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
-import { ForumPost } from './entities/forum-post.entity';
-import { ForumThread } from './entities/forum-thread.entity';
 import { Logbook } from './entities/logbook.entity';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { Rubric, RubricCriterion } from './entities/rubric.entity';
@@ -62,13 +60,14 @@ export class SeedService implements OnApplicationBootstrap {
     @InjectRepository(AiDeclaration) private readonly declarations: Repository<AiDeclaration>,
     @InjectRepository(Valuation) private readonly valuations: Repository<Valuation>,
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
-    @InjectRepository(ForumThread) private readonly forumThreads: Repository<ForumThread>,
-    @InjectRepository(ForumPost) private readonly forumPosts: Repository<ForumPost>,
     private readonly authService: AuthService,
   ) {}
 
   async onApplicationBootstrap() {
-    if ((process.env.DEMO_SEED ?? 'true') !== 'true') return;
+    // Los datos fijos se reservan exclusivamente para las pruebas automatizadas.
+    // Desarrollo y producción siempre deben trabajar con cuentas y datos persistidos
+    // por los flujos reales de la aplicación.
+    if (process.env.NODE_ENV !== 'test' || process.env.DEMO_SEED !== 'true') return;
 
     const teacher = await this.ensureUser(
       'docente@unah.edu.hn',
@@ -434,24 +433,10 @@ export class SeedService implements OnApplicationBootstrap {
       seededActivities.set(definition.title, activity);
     }
 
-    const forumThread = await this.ensureForumData(
-      softwareClass,
-      databaseClass,
-      webClass,
-      teacher,
-      student,
-      student2,
-      student3,
-    );
-    await this.ensureDemoNotifications(
-      student,
-      softwareClass,
-      forumThread,
-      seededActivities,
-    );
+    await this.ensureDemoNotifications(student, seededActivities);
 
     this.logger.log(
-      `Datos demo listos: 3 clases, 5 estudiantes, ${activitySeeds.length} actividades y foros con contenido.`,
+      `Datos demo listos: 3 clases, 5 estudiantes y ${activitySeeds.length} actividades.`,
     );
   }
 
@@ -651,174 +636,8 @@ export class SeedService implements OnApplicationBootstrap {
     }
   }
 
-  private async ensureForumData(
-    softwareClass: AcademicClass,
-    databaseClass: AcademicClass,
-    webClass: AcademicClass,
-    teacher: User,
-    student: User,
-    student2: User,
-    student3: User,
-  ) {
-    const guide = await this.ensureForumThread({
-      academicClass: softwareClass,
-      author: teacher,
-      title: 'Guía y dudas frecuentes del proyecto final',
-      description: 'Usen este hilo para centralizar dudas sobre alcance, evidencias esperadas y fecha de entrega del proyecto final.',
-      pinned: true,
-      resolved: false,
-      createdDaysAgo: 8,
-    });
-    const guideQuestion = await this.ensureForumPost(
-      guide,
-      student2,
-      '¿La bitácora debe incluir también las decisiones que descartamos durante las reuniones?',
-      null,
-      6,
-    );
-    await this.ensureForumPost(
-      guide,
-      teacher,
-      'Sí. Incluyan la alternativa descartada, la evidencia revisada y el motivo de la decisión. Eso facilita evaluar el proceso.',
-      guideQuestion,
-      5,
-    );
-    await this.ensureForumPost(
-      guide,
-      student3,
-      '¿Podemos adjuntar un enlace al repositorio además del documento final?',
-      null,
-      3,
-    );
-
-    const architecture = await this.ensureForumThread({
-      academicClass: softwareClass,
-      author: student,
-      title: '¿Cómo documentar decisiones de arquitectura?',
-      description: 'Tengo dudas sobre el nivel de detalle para explicar las alternativas que evaluamos antes de escoger la arquitectura modular.',
-      pinned: false,
-      resolved: false,
-      createdDaysAgo: 3,
-    });
-    const teacherAnswer = await this.ensureForumPost(
-      architecture,
-      teacher,
-      'Describe el contexto, las opciones consideradas y dos atributos de calidad afectados. No necesitas copiar todo el código.',
-      null,
-      2,
-    );
-    await this.ensureForumPost(
-      architecture,
-      student2,
-      'A mí me ayudó usar una tabla breve con decisión, ventaja, riesgo y evidencia.',
-      teacherAnswer,
-      1,
-    );
-
-    const sources = await this.ensureForumThread({
-      academicClass: softwareClass,
-      author: student2,
-      title: 'Fuentes para pruebas de accesibilidad',
-      description: 'Comparto las referencias que usamos para validar contraste, navegación por teclado y mensajes de error.',
-      pinned: false,
-      resolved: true,
-      createdDaysAgo: 12,
-    });
-    await this.ensureForumPost(
-      sources,
-      teacher,
-      'Excelente aporte. Recuerden guardar capturas o resultados de las herramientas como evidencia de la validación.',
-      null,
-      11,
-    );
-
-    const sqlThread = await this.ensureForumThread({
-      academicClass: databaseClass,
-      author: student3,
-      title: 'Duda con el plan de ejecución',
-      description: 'La consulta usa el índice, pero el costo estimado sigue alto. ¿Qué métricas deberíamos comparar en el informe?',
-      pinned: false,
-      resolved: false,
-      createdDaysAgo: 2,
-    });
-    await this.ensureForumPost(
-      sqlThread,
-      teacher,
-      'Compara lecturas, tiempo total y cantidad de filas antes y después. Explica también el costo de mantener el índice.',
-      null,
-      1,
-    );
-
-    const webThread = await this.ensureForumThread({
-      academicClass: webClass,
-      author: teacher,
-      title: 'Checklist para la demostración del prototipo',
-      description: 'Antes de presentar, verifiquen el flujo principal, un caso de error, accesibilidad por teclado y comportamiento responsivo.',
-      pinned: true,
-      resolved: false,
-      createdDaysAgo: 4,
-    });
-    await this.ensureForumPost(
-      webThread,
-      student,
-      'Ya agregamos el caso de error de validación y una prueba desde móvil. Documentaremos ambos en la bitácora.',
-      null,
-      2,
-    );
-
-    return architecture;
-  }
-
-  private async ensureForumThread(seed: {
-    academicClass: AcademicClass;
-    author: User;
-    title: string;
-    description: string;
-    pinned: boolean;
-    resolved: boolean;
-    createdDaysAgo: number;
-  }) {
-    let thread = await this.forumThreads.findOne({
-      where: { academicClass: { id: seed.academicClass.id }, title: seed.title },
-    });
-    if (!thread) {
-      thread = this.forumThreads.create({
-        academicClass: seed.academicClass,
-        author: seed.author,
-        title: seed.title,
-        description: seed.description,
-        pinned: seed.pinned,
-        resolved: seed.resolved,
-      });
-      thread.createdAt = this.dateAt(-seed.createdDaysAgo, 10);
-    } else {
-      thread.description = seed.description;
-      thread.pinned = seed.pinned;
-      thread.resolved = seed.resolved;
-    }
-    return this.forumThreads.save(thread);
-  }
-
-  private async ensureForumPost(
-    thread: ForumThread,
-    author: User,
-    body: string,
-    parentPost: ForumPost | null,
-    createdDaysAgo: number,
-  ) {
-    const existing = await this.forumPosts.findOne({
-      where: { thread: { id: thread.id }, body },
-    });
-    if (existing) return existing;
-    const post = this.forumPosts.create({ thread, author, body, parentPost });
-    post.createdAt = this.dateAt(-createdDaysAgo, 14);
-    return this.forumPosts.save(post);
-  }
-
   private async ensureDemoNotifications(
     student: User,
-    academicClass: AcademicClass,
-    forumThread: ForumThread,
     activities: Map<string, Activity>,
   ) {
     const debate = activities.get('Debate ético — autos autónomos');
@@ -830,19 +649,7 @@ export class SeedService implements OnApplicationBootstrap {
       message: 'El docente publicó tu nota y dejó retroalimentación por criterio.',
       read: false,
       activityId: debate.id,
-      forumThreadId: null,
-      classId: null,
       daysAgo: 2,
-    });
-    await this.upsertNotification(student, {
-      type: NotificationType.FORUM_REPLY,
-      title: 'Nueva respuesta de Carlos Torres',
-      message: `Respondieron al hilo “${forumThread.title}”.`,
-      read: false,
-      activityId: null,
-      forumThreadId: forumThread.id,
-      classId: academicClass.id,
-      daysAgo: 1,
     });
     await this.upsertNotification(student, {
       type: NotificationType.GRADE_PUBLISHED,
@@ -850,8 +657,6 @@ export class SeedService implements OnApplicationBootstrap {
       message: 'El docente publicó tu nota del ensayo de privacidad.',
       read: true,
       activityId: privacy.id,
-      forumThreadId: null,
-      classId: null,
       daysAgo: 12,
     });
   }
@@ -864,8 +669,6 @@ export class SeedService implements OnApplicationBootstrap {
       message: string;
       read: boolean;
       activityId: number | null;
-      forumThreadId: number | null;
-      classId: number | null;
       daysAgo: number;
     },
   ) {
@@ -878,8 +681,6 @@ export class SeedService implements OnApplicationBootstrap {
     notification.message = seed.message;
     notification.read = seed.read;
     notification.activityId = seed.activityId;
-    notification.forumThreadId = seed.forumThreadId;
-    notification.classId = seed.classId;
     notification.createdAt = this.dateAt(-seed.daysAgo, 16);
     return this.notifications.save(notification);
   }

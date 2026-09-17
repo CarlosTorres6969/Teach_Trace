@@ -14,8 +14,6 @@ import { AuthSession } from './entities/auth-session.entity';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
-import { ForumPost } from './entities/forum-post.entity';
-import { ForumThread } from './entities/forum-thread.entity';
 import { Indicator } from './entities/indicator.entity';
 import { Logbook } from './entities/logbook.entity';
 import { Notification } from './entities/notification.entity';
@@ -26,7 +24,6 @@ import { Submission } from './entities/submission.entity';
 import { User } from './entities/user.entity';
 import { Valuation } from './entities/valuation.entity';
 import { EvaluationsModule } from './evaluations/evaluations.module';
-import { ForumModule } from './forum/forum.module';
 import { IndicatorsModule } from './indicators/indicators.module';
 import { LogbooksModule } from './logbooks/logbooks.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
@@ -56,8 +53,6 @@ const entities = [
   NotificationPreference,
   Notification,
   PushSubscriptionEntity,
-  ForumThread,
-  ForumPost,
 ];
 
 @Module({
@@ -91,8 +86,6 @@ const entities = [
       Submission,
       Valuation,
       Notification,
-      ForumThread,
-      ForumPost,
     ]),
     AuthModule,
     ClassesModule,
@@ -110,7 +103,6 @@ const entities = [
     StudentModule,
     TeacherModule,
     UsersModule,
-    ForumModule,
   ],
   providers: [SeedService],
 })

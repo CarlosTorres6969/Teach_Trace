@@ -2,6 +2,70 @@ import { UserRole } from '../entities/user.entity';
 import { ClassesService } from './classes.service';
 
 describe('ClassesService', () => {
+  it('crea una cuenta estudiantil con contraseña temporal y envía la invitación', async () => {
+    const academicClass = {
+      id: 10,
+      name: 'Ingeniería del Software',
+      subject: 'IS',
+      code: 'IS-911',
+      period: 'III PAC 2026',
+      teacher: { id: 3 },
+    };
+    const classes = { findOne: jest.fn().mockResolvedValue(academicClass) };
+    const enrollments = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((value) => ({ id: 20, enrolledAt: new Date(), ...value })),
+      save: jest.fn(async (value) => value),
+    };
+    const users = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((value) => ({ id: 7, ...value })),
+      save: jest.fn(async (value) => value),
+    };
+    const authService = { hashPassword: jest.fn().mockResolvedValue('hash-temporal') };
+    const mailService = { sendTemporaryPasswordEmail: jest.fn().mockResolvedValue(true) };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      users as never,
+      authService as never,
+      mailService as never,
+    );
+
+    const result = await service.enrollStudent(
+      3,
+      10,
+      ' NUEVO@UNAH.HN ',
+      'Nuevo Estudiante',
+    );
+
+    expect(users.create).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'nuevo@unah.hn',
+      name: 'Nuevo Estudiante',
+      role: UserRole.STUDENT,
+      active: true,
+      mustChangePassword: true,
+      passwordHash: 'hash-temporal',
+    }));
+    expect(mailService.sendTemporaryPasswordEmail).toHaveBeenCalledWith(
+      'nuevo@unah.hn',
+      'Nuevo Estudiante',
+      expect.stringMatching(/^Tt!/),
+      {
+        name: 'Ingeniería del Software',
+        subject: 'IS',
+        code: 'IS-911',
+        period: 'III PAC 2026',
+      },
+    );
+    expect(result).toMatchObject({
+      accountCreated: true,
+      invitationEmailSent: true,
+      student: { email: 'nuevo@unah.hn' },
+    });
+    expect(result).not.toHaveProperty('temporaryPassword');
+  });
+
   it('matricula únicamente una cuenta estudiantil activa en una clase del docente', async () => {
     const academicClass = { id: 10, teacher: { id: 3 } };
     const student = {
@@ -18,12 +82,20 @@ describe('ClassesService', () => {
       save: jest.fn(async (value) => value),
     };
     const users = { findOne: jest.fn().mockResolvedValue(student) };
-    const service = new ClassesService(classes as never, enrollments as never, users as never);
+    const authService = { hashPassword: jest.fn() };
+    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      users as never,
+      authService as never,
+      mailService as never,
+    );
 
     const result = await service.enrollStudent(3, 10, ' ESTUDIANTE@UNAH.EDU.HN ');
 
     expect(users.findOne).toHaveBeenCalledWith({
-      where: { email: 'estudiante@unah.edu.hn', role: UserRole.STUDENT, active: true },
+      where: { email: 'estudiante@unah.edu.hn' },
     });
     expect(enrollments.save).toHaveBeenCalled();
     expect(result.student.email).toBe('estudiante@unah.edu.hn');
@@ -59,7 +131,15 @@ describe('ClassesService', () => {
       save: jest.fn(async (value) => value),
     };
     const users = { find: jest.fn().mockResolvedValue([newStudent, enrolledStudent]) };
-    const service = new ClassesService(classes as never, enrollments as never, users as never);
+    const authService = { hashPassword: jest.fn() };
+    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      users as never,
+      authService as never,
+      mailService as never,
+    );
 
     const result = await service.enrollStudents(3, 10, [
       ' NUEVO@UNAH.EDU.HN ',
@@ -102,7 +182,15 @@ describe('ClassesService', () => {
       save: jest.fn(async (value) => value),
     };
     const users = { find: jest.fn().mockResolvedValue([student]) };
-    const service = new ClassesService(classes as never, enrollments as never, users as never);
+    const authService = { hashPassword: jest.fn() };
+    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      users as never,
+      authService as never,
+      mailService as never,
+    );
 
     const result = await service.enrollStudents(3, 10, ['reactivado@unah.edu.hn']);
 

@@ -44,6 +44,9 @@ export class User {
   @Column({ default: true })
   active: boolean;
 
+  @Column({ default: false })
+  mustChangePassword: boolean;
+
   @Column({ type: 'simple-enum', enum: UserTheme, default: UserTheme.SYSTEM })
   theme: UserTheme;
 

@@ -60,7 +60,7 @@ export class TeacherController {
     @Param('classId', ParseIntPipe) classId: number,
     @Body() input: EnrollStudentDto,
   ) {
-    return this.teacherService.enrollStudent(user.id, classId, input.email);
+    return this.teacherService.enrollStudent(user.id, classId, input.email, input.name);
   }
 
   @Post('classes/:classId/enrollments/bulk')

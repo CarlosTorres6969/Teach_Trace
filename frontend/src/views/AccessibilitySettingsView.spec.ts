@@ -11,6 +11,7 @@ const { apiMock, user } = vi.hoisted(() => ({
     email: 'estudiante@unah.edu.hn',
     name: 'Estudiante',
     role: 'student' as const,
+    mustChangePassword: false,
     theme: 'system' as const,
     accessibilitySettings: {
       fontSize: 100,

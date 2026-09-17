@@ -1,17 +1,24 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'crypto';
 import { In, Repository } from 'typeorm';
+import { AuthService } from '../auth/auth.service';
 import { AcademicClass } from '../entities/class.entity';
 import { Enrollment } from '../entities/enrollment.entity';
 import { User, UserRole } from '../entities/user.entity';
+import { MailService } from '../mail/mail.service';
 import { CreateClassDto } from './classes.dto';
 
 @Injectable()
 export class ClassesService {
+  private readonly logger = new Logger(ClassesService.name);
+
   constructor(
     @InjectRepository(AcademicClass) private readonly classes: Repository<AcademicClass>,
     @InjectRepository(Enrollment) private readonly enrollments: Repository<Enrollment>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly authService: AuthService,
+    private readonly mailService: MailService,
   ) {}
 
   async listForTeacher(teacherId: number) {
@@ -39,13 +46,38 @@ export class ClassesService {
     return this.classResponse(academicClass);
   }
 
-  async enrollStudent(teacherId: number, classId: number, email: string) {
+  async enrollStudent(teacherId: number, classId: number, email: string, name?: string) {
     const academicClass = await this.ownedClass(teacherId, classId);
     const normalizedEmail = email.trim().toLowerCase();
-    const student = await this.users.findOne({
-      where: { email: normalizedEmail, role: UserRole.STUDENT, active: true },
-    });
-    if (!student) throw new NotFoundException('No existe un estudiante activo con ese correo');
+    let student = await this.users.findOne({ where: { email: normalizedEmail } });
+    let accountCreated = false;
+    let invitationEmailSent: boolean | null = null;
+    let temporaryPassword: string | null = null;
+
+    if (student && student.role !== UserRole.STUDENT) {
+      throw new ConflictException('El correo pertenece a una cuenta que no es estudiantil');
+    }
+    if (student && !student.active) {
+      throw new ConflictException('La cuenta estudiantil está desactivada');
+    }
+    if (!student) {
+      const studentName = name?.trim();
+      if (!studentName) {
+        throw new BadRequestException('El nombre es obligatorio para crear un estudiante nuevo');
+      }
+      temporaryPassword = this.generateTemporaryPassword();
+      student = await this.users.save(
+        this.users.create({
+          email: normalizedEmail,
+          name: studentName,
+          role: UserRole.STUDENT,
+          active: true,
+          mustChangePassword: true,
+          passwordHash: await this.authService.hashPassword(temporaryPassword),
+        }),
+      );
+      accountCreated = true;
+    }
 
     let enrollment = await this.enrollments.findOne({
       where: { student: { id: student.id }, academicClass: { id: classId } },
@@ -53,7 +85,33 @@ export class ClassesService {
     if (!enrollment) enrollment = this.enrollments.create({ student, academicClass });
     enrollment.active = true;
     await this.enrollments.save(enrollment);
-    return this.enrollmentResponse(enrollment);
+
+    if (accountCreated && temporaryPassword) {
+      try {
+        invitationEmailSent = await this.mailService.sendTemporaryPasswordEmail(
+          student.email,
+          student.name,
+          temporaryPassword,
+          {
+            name: academicClass.name,
+            subject: academicClass.subject,
+            code: academicClass.code,
+            period: academicClass.period,
+          },
+        );
+      } catch (error) {
+        invitationEmailSent = false;
+        this.logger.error(
+          `No fue posible enviar la contraseña temporal a ${student.email}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
+    return {
+      ...this.enrollmentResponse(enrollment),
+      accountCreated,
+      invitationEmailSent,
+    };
   }
 
   async enrollStudents(teacherId: number, classId: number, emails: string[]) {
@@ -177,5 +235,9 @@ export class ClassesService {
         email: enrollment.student.email,
       },
     };
+  }
+
+  private generateTemporaryPassword(): string {
+    return `Tt!${randomBytes(18).toString('base64url')}`;
   }
 }

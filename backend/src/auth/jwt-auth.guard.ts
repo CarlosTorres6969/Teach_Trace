@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -40,12 +40,23 @@ export class JwtAuthGuard implements CanActivate {
       }
       request.user = session.user;
       request.session = session;
+      if (session.user.mustChangePassword && !this.isTemporaryPasswordRoute(request.path)) {
+        throw new ForbiddenException('Debes cambiar la contraseña temporal antes de continuar');
+      }
       return true;
     } catch (error) {
       this.clearSessionCookie(request);
-      if (error instanceof UnauthorizedException) throw error;
+      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) throw error;
       throw new UnauthorizedException('Sesión no válida');
     }
+  }
+
+  private isTemporaryPasswordRoute(path: string): boolean {
+    return [
+      '/api/auth/me',
+      '/api/auth/logout',
+      '/api/auth/temporary-password/change',
+    ].includes(path);
   }
 
   private accessToken(request: Request): string | undefined {

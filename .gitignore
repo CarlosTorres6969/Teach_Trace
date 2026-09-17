@@ -3,8 +3,12 @@ dist/
 .env
 backend/teachtrace.sqlite
 backend/teachtrace.sqlite-journal
+/teachtrace.sqlite
+/teachtrace.sqlite-journal
+*.sqlite*.bak
 backend/document-repository/
 frontend/.vite/
+.playwright-cli/
 coverage/
 *.tsbuildinfo
 frontend/src/*.js

@@ -12,6 +12,7 @@ export type User = {
   email: string;
   name: string;
   role: Role;
+  mustChangePassword: boolean;
   theme: ThemePreference;
   accessibilitySettings: AccessibilitySettings;
 };
@@ -31,13 +32,11 @@ export type NotificationPreference = {
 
 export type AppNotification = {
   id: number;
-  type: 'GRADE_PUBLISHED' | 'FORUM_REPLY';
+  type: 'GRADE_PUBLISHED';
   title: string;
   message: string;
   read: boolean;
   activityId: number | null;
-  forumThreadId: number | null;
-  classId: number | null;
   createdAt: string;
 };
 
@@ -68,47 +67,6 @@ export type Activity = {
   logbookStatus?: 'not_started' | 'in_progress' | 'complete';
   completionPercentage?: number;
   missingSections?: string[];
-};
-
-export type ForumAuthor = {
-  id: number;
-  name: string;
-  role: Role;
-};
-
-export type ForumPost = {
-  id: number;
-  body: string;
-  parentPostId: number | null;
-  author: ForumAuthor;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ForumThreadSummary = {
-  id: number;
-  title: string;
-  description: string;
-  pinned: boolean;
-  resolved: boolean;
-  author: ForumAuthor;
-  postCount: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ForumThread = Omit<ForumThreadSummary, 'postCount'> & {
-  academicClass: Pick<AcademicClass, 'id' | 'name' | 'code' | 'subject'>;
-  posts: ForumPost[];
-};
-
-export type ForumThreadPage = {
-  academicClass: Pick<AcademicClass, 'id' | 'name' | 'code' | 'subject'>;
-  items: ForumThreadSummary[];
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
 };
 
 export type Criterion = {

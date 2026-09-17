@@ -4,6 +4,7 @@ import AccessibilitySettingsView from './views/AccessibilitySettingsView.vue';
 import LoginView from './views/LoginView.vue';
 import ForgotPasswordView from './views/ForgotPasswordView.vue';
 import ResetPasswordView from './views/ResetPasswordView.vue';
+import ChangeTemporaryPasswordView from './views/ChangeTemporaryPasswordView.vue';
 import NotificationSettingsView from './views/NotificationSettingsView.vue';
 import StudentDashboard from './views/StudentDashboard.vue';
 import StudentActivityView from './views/StudentActivityView.vue';
@@ -12,7 +13,6 @@ import StudentResultsView from './views/StudentResultsView.vue';
 import TeacherDashboard from './views/TeacherDashboard.vue';
 import TeacherEvaluationDashboard from './views/TeacherEvaluationDashboard.vue';
 import TeacherSubmissionsView from './views/TeacherSubmissionsView.vue';
-import ForumView from './views/ForumView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -21,17 +21,16 @@ export const router = createRouter({
     { path: '/login', component: LoginView, meta: { public: true } },
     { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
     { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
+    { path: '/change-password', component: ChangeTemporaryPasswordView },
     { path: '/student', component: StudentDashboard, meta: { role: 'student' } },
     { path: '/student/profile', component: StudentProfileView, meta: { role: 'student' } },
     { path: '/student/activities/:id', component: StudentActivityView, meta: { role: 'student' } },
     { path: '/student/activities/:id/results', component: StudentResultsView, meta: { role: 'student' } },
-    { path: '/student/classes/:classId/forum', component: ForumView, meta: { role: 'student' } },
     { path: '/settings/notifications', component: NotificationSettingsView, meta: { role: 'student' } },
     { path: '/settings/accessibility', component: AccessibilitySettingsView, meta: { role: 'student' } },
     { path: '/teacher', component: TeacherDashboard, meta: { role: 'teacher' } },
     { path: '/teacher/evaluations', component: TeacherEvaluationDashboard, meta: { role: 'teacher' } },
     { path: '/teacher/activities/:id/submissions', component: TeacherSubmissionsView, meta: { role: 'teacher' } },
-    { path: '/teacher/classes/:classId/forum', component: ForumView, meta: { role: 'teacher' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });
@@ -42,6 +41,13 @@ router.beforeEach(async (to) => {
   if (isRedirecting) return true;
   
   await restoreSession();
+
+  if (auth.user?.mustChangePassword && to.path !== '/change-password') {
+    return '/change-password';
+  }
+  if (auth.user && !auth.user.mustChangePassword && to.path === '/change-password') {
+    return auth.user.role === 'student' ? '/student' : '/teacher';
+  }
   
   if (to.meta.public) {
     if (auth.user) return auth.user.role === 'student' ? '/student' : '/teacher';

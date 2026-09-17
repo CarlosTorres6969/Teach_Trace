@@ -16,6 +16,7 @@ import { AuthSession } from '../entities/auth-session.entity';
 import { User } from '../entities/user.entity';
 import { CurrentUser } from './current-user.decorator';
 import { AuthService } from './auth.service';
+import { ChangeTemporaryPasswordDto } from './change-temporary-password.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto } from './login.dto';
 import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './password-reset.dto';
@@ -37,6 +38,16 @@ export class AuthController {
   @Post('password-reset/confirm')
   confirmPasswordReset(@Body() input: ConfirmPasswordResetDto) {
     return this.authService.confirmPasswordReset(input);
+  }
+
+  @Post('temporary-password/change')
+  @UseGuards(JwtAuthGuard)
+  changeTemporaryPassword(
+    @CurrentUser() user: User,
+    @Req() request: Request & { session: AuthSession },
+    @Body() input: ChangeTemporaryPasswordDto,
+  ) {
+    return this.authService.changeTemporaryPassword(user, request.session, input);
   }
 
   @Post('login')

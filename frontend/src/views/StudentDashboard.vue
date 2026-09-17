@@ -209,11 +209,6 @@ onMounted(() => loadActivities());
             <RouterLink class="button primary" :to="`/student/activities/${activity.id}`">
               Abrir actividad
             </RouterLink>
-            <RouterLink
-              v-if="activity.academicClass"
-              class="button secondary"
-              :to="`/student/classes/${activity.academicClass.id}/forum`"
-            >Foro de la clase</RouterLink>
           </div>
         </article>
         <div v-if="!pendingActivities.length" class="panel empty-state">

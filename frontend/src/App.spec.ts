@@ -49,6 +49,7 @@ function studentSession() {
       email: 'estudiante@unah.edu.hn',
       name: 'Estudiante',
       role: 'student',
+      mustChangePassword: false,
       theme: 'light',
       accessibilitySettings: {
         fontSize: 100,
@@ -195,8 +196,6 @@ describe('App', () => {
       message: 'Ya puedes consultar el resultado.',
       read: false,
       activityId: 45,
-      forumThreadId: null,
-      classId: null,
       createdAt: '2026-09-11T12:00:00.000Z',
     };
     apiMock.mockImplementation((path: string) => {
@@ -230,8 +229,6 @@ describe('App', () => {
       message: 'Resultado disponible.',
       read: false,
       activityId: 46,
-      forumThreadId: null,
-      classId: null,
       createdAt: '2026-09-11T12:00:00.000Z',
     };
     apiMock.mockImplementation((path: string) => {
@@ -251,5 +248,17 @@ describe('App', () => {
     expect(apiMock).toHaveBeenCalledWith('/notifications/read-all', { method: 'PUT' });
     expect(wrapper.find('.bell-item').exists()).toBe(false);
     expect(wrapper.find('.bell-badge').exists()).toBe(false);
+  });
+
+  it('oculta la navegación y no inicia notificaciones mientras exige cambiar la contraseña', async () => {
+    if (!auth.user) throw new Error('Se esperaba una sesión estudiantil');
+    auth.user.mustChangePassword = true;
+
+    wrapper = mountApp();
+    await flushPromises();
+
+    expect(wrapper.find('.topbar').exists()).toBe(false);
+    expect(MockEventSource.instances).toHaveLength(0);
+    expect(registerPushMock).not.toHaveBeenCalled();
   });
 });

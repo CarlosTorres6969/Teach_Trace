@@ -27,8 +27,8 @@ export class TeacherService {
     return this.classesService.create(teacher, input);
   }
 
-  enrollStudent(teacherId: number, classId: number, email: string) {
-    return this.classesService.enrollStudent(teacherId, classId, email);
+  enrollStudent(teacherId: number, classId: number, email: string, name?: string) {
+    return this.classesService.enrollStudent(teacherId, classId, email, name);
   }
 
   enrollStudents(teacherId: number, classId: number, emails: string[]) {

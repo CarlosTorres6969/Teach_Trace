@@ -8,10 +8,11 @@ import { IsNull, Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
 import { PasswordResetToken } from '../entities/password-reset-token.entity';
 import { DEFAULT_ACCESSIBILITY_SETTINGS, User } from '../entities/user.entity';
-import { MicrosoftGraphMailService } from '../mail/microsoft-graph-mail.service';
+import { MailService } from '../mail/mail.service';
 import { LoginDto } from './login.dto';
 import { LoginAttemptService } from './login-attempt.service';
 import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './password-reset.dto';
+import { ChangeTemporaryPasswordDto } from './change-temporary-password.dto';
 
 const scrypt = promisify(nodeScrypt);
 const SESSION_HOURS = 8;
@@ -30,7 +31,7 @@ export class AuthService {
     private readonly loginAttempts: LoginAttemptService,
     @Optional() private readonly config?: ConfigService,
     @Optional() @InjectRepository(PasswordResetToken) private readonly resetTokens?: Repository<PasswordResetToken>,
-    @Optional() private readonly mailService?: MicrosoftGraphMailService,
+    @Optional() private readonly mailService?: MailService,
   ) {}
 
   async login(input: LoginDto, ip: string) {
@@ -101,16 +102,20 @@ export class AuthService {
         const publicAppUrl = (this.config?.get<string>('PUBLIC_APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '');
         const resetUrl = `${publicAppUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
-        try {
-          await this.mailService.sendPasswordResetEmail(user.email, resetUrl);
-        } catch (error) {
-          this.logger.error('No fue posible enviar el correo de recuperación', error instanceof Error ? error.stack : undefined);
-          await this.resetTokens.delete(token.id);
-        }
+        void this.deliverPasswordResetEmail(token.id, user.email, resetUrl);
       }
     }
 
     return { message: RESET_REQUEST_MESSAGE };
+  }
+
+  private async deliverPasswordResetEmail(tokenId: string, email: string, resetUrl: string) {
+    try {
+      await this.mailService?.sendPasswordResetEmail(email, resetUrl);
+    } catch (error) {
+      this.logger.error('No fue posible enviar el correo de recuperación', error instanceof Error ? error.stack : undefined);
+      await this.resetTokens?.delete(tokenId);
+    }
   }
 
   async confirmPasswordReset(input: ConfirmPasswordResetDto) {
@@ -125,6 +130,7 @@ export class AuthService {
     }
 
     token.user.passwordHash = await this.hashPassword(input.password);
+    token.user.mustChangePassword = false;
     token.usedAt = now;
     await this.users.save(token.user);
     await this.resetTokens.save(token);
@@ -141,12 +147,46 @@ export class AuthService {
     return { message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.' };
   }
 
+  async changeTemporaryPassword(
+    user: User,
+    currentSession: AuthSession,
+    input: ChangeTemporaryPasswordDto,
+  ) {
+    if (!user.mustChangePassword) {
+      throw new BadRequestException('La cuenta no tiene una contraseña temporal pendiente');
+    }
+    if (!(await this.verifyPassword(input.currentPassword, user.passwordHash))) {
+      throw new BadRequestException('La contraseña temporal es incorrecta');
+    }
+    if (input.currentPassword === input.newPassword) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente de la temporal');
+    }
+
+    user.passwordHash = await this.hashPassword(input.newPassword);
+    user.mustChangePassword = false;
+    await this.users.save(user);
+
+    const otherSessions = await this.sessions.find({
+      where: { user: { id: user.id }, revokedAt: IsNull() },
+    });
+    const revokedAt = new Date();
+    const sessionsToRevoke = otherSessions.filter((session) => session.id !== currentSession.id);
+    sessionsToRevoke.forEach((session) => { session.revokedAt = revokedAt; });
+    if (sessionsToRevoke.length) await this.sessions.save(sessionsToRevoke);
+
+    return {
+      message: 'Contraseña actualizada correctamente',
+      user: this.safeUser(user),
+    };
+  }
+
   safeUser(user: User) {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      mustChangePassword: user.mustChangePassword ?? false,
       theme: user.theme,
       accessibilitySettings: user.accessibilitySettings ?? {
         ...DEFAULT_ACCESSIBILITY_SETTINGS,
