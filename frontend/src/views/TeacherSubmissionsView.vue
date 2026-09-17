@@ -22,12 +22,22 @@ type ValuationItem = {
   confirmed: boolean;
 };
 
+type ConversationMessage = {
+  id: number;
+  role: 'student' | 'ai';
+  content: string;
+  sequence: number;
+  createdAt: string;
+};
+
 type SubmissionDetail = SubmissionSummary & {
   activity: { id: number; title: string };
   productText: string;
   productUrl: string;
   fileName: string | null;
+  feedback: string;
   valuations: ValuationItem[];
+  aiConversation: null | { messages: ConversationMessage[] };
   logbook: null | Record<string, string>;
   aiDeclaration: null | {
     toolName: string;
@@ -57,6 +67,9 @@ const message = ref('');
 const editingValues = ref<Record<number, { teacherValue: number; teacherComment: string }>>({});
 const savingValuation = ref<Record<number, boolean>>({});
 const closingEvaluation = ref(false);
+const savingFeedback = ref(false);
+const feedbackDraft = ref('');
+const startingEvaluation = ref(false);
 
 async function load() {
   try {
@@ -75,6 +88,7 @@ async function openSubmission(id: number) {
       ...detail,
       valuations: Array.isArray(detail.valuations) ? detail.valuations : [],
     };
+    feedbackDraft.value = detail.feedback ?? '';
     // Inicializar valores de edición con los ya confirmados (o vacíos)
     editingValues.value = {};
     for (const v of selected.value.valuations) {
@@ -85,6 +99,55 @@ async function openSubmission(id: number) {
     }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo abrir la entrega';
+  }
+}
+
+async function startManualEvaluation() {
+  if (startingEvaluation.value) return;
+  startingEvaluation.value = true;
+  error.value = '';
+  try {
+    await api(`/teacher/activities/${activityId}/evaluation`, { method: 'POST' });
+    message.value = 'Evaluación manual iniciada.';
+    await load();
+    if (submissions.value.length) await openSubmission(submissions.value[0].id);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'No se pudo iniciar la evaluación manual';
+  } finally {
+    startingEvaluation.value = false;
+  }
+}
+
+async function saveFeedback() {
+  if (!selected.value || savingFeedback.value) return;
+  savingFeedback.value = true;
+  error.value = '';
+  try {
+    await api(`/teacher/submissions/${selected.value.id}/feedback`, {
+      method: 'PUT',
+      body: JSON.stringify({ feedback: feedbackDraft.value }),
+    });
+    selected.value.feedback = feedbackDraft.value.trim();
+    message.value = 'Retroalimentación general guardada.';
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la retroalimentación';
+  } finally {
+    savingFeedback.value = false;
+  }
+}
+
+async function downloadConversation() {
+  if (!selected.value?.aiConversation?.messages.length) return;
+  try {
+    const blob = await apiBlob(`/teacher/submissions/${selected.value.id}/ai-conversation/export`);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `conversacion-ia-${selected.value.id}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'No se pudo exportar la conversación';
   }
 }
 
@@ -158,6 +221,9 @@ onMounted(load);
     <RouterLink to="/teacher" class="back-link">← Panel docente</RouterLink>
     <section class="page-heading compact">
       <div><span class="eyebrow">Evidencias</span><h1>Productos entregados</h1></div>
+      <button class="button primary" type="button" :disabled="startingEvaluation" @click="startManualEvaluation">
+        {{ startingEvaluation ? 'Iniciando…' : 'Iniciar evaluación manual' }}
+      </button>
     </section>
 
     <p v-if="error" class="alert error">{{ error }}</p>
@@ -197,6 +263,19 @@ onMounted(load);
         <button v-if="selected.fileName" class="button secondary" type="button" @click="downloadFile">
           Descargar {{ selected.fileName }}
         </button>
+
+        <section v-if="selected.aiConversation?.messages.length" class="conversation-review">
+          <div class="valuation-panel-header">
+            <h3>Conversación con IA</h3>
+            <button class="button secondary" type="button" @click="downloadConversation">Exportar TXT</button>
+          </div>
+          <ol class="conversation-transcript">
+            <li v-for="item in selected.aiConversation.messages" :key="item.id">
+              <strong>{{ item.role === 'student' ? 'Estudiante' : 'IA' }}</strong>
+              <p>{{ item.content }}</p>
+            </li>
+          </ol>
+        </section>
 
         <!-- Bitácora -->
         <template v-if="selected.logbook">
@@ -308,18 +387,14 @@ onMounted(load);
           </div>
         </template>
 
-        <div v-else-if="selected.status !== 'evaluated'" class="panel empty-state valuation-empty-hint">
-          <p>Esta entrega aún no tiene valoraciones generadas.</p>
-          <p class="muted">Usa el botón "Evaluar" en el panel principal para que el motor de IA analice la evidencia, o cierra la evaluación manualmente si ya revisaste todo.</p>
-          <button
-            class="button primary"
-            type="button"
-            :disabled="closingEvaluation"
-            @click="closeEvaluation"
-          >
-            {{ closingEvaluation ? 'Publicando…' : '📢 Publicar evaluación sin valoraciones' }}
+
+        <section v-if="selected?.status !== 'evaluated'" class="feedback-editor">
+          <h3>Retroalimentación general</h3>
+          <textarea v-model="feedbackDraft" rows="5" maxlength="5000" placeholder="Escribe una retroalimentación general para el estudiante." />
+          <button class="button secondary" type="button" :disabled="savingFeedback" @click="saveFeedback">
+            {{ savingFeedback ? 'Guardando…' : 'Guardar retroalimentación' }}
           </button>
-        </div>
+        </section>
       </article>
 
       <div v-else class="empty-state panel">

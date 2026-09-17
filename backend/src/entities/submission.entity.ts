@@ -53,8 +53,19 @@ export class Submission {
   @Column({ type: 'varchar', nullable: true })
   fileMimeType: string | null;
 
+  /** Reference to the filesystem/document repository object. */
+  @Column({ default: '' })
+  fileStorageKey: string;
+
+  @Column({ type: 'integer', nullable: true })
+  fileSize: number | null;
+
+  /** Kept for backwards compatibility with submissions created before the document repository. */
   @Column({ type: 'text', nullable: true, select: false })
   fileBase64: string | null;
+
+  @Column({ type: 'text', default: '' })
+  feedback: string;
 
   @Column({ type: 'datetime', nullable: true })
   notificationSentAt: Date | null;

@@ -1,24 +1,36 @@
-import { Injectable, UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes, scrypt as nodeScrypt, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, scrypt as nodeScrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
+import { PasswordResetToken } from '../entities/password-reset-token.entity';
 import { DEFAULT_ACCESSIBILITY_SETTINGS, User } from '../entities/user.entity';
+import { MicrosoftGraphMailService } from '../mail/microsoft-graph-mail.service';
 import { LoginDto } from './login.dto';
 import { LoginAttemptService } from './login-attempt.service';
+import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './password-reset.dto';
 
 const scrypt = promisify(nodeScrypt);
 const SESSION_HOURS = 8;
+const RESET_TTL_MS = 30 * 60 * 1000;
+const RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+const RESET_REQUEST_MESSAGE = 'Si el correo está registrado, recibirás un enlace para recuperar tu contraseña.';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(AuthSession) private readonly sessions: Repository<AuthSession>,
     private readonly jwtService: JwtService,
     private readonly loginAttempts: LoginAttemptService,
+    @Optional() private readonly config?: ConfigService,
+    @Optional() @InjectRepository(PasswordResetToken) private readonly resetTokens?: Repository<PasswordResetToken>,
+    @Optional() private readonly mailService?: MicrosoftGraphMailService,
   ) {}
 
   async login(input: LoginDto, ip: string) {
@@ -57,6 +69,78 @@ export class AuthService {
     return { message: 'Sesión cerrada correctamente' };
   }
 
+  async requestPasswordReset(input: RequestPasswordResetDto, ip: string) {
+    const email = input.email.trim().toLowerCase();
+    const user = await this.users.findOne({ where: { email, active: true } });
+
+    if (user && this.resetTokens && this.mailService) {
+      const latest = await this.resetTokens.findOne({
+        where: { user: { id: user.id } },
+        order: { createdAt: 'DESC' },
+      });
+      const recentlyRequested = latest && Date.now() - latest.createdAt.getTime() < RESET_REQUEST_COOLDOWN_MS;
+
+      if (!recentlyRequested) {
+        const rawToken = randomBytes(32).toString('hex');
+        const createdAt = new Date();
+        const previousTokens = await this.resetTokens.find({
+          where: { user: { id: user.id }, usedAt: IsNull() },
+        });
+        previousTokens.forEach((previousToken) => { previousToken.usedAt = createdAt; });
+        if (previousTokens.length) await this.resetTokens.save(previousTokens);
+        const token = this.resetTokens.create({
+          user,
+          tokenHash: this.hashResetToken(rawToken),
+          expiresAt: new Date(createdAt.getTime() + this.resetTtlMs()),
+          usedAt: null,
+          createdAt,
+          requestIp: ip,
+        });
+
+        await this.resetTokens.save(token);
+        const publicAppUrl = (this.config?.get<string>('PUBLIC_APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '');
+        const resetUrl = `${publicAppUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+
+        try {
+          await this.mailService.sendPasswordResetEmail(user.email, resetUrl);
+        } catch (error) {
+          this.logger.error('No fue posible enviar el correo de recuperación', error instanceof Error ? error.stack : undefined);
+          await this.resetTokens.delete(token.id);
+        }
+      }
+    }
+
+    return { message: RESET_REQUEST_MESSAGE };
+  }
+
+  async confirmPasswordReset(input: ConfirmPasswordResetDto) {
+    if (!this.resetTokens) throw new BadRequestException('El servicio de recuperación no está disponible');
+
+    const token = await this.resetTokens.findOne({
+      where: { tokenHash: this.hashResetToken(input.token) },
+    });
+    const now = new Date();
+    if (!token || token.usedAt || token.expiresAt.getTime() <= now.getTime() || !token.user?.active) {
+      throw new BadRequestException('El enlace de recuperación no es válido o ya expiró');
+    }
+
+    token.user.passwordHash = await this.hashPassword(input.password);
+    token.usedAt = now;
+    await this.users.save(token.user);
+    await this.resetTokens.save(token);
+
+    const activeSessions = await this.sessions.find({
+      where: { user: { id: token.user.id }, revokedAt: IsNull() },
+    });
+    if (activeSessions.length) {
+      const revokedAt = new Date();
+      activeSessions.forEach((session) => { session.revokedAt = revokedAt; });
+      await this.sessions.save(activeSessions);
+    }
+
+    return { message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.' };
+  }
+
   safeUser(user: User) {
     return {
       id: user.id,
@@ -74,6 +158,15 @@ export class AuthService {
     const salt = randomBytes(16).toString('hex');
     const derived = (await scrypt(password, salt, 64)) as Buffer;
     return `${salt}:${derived.toString('hex')}`;
+  }
+
+  private hashResetToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private resetTtlMs(): number {
+    const configured = Number(this.config?.get<string>('PASSWORD_RESET_TTL_MS', String(RESET_TTL_MS)));
+    return Number.isFinite(configured) && configured > 0 ? configured : RESET_TTL_MS;
   }
 
   private async verifyPassword(password: string, stored: string): Promise<boolean> {

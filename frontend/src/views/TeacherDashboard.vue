@@ -323,6 +323,7 @@ onBeforeUnmount(() => {
   <main class="page">
     <section class="page-heading">
       <div><span class="eyebrow">Panel docente</span><h1>Hola, {{ auth.user?.name }}</h1></div>
+      <RouterLink class="button primary" to="/teacher/evaluations">Ver entregas por filtros</RouterLink>
       <p>Configura las actividades y las rúbricas del piloto.</p>
     </section>
     <nav class="tabs teacher-tabs">

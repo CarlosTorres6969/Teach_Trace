@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
+import { AiConversationsService } from '../ai-conversations/ai-conversations.service';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { normalizeAiDeclarationText } from '../ai-declarations/update-ai-declaration.dto';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
@@ -14,6 +15,7 @@ import {
 import { User } from '../entities/user.entity';
 import { Valuation } from '../entities/valuation.entity';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
+import { DocumentRepositoryService } from './document-repository.service';
 
 export type UploadedAcademicFile = {
   originalname: string;
@@ -32,6 +34,8 @@ export class SubmissionsService {
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly aiEngine: AiEngineService,
+    @Optional() private readonly documentRepository?: DocumentRepositoryService,
+    @Optional() private readonly aiConversations?: AiConversationsService,
   ) {}
 
   async getStatus(studentId: number, activityId: number) {
@@ -74,7 +78,27 @@ export class SubmissionsService {
     if (!productText && !productUrl && !file && !existingSubmission?.fileName) {
       throw new BadRequestException('Debe entregar texto, un enlace o un archivo');
     }
+    if (
+      file &&
+      (file.mimetype !== 'application/pdf' ||
+        !file.originalname.toLowerCase().endsWith('.pdf') ||
+        file.buffer.subarray(0, 5).toString('ascii') !== '%PDF-')
+    ) {
+      throw new BadRequestException('El archivo de la entrega debe ser un PDF');
+    }
 
+    const storedDocument = file && this.documentRepository
+      ? await this.documentRepository.save(
+          {
+            name: file.originalname,
+            mimeType: file.mimetype,
+            content: file.buffer,
+          },
+          `submissions/${student.id}/${activityId}`,
+        )
+      : null;
+
+    let transactionSubmission: Submission | null = null;
     await this.dataSource.transaction(async (manager) => {
       const submissionRepository = manager.getRepository(Submission);
       const declarationRepository = manager.getRepository(AiDeclaration);
@@ -87,7 +111,10 @@ export class SubmissionsService {
           activity,
           fileName: null,
           fileMimeType: null,
+          fileStorageKey: '',
+          fileSize: null,
           fileBase64: null,
+          feedback: '',
           evaluationStatus: EvaluationStatus.NOT_REQUESTED,
           manualReviewRequired: false,
         });
@@ -100,10 +127,12 @@ export class SubmissionsService {
       submission.submittedAt = new Date();
       if (file) {
         submission.fileName = file.originalname;
-        submission.fileMimeType = file.mimetype || 'application/octet-stream';
-        submission.fileBase64 = file.buffer.toString('base64');
+        submission.fileMimeType = file.mimetype;
+        submission.fileStorageKey = storedDocument?.key ?? '';
+        submission.fileSize = storedDocument?.size ?? file.size;
+        submission.fileBase64 = storedDocument ? null : file.buffer.toString('base64');
       }
-      await submissionRepository.save(submission);
+      transactionSubmission = await submissionRepository.save(submission);
 
       let declaration = await declarationRepository.findOne({
         where: { student: { id: student.id }, activity: { id: activityId } },
@@ -133,6 +162,10 @@ export class SubmissionsService {
       activity,
       remainingManualReviews > 0,
     );
+
+    if (transactionSubmission && this.aiConversations) {
+      await this.aiConversations.attachToSubmission(student.id, activityId, transactionSubmission);
+    }
 
     return this.getStatus(student.id, activityId);
   }
@@ -188,6 +221,7 @@ export class SubmissionsService {
       productText: submission.productText,
       productUrl: submission.productUrl,
       fileName: submission.fileName,
+      feedback: submission.feedback,
       valuations: valuations.map((valuation) => ({
         id: valuation.id,
         criterion: valuation.criterion,
@@ -215,6 +249,9 @@ export class SubmissionsService {
             promptSummary: declaration.promptSummary,
           }
         : null,
+      aiConversation: this.aiConversations
+        ? await this.aiConversations.getForTeacher(teacherId, submissionId)
+        : null,
     };
   }
 
@@ -227,14 +264,99 @@ export class SubmissionsService {
       .getOne();
     if (!submission) throw new NotFoundException('La entrega no existe');
     await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
-    if (!submission.fileBase64 || !submission.fileName) {
+    if ((!submission.fileStorageKey && !submission.fileBase64) || !submission.fileName) {
       throw new NotFoundException('La entrega no contiene un archivo');
     }
+    const content = submission.fileStorageKey && this.documentRepository
+      ? await this.documentRepository.read(submission.fileStorageKey)
+      : Buffer.from(submission.fileBase64 as string, 'base64');
     return {
       name: submission.fileName,
       mimeType: submission.fileMimeType ?? 'application/octet-stream',
-      content: Buffer.from(submission.fileBase64, 'base64'),
+      content,
     };
+  }
+
+  async startManualEvaluation(teacherId: number, activityId: number) {
+    const activity = await this.activitiesService.ownedActivity(teacherId, activityId, true);
+    if (!activity.rubric?.criteria?.length) {
+      throw new BadRequestException('Asocia una rúbrica antes de iniciar la evaluación');
+    }
+    const submissions = (await this.submissions.find({ where: { activity: { id: activityId } } }))
+      .filter((submission) => submission.status !== SubmissionStatus.EVALUATED);
+    let valuationsCreated = 0;
+    for (const submission of submissions) {
+      submission.status = SubmissionStatus.UNDER_REVIEW;
+      submission.evaluationStatus = EvaluationStatus.MANUAL_REQUIRED;
+      submission.manualReviewRequired = true;
+      await this.submissions.save(submission);
+      const existing = await this.valuations.find({ where: { submission: { id: submission.id } } });
+      const existingCriteria = new Set(existing.map((valuation) => valuation.criterion));
+      const missing = activity.rubric.criteria.filter((criterion) => !existingCriteria.has(criterion.name));
+      if (missing.length) {
+        await this.valuations.save(
+          missing.map((criterion) =>
+            this.valuations.create({
+              activity,
+              submission,
+              dimension: criterion.dimension,
+              criterion: criterion.name,
+              aiValue: null,
+              aiExplanation: '',
+              teacherValue: null,
+              teacherComment: '',
+              confirmed: false,
+            }),
+          ),
+        );
+        valuationsCreated += missing.length;
+      }
+    }
+    await this.activitiesService.setManualEvaluationRequired(activity, submissions.length > 0);
+    return {
+      activityId,
+      processed: submissions.length,
+      valuationsCreated,
+      pendingManualReview: submissions.length,
+    };
+  }
+
+  async listEvaluationDashboard(
+    teacherId: number,
+    filters: { classId?: number; activityId?: number; studentId?: number; status?: SubmissionStatus },
+  ) {
+    const submissions = await this.submissions.find({
+      relations: { activity: true, student: true },
+      order: { submittedAt: 'DESC' },
+    });
+    return submissions
+      .filter((submission) => submission.activity.teacher.id === teacherId)
+      .filter((submission) => !filters.classId || submission.activity.academicClass.id === filters.classId)
+      .filter((submission) => !filters.activityId || submission.activity.id === filters.activityId)
+      .filter((submission) => !filters.studentId || submission.student.id === filters.studentId)
+      .filter((submission) => !filters.status || submission.status === filters.status)
+      .map((submission) => ({
+        id: submission.id,
+        status: submission.status,
+        evaluationStatus: submission.evaluationStatus,
+        manualReviewRequired: submission.manualReviewRequired,
+        submittedAt: submission.submittedAt,
+        student: {
+          id: submission.student.id,
+          name: submission.student.name,
+          email: submission.student.email,
+        },
+        activity: {
+          id: submission.activity.id,
+          title: submission.activity.title,
+          dueDate: submission.activity.dueDate,
+        },
+        academicClass: {
+          id: submission.activity.academicClass.id,
+          name: submission.activity.academicClass.name,
+          code: submission.activity.academicClass.code,
+        },
+      }));
   }
 
   async evaluateActivity(teacherId: number, activityId: number) {

@@ -716,3 +716,18 @@ html.high-contrast .activities-nav-badge {
 .valuation-empty-hint { text-align: center; }
 html.dark .valuation-editor--confirmed { background: #0d1f35; border-color: #3a6a9e; }
 html.dark .valuation-ai-hint { background: #101b2b; }
+
+.conversation-editor, .conversation-review, .feedback-editor { display: grid; gap: .75rem; margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.conversation-messages { display: grid; gap: .75rem; }
+.conversation-message { display: grid; gap: .6rem; padding: .85rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.conversation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.conversation-transcript { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.conversation-transcript li { padding: .75rem; border-left: 3px solid var(--green); background: var(--green-light); }
+.conversation-transcript p { margin: .35rem 0 0; white-space: pre-wrap; }
+.feedback-editor textarea { width: 100%; }
+.evaluation-filters { align-items: end; margin-bottom: 1rem; }
+.evaluation-table-wrap { overflow-x: auto; }
+.evaluation-table { width: 100%; border-collapse: collapse; }
+.evaluation-table th, .evaluation-table td { padding: .8rem .65rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.evaluation-table td small { display: block; color: var(--muted); margin-top: .2rem; }
+html.dark .conversation-message, html.dark .conversation-transcript li { background: #101b2b; }

@@ -3,6 +3,7 @@ dist/
 .env
 backend/teachtrace.sqlite
 backend/teachtrace.sqlite-journal
+backend/document-repository/
 frontend/.vite/
 coverage/
 *.tsbuildinfo

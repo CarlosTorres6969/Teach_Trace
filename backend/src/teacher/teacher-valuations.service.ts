@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -41,14 +42,6 @@ export class TeacherValuationsService {
     await this.valuations.save(valuation);
 
     // Cerrar si todos los criterios están confirmados
-    const allValuations = await this.valuations.find({
-      where: { submission: { id: submissionId } },
-    });
-    const allConfirmed = allValuations.length > 0 && allValuations.every((v) => v.confirmed);
-    if (allConfirmed) {
-      await this.closeEvaluation(submission);
-    }
-
     return {
       id: valuation.id,
       criterion: valuation.criterion,
@@ -63,8 +56,25 @@ export class TeacherValuationsService {
   async closeEvaluationManually(teacherId: number, submissionId: number) {
     const submission = await this.loadSubmission(submissionId);
     await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    if (submission.status === SubmissionStatus.EVALUATED) {
+      throw new BadRequestException('La evaluación ya fue publicada');
+    }
+    const valuations = await this.valuations.find({ where: { submission: { id: submissionId } } });
+    const requiredCriteria = submission.activity.rubric?.criteria?.length ?? 0;
+    if (requiredCriteria > 0 &&
+        (valuations.length < requiredCriteria || valuations.some((valuation) => !valuation.confirmed))) {
+      throw new BadRequestException('Debe confirmar todos los criterios antes de publicar la evaluación');
+    }
     await this.closeEvaluation(submission);
     return { submissionId, status: SubmissionStatus.EVALUATED };
+  }
+
+  async updateFeedback(teacherId: number, submissionId: number, feedback: string) {
+    const submission = await this.loadSubmission(submissionId);
+    await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    submission.feedback = feedback.trim();
+    await this.submissions.save(submission);
+    return { submissionId, feedback: submission.feedback };
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -72,7 +82,7 @@ export class TeacherValuationsService {
   private async loadSubmission(submissionId: number): Promise<Submission> {
     const submission = await this.submissions.findOne({
       where: { id: submissionId },
-      relations: { activity: true, student: true },
+      relations: { activity: { rubric: true }, student: true },
     });
     if (!submission) throw new NotFoundException('La entrega no existe');
     return submission;

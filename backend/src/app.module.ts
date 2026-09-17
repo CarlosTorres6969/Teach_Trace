@@ -3,12 +3,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
+import { AiConversationsModule } from './ai-conversations/ai-conversations.module';
 import { AiEngineModule } from './ai-engine/ai-engine.module';
 import { AuthModule } from './auth/auth.module';
 import { ClassesModule } from './classes/classes.module';
 import { Activity } from './entities/activity.entity';
 import { AiDeclaration } from './entities/ai-declaration.entity';
+import { AiConversation, AiMessage } from './entities/ai-conversation.entity';
 import { AuthSession } from './entities/auth-session.entity';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { AcademicClass } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { ForumPost } from './entities/forum-post.entity';
@@ -38,12 +41,15 @@ import { UsersModule } from './users/users.module';
 const entities = [
   User,
   AuthSession,
+  PasswordResetToken,
   AcademicClass,
   Enrollment,
   Activity,
   Rubric,
   Logbook,
   AiDeclaration,
+  AiConversation,
+  AiMessage,
   Submission,
   Valuation,
   Indicator,
@@ -80,6 +86,8 @@ const entities = [
       Rubric,
       Logbook,
       AiDeclaration,
+      AiConversation,
+      AiMessage,
       Submission,
       Valuation,
       Notification,
@@ -94,6 +102,7 @@ const entities = [
     NotificationPreferencesModule,
     NotificationsModule,
     AiDeclarationsModule,
+    AiConversationsModule,
     SubmissionsModule,
     AiEngineModule,
     EvaluationsModule,

@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -17,9 +18,11 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateClassDto, EnrollStudentDto, EnrollStudentsDto } from '../classes/classes.dto';
 import { User, UserRole } from '../entities/user.entity';
+import { SubmissionStatus } from '../entities/submission.entity';
 import { AssociateRubricDto, CreateRubricDto } from '../rubrics/rubrics.dto';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { ConfirmValuationDto } from './confirm-valuation.dto';
+import { UpdateFeedbackDto } from './update-feedback.dto';
 import { TeacherService } from './teacher.service';
 import { TeacherValuationsService } from './teacher-valuations.service';
 
@@ -115,6 +118,30 @@ export class TeacherController {
     return this.teacherService.listSubmissions(user.id, activityId);
   }
 
+  @Get('submissions')
+  listEvaluationDashboard(
+    @CurrentUser() user: User,
+    @Query('classId') classId?: string,
+    @Query('activityId') activityId?: string,
+    @Query('studentId') studentId?: string,
+    @Query('status') status?: SubmissionStatus,
+  ) {
+    return this.submissionsService.listEvaluationDashboard(user.id, {
+      classId: classId ? Number(classId) : undefined,
+      activityId: activityId ? Number(activityId) : undefined,
+      studentId: studentId ? Number(studentId) : undefined,
+      status,
+    });
+  }
+
+  @Post('activities/:activityId/evaluation')
+  startManualEvaluation(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+  ) {
+    return this.submissionsService.startManualEvaluation(user.id, activityId);
+  }
+
   @Get('submissions/:submissionId')
   getSubmission(
     @CurrentUser() user: User,
@@ -159,5 +186,14 @@ export class TeacherController {
     @Param('submissionId', ParseIntPipe) submissionId: number,
   ) {
     return this.teacherValuationsService.closeEvaluationManually(user.id, submissionId);
+  }
+
+  @Put('submissions/:submissionId/feedback')
+  updateFeedback(
+    @CurrentUser() user: User,
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+    @Body() dto: UpdateFeedbackDto,
+  ) {
+    return this.teacherValuationsService.updateFeedback(user.id, submissionId, dto.feedback);
   }
 }

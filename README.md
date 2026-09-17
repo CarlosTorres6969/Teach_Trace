@@ -73,6 +73,17 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - El limitador se conserva en memoria, apropiado para el monolito del piloto. Si se despliegan
   varias instancias deberá moverse a un almacén compartido.
 
+## Recuperación de contraseña con Outlook/Microsoft 365
+
+La recuperación no envía contraseñas. Crea un token aleatorio de un solo uso, guarda únicamente su
+hash, vence en 30 minutos y revoca las sesiones activas después del cambio. En desarrollo, con
+`MAIL_ENABLED=false`, el enlace se escribe en el log del backend; en producción debe activarse el
+envío mediante Microsoft Graph y nunca deben registrarse secretos en el repositorio.
+
+Configure en `.env` los valores de `PUBLIC_APP_URL`, `MAIL_ENABLED`, `MICROSOFT_TENANT_ID`,
+`MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` y `MICROSOFT_SENDER_EMAIL`. La aplicación de
+Microsoft Entra debe tener permiso de aplicación `Mail.Send` con consentimiento administrativo.
+
 El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` ya recorre las entregas e invoca
 el contrato del motor. Mientras el proveedor no esté implementado no persiste valoraciones falsas
 y marca las entregas para revisión manual.

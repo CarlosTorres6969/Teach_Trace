@@ -534,7 +534,7 @@ export class StudentService {
         confirmed: v.confirmed,
       })),
       finalScore,
-      feedback: '',
+      feedback: submission?.feedback ?? '',
     };
   }
 }

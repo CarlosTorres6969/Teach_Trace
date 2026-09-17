@@ -60,6 +60,10 @@ const declaration = reactive({
   purpose: '',
   promptSummary: '',
 });
+type ConversationRole = 'student' | 'ai';
+type ConversationMessage = { role: ConversationRole; content: string; createdAt?: string };
+const conversation = ref<ConversationMessage[]>([]);
+const savingConversation = ref(false);
 const submission = reactive({
   status: 'not_submitted',
   submittedAt: '',
@@ -91,10 +95,11 @@ const statusText = computed(() => ({
 
 async function load() {
   try {
-    const [logbookData, declarationData, submissionData] = await Promise.all([
+    const [logbookData, declarationData, submissionData, conversationData] = await Promise.all([
       api<Record<string, string> & { activity: { title: string } }>(`/student/activities/${activityId}/logbook`),
       api<Record<string, string | number | null>>(`/student/activities/${activityId}/ai-declaration`),
       api<Record<string, string> & { activity: { title: string } }>(`/student/activities/${activityId}/submission-status`),
+      api<{ messages: ConversationMessage[] } | null>(`/student/activities/${activityId}/ai-conversation`),
     ]);
     title.value = logbookData.activity.title;
     Object.assign(logbook, {
@@ -111,6 +116,7 @@ async function load() {
           : '',
     });
     Object.assign(submission, submissionData);
+    conversation.value = conversationData?.messages ?? [];
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo cargar la actividad';
   } finally {
@@ -161,6 +167,12 @@ async function saveWithoutAdvancing() {
 function selectFile(event: Event) {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0] ?? null;
+  if (file && (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf'))) {
+    error.value = 'La evidencia debe ser un archivo PDF.';
+    target.value = '';
+    selectedFile.value = null;
+    return;
+  }
   if (file && file.size > 10 * 1024 * 1024) {
     error.value = 'El archivo no puede superar 10 MB.';
     target.value = '';
@@ -169,6 +181,37 @@ function selectFile(event: Event) {
   }
   error.value = '';
   selectedFile.value = file;
+}
+
+function addConversationMessage(role: ConversationRole) {
+  conversation.value.push({ role, content: '' });
+}
+
+function removeConversationMessage(index: number) {
+  conversation.value.splice(index, 1);
+}
+
+async function saveConversation() {
+  if (!conversation.value.length) return;
+  if (conversation.value.some((item) => !item.content.trim())) {
+    throw new Error('Completa todos los mensajes de la conversación con IA');
+  }
+  savingConversation.value = true;
+  try {
+    const saved = await api<{ messages: ConversationMessage[] }>(
+      `/student/activities/${activityId}/ai-conversation`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          messages: conversation.value.map(({ role, content }) => ({ role, content })),
+        }),
+      },
+    );
+    conversation.value = saved.messages;
+    message.value = 'Conversación con IA guardada.';
+  } finally {
+    savingConversation.value = false;
+  }
 }
 
 async function submitEvidence() {
@@ -207,6 +250,7 @@ async function submitEvidence() {
   form.set('promptSummary', promptSummary);
   if (selectedFile.value) form.set('file', selectedFile.value);
   try {
+    if (conversation.value.length) await saveConversation();
     const result = await api<Record<string, string | null>>(
       `/student/activities/${activityId}/submission`,
       { method: 'PUT', body: form },
@@ -349,7 +393,7 @@ onMounted(() => {
             <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" /></label>
             <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" /></label>
             <label>Archivo complementario
-              <input type="file" @change="selectFile" />
+              <input type="file" accept="application/pdf,.pdf" @change="selectFile" />
               <small class="muted">Tamaño máximo: 10 MB.</small>
             </label>
             <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
@@ -373,6 +417,36 @@ onMounted(() => {
             </label>
             <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
           </div>
+
+          <section class="conversation-editor" aria-labelledby="conversation-title">
+              <div>
+                <h3 id="conversation-title">Conversación con IA</h3>
+                <p class="muted">Registra los mensajes intercambiados para conservar esta evidencia junto con la entrega.</p>
+              </div>
+              <div v-if="conversation.length" class="conversation-messages">
+                <article v-for="(item, index) in conversation" :key="index" class="conversation-message">
+                  <label>
+                    Participante
+                    <select v-model="item.role">
+                      <option value="student">Estudiante</option>
+                      <option value="ai">IA</option>
+                    </select>
+                  </label>
+                  <label>
+                    Mensaje
+                    <textarea v-model="item.content" rows="3" maxlength="20000" required />
+                  </label>
+                  <button class="button secondary" type="button" @click="removeConversationMessage(index)">Quitar mensaje</button>
+                </article>
+              </div>
+              <div class="conversation-actions">
+                <button class="button secondary" type="button" @click="addConversationMessage('student')">Agregar mensaje del estudiante</button>
+                <button class="button secondary" type="button" @click="addConversationMessage('ai')">Agregar respuesta de IA</button>
+                <button v-if="conversation.length" class="button secondary" type="button" :disabled="savingConversation" @click="saveConversation">
+                  {{ savingConversation ? 'Guardando…' : 'Guardar conversación' }}
+                </button>
+              </div>
+          </section>
         </section>
 
         <div class="logbook-actions">

@@ -1092,7 +1092,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('usageLevel', '2');
     form.set('purpose', 'Contrastar argumentos');
     form.set('promptSummary', 'Consultas para contrastar');
-    form.set('file', new Blob(['evidencia académica'], { type: 'text/plain' }), 'evidencia.txt');
+    form.set('file', new Blob(['%PDF-1.7\nevidencia académica'], { type: 'application/pdf' }), 'evidencia.pdf');
     const submitted = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
@@ -1111,7 +1111,7 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     expect(detail.body).toMatchObject({
-      fileName: 'evidencia.txt',
+      fileName: 'evidencia.pdf',
       aiDeclaration: { toolName: 'ChatGPT', usageLevel: 2 },
     });
 
@@ -1119,7 +1119,7 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     expect(downloaded.response.status).toBe(200);
-    expect(downloaded.body).toBe('evidencia académica');
+    expect(downloaded.body).toBe('%PDF-1.7\nevidencia académica');
 
     const studentDownload = await request(`/api/teacher/submissions/${submissionId}/file`, {
       headers: sessionHeaders(student.sessionCookie),
@@ -1727,7 +1727,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('usageLevel', '1');
     form.set('purpose', 'Apoyo para estructurar ideas');
     form.set('promptSummary', 'Resumen de prompts utilizados para preparar el archivo');
-    form.set('file', new Blob(['contenido del archivo'], { type: 'text/plain' }), 'entrega.txt');
+    form.set('file', new Blob(['%PDF-1.7\ncontenido del archivo'], { type: 'application/pdf' }), 'entrega.pdf');
 
     const response = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
@@ -1738,9 +1738,9 @@ describe('TeachTrace API (integración)', () => {
   });
 
   it('HU-19: acepta archivo de exactamente 10 MB', async () => {
-    const tenMB = new Blob([new Uint8Array(10 * 1024 * 1024)], { type: 'application/octet-stream' });
+    const tenMB = new Blob(['%PDF-', new Uint8Array(10 * 1024 * 1024 - 5)], { type: 'application/pdf' });
     const form = buildSubmitForm();
-    form.set('file', tenMB, 'archivo-10mb.bin');
+    form.set('file', tenMB, 'archivo-10mb.pdf');
 
     const response = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',
@@ -1751,9 +1751,9 @@ describe('TeachTrace API (integración)', () => {
   });
 
   it('HU-19: rechaza archivo que supera 10 MB en un byte', async () => {
-    const overLimit = new Blob([new Uint8Array(10 * 1024 * 1024 + 1)], { type: 'application/octet-stream' });
+    const overLimit = new Blob(['%PDF-', new Uint8Array(10 * 1024 * 1024 - 4)], { type: 'application/pdf' });
     const form = buildSubmitForm();
-    form.set('file', overLimit, 'archivo-too-large.bin');
+    form.set('file', overLimit, 'archivo-too-large.pdf');
 
     const response = await request(`/api/student/activities/${activityId}/submission`, {
       method: 'PUT',

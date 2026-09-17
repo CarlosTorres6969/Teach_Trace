@@ -18,6 +18,7 @@ import { CurrentUser } from './current-user.decorator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto } from './login.dto';
+import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './password-reset.dto';
 import { SESSION_COOKIE_NAME, sessionCookieOptions } from './security.config';
 
 @Controller('auth')
@@ -26,6 +27,17 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly config: ConfigService,
   ) {}
+
+  @Post('password-reset/request')
+  requestPasswordReset(@Body() input: RequestPasswordResetDto, @Req() request: Request) {
+    const ip = request.ip || request.socket.remoteAddress || 'unknown';
+    return this.authService.requestPasswordReset(input, ip);
+  }
+
+  @Post('password-reset/confirm')
+  confirmPasswordReset(@Body() input: ConfirmPasswordResetDto) {
+    return this.authService.confirmPasswordReset(input);
+  }
 
   @Post('login')
   async login(

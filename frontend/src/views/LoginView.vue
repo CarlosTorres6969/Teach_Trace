@@ -57,6 +57,7 @@ function useDemo(role: 'student' | 'teacher') {
         <form @submit.prevent="login">
           <label>Correo institucional<input v-model.trim="form.email" type="email" autocomplete="username" required /></label>
           <label>Contraseña<input v-model="form.password" type="password" autocomplete="current-password" minlength="8" required /></label>
+          <RouterLink class="back-link login-forgot-link" to="/forgot-password">¿Olvidaste tu contraseña?</RouterLink>
           <p v-if="error" class="alert error">{{ error }}</p>
           <button class="button primary full" :disabled="loading">
             {{ loading ? 'Ingresando…' : 'Ingresar al sistema' }}

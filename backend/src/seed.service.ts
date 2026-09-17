@@ -601,8 +601,8 @@ export class SeedService implements OnApplicationBootstrap {
         submittedAt,
         productText: `Entrega de demostración para “${activity.title}”. Incluye contexto, decisiones justificadas, evidencia revisada y una reflexión sobre los resultados obtenidos.`,
         productUrl: '',
-        fileName: seed.withFile ? 'evidencia-demo.txt' : null,
-        fileMimeType: seed.withFile ? 'text/plain' : null,
+        fileName: seed.withFile ? 'evidencia-demo.pdf' : null,
+        fileMimeType: seed.withFile ? 'application/pdf' : null,
         fileBase64: fileContent,
         notificationSentAt:
           seed.status === SubmissionStatus.EVALUATED
