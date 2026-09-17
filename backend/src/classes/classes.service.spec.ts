@@ -67,7 +67,14 @@ describe('ClassesService', () => {
   });
 
   it('matricula únicamente una cuenta estudiantil activa en una clase del docente', async () => {
-    const academicClass = { id: 10, teacher: { id: 3 } };
+    const academicClass = {
+      id: 10,
+      name: 'Ingeniería del Software',
+      subject: 'IS',
+      code: 'IS-911',
+      period: 'III PAC 2026',
+      teacher: { id: 3 },
+    };
     const student = {
       id: 7,
       email: 'estudiante@unah.edu.hn',
@@ -83,7 +90,10 @@ describe('ClassesService', () => {
     };
     const users = { findOne: jest.fn().mockResolvedValue(student) };
     const authService = { hashPassword: jest.fn() };
-    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const mailService = {
+      sendTemporaryPasswordEmail: jest.fn(),
+      sendEnrollmentEmail: jest.fn().mockResolvedValue(true),
+    };
     const service = new ClassesService(
       classes as never,
       enrollments as never,
@@ -99,10 +109,69 @@ describe('ClassesService', () => {
     });
     expect(enrollments.save).toHaveBeenCalled();
     expect(result.student.email).toBe('estudiante@unah.edu.hn');
+    expect(result.enrollmentEmailSent).toBe(true);
+    expect(mailService.sendEnrollmentEmail).toHaveBeenCalledWith(
+      'estudiante@unah.edu.hn',
+      'Estudiante',
+      {
+        name: 'Ingeniería del Software',
+        subject: 'IS',
+        code: 'IS-911',
+        period: 'III PAC 2026',
+      },
+    );
+  });
+
+  it('no duplica el correo si el estudiante ya estaba matriculado activamente', async () => {
+    const academicClass = { id: 10, teacher: { id: 3 } };
+    const student = {
+      id: 7,
+      email: 'estudiante@unah.edu.hn',
+      name: 'Estudiante',
+      role: UserRole.STUDENT,
+      active: true,
+    };
+    const activeEnrollment = {
+      id: 20,
+      student,
+      academicClass,
+      active: true,
+      enrolledAt: new Date(),
+    };
+    const classes = { findOne: jest.fn().mockResolvedValue(academicClass) };
+    const enrollments = {
+      findOne: jest.fn().mockResolvedValue(activeEnrollment),
+      create: jest.fn(),
+      save: jest.fn(async (value) => value),
+    };
+    const users = { findOne: jest.fn().mockResolvedValue(student) };
+    const mailService = {
+      sendTemporaryPasswordEmail: jest.fn(),
+      sendEnrollmentEmail: jest.fn(),
+    };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      users as never,
+      { hashPassword: jest.fn() } as never,
+      mailService as never,
+    );
+
+    const result = await service.enrollStudent(3, 10, student.email);
+
+    expect(result.enrollmentEmailSent).toBeNull();
+    expect(mailService.sendEnrollmentEmail).not.toHaveBeenCalled();
   });
 
   it('matricula estudiantes en lote, elimina duplicados y reporta cuentas no encontradas', async () => {
-    const academicClass = { id: 10, teacher: { id: 3 } };
+    const academicClass = {
+      id: 10,
+      name: 'Ingeniería del Software',
+      subject: 'IS',
+      code: 'IS-911',
+      period: 'III PAC 2026',
+      teacher: { id: 3 },
+    };
     const newStudent = {
       id: 7,
       email: 'nuevo@unah.edu.hn',
@@ -132,7 +201,10 @@ describe('ClassesService', () => {
     };
     const users = { find: jest.fn().mockResolvedValue([newStudent, enrolledStudent]) };
     const authService = { hashPassword: jest.fn() };
-    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const mailService = {
+      sendTemporaryPasswordEmail: jest.fn(),
+      sendEnrollmentEmail: jest.fn().mockResolvedValue(true),
+    };
     const service = new ClassesService(
       classes as never,
       enrollments as never,
@@ -158,13 +230,27 @@ describe('ClassesService', () => {
     expect(enrollments.save).toHaveBeenCalledWith([
       expect.objectContaining({ student: newStudent, academicClass, active: true }),
     ]);
+    expect(mailService.sendEnrollmentEmail).toHaveBeenCalledTimes(1);
+    expect(mailService.sendEnrollmentEmail).toHaveBeenCalledWith(
+      newStudent.email,
+      newStudent.name,
+      expect.objectContaining({ code: 'IS-911' }),
+    );
   });
 
   it('reactiva una matrícula previa inactiva durante la importación masiva', async () => {
-    const academicClass = { id: 10, teacher: { id: 3 } };
+    const academicClass = {
+      id: 10,
+      name: 'Ingeniería del Software',
+      subject: 'IS',
+      code: 'IS-911',
+      period: 'III PAC 2026',
+      teacher: { id: 3 },
+    };
     const student = {
       id: 9,
       email: 'reactivado@unah.edu.hn',
+      name: 'Estudiante reactivado',
       role: UserRole.STUDENT,
       active: true,
     };
@@ -183,7 +269,10 @@ describe('ClassesService', () => {
     };
     const users = { find: jest.fn().mockResolvedValue([student]) };
     const authService = { hashPassword: jest.fn() };
-    const mailService = { sendTemporaryPasswordEmail: jest.fn() };
+    const mailService = {
+      sendTemporaryPasswordEmail: jest.fn(),
+      sendEnrollmentEmail: jest.fn().mockResolvedValue(true),
+    };
     const service = new ClassesService(
       classes as never,
       enrollments as never,
@@ -198,5 +287,10 @@ describe('ClassesService', () => {
     expect(result.alreadyEnrolledCount).toBe(0);
     expect(inactiveEnrollment.active).toBe(true);
     expect(enrollments.save).toHaveBeenCalledWith([inactiveEnrollment]);
+    expect(mailService.sendEnrollmentEmail).toHaveBeenCalledWith(
+      student.email,
+      student.name,
+      expect.objectContaining({ code: 'IS-911' }),
+    );
   });
 });

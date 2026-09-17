@@ -119,7 +119,11 @@ async function enrollStudent(classId: number) {
   error.value = '';
   message.value = '';
   try {
-    const result = await api<{ accountCreated: boolean; invitationEmailSent: boolean | null }>(`/teacher/classes/${classId}/enrollments`, {
+    const result = await api<{
+      accountCreated: boolean;
+      invitationEmailSent: boolean | null;
+      enrollmentEmailSent: boolean | null;
+    }>(`/teacher/classes/${classId}/enrollments`, {
       method: 'POST',
       body: JSON.stringify({ email, name }),
     });
@@ -130,7 +134,11 @@ async function enrollStudent(classId: number) {
       ? result.invitationEmailSent
         ? 'Estudiante creado y matriculado. La contraseña temporal fue enviada por correo.'
         : 'Estudiante creado y matriculado, pero no fue posible enviar el correo con la contraseña temporal.'
-      : 'Estudiante matriculado.';
+      : result.enrollmentEmailSent === true
+        ? 'Estudiante matriculado. La notificación fue enviada por correo.'
+        : result.enrollmentEmailSent === false
+          ? 'Estudiante matriculado, pero no fue posible enviar la notificación por correo.'
+          : 'El estudiante ya estaba matriculado en esta clase.';
   } catch (cause) {
     showError(cause);
   }

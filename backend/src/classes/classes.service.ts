@@ -52,6 +52,7 @@ export class ClassesService {
     let student = await this.users.findOne({ where: { email: normalizedEmail } });
     let accountCreated = false;
     let invitationEmailSent: boolean | null = null;
+    let enrollmentEmailSent: boolean | null = null;
     let temporaryPassword: string | null = null;
 
     if (student && student.role !== UserRole.STUDENT) {
@@ -82,6 +83,7 @@ export class ClassesService {
     let enrollment = await this.enrollments.findOne({
       where: { student: { id: student.id }, academicClass: { id: classId } },
     });
+    const shouldNotifyExistingStudent = !accountCreated && !enrollment?.active;
     if (!enrollment) enrollment = this.enrollments.create({ student, academicClass });
     enrollment.active = true;
     await this.enrollments.save(enrollment);
@@ -106,11 +108,14 @@ export class ClassesService {
           error instanceof Error ? error.stack : undefined,
         );
       }
+    } else if (shouldNotifyExistingStudent) {
+      enrollmentEmailSent = await this.sendEnrollmentNotification(student, academicClass);
     }
     return {
       ...this.enrollmentResponse(enrollment),
       accountCreated,
       invitationEmailSent,
+      enrollmentEmailSent,
     };
   }
 
@@ -155,6 +160,15 @@ export class ClassesService {
     }
 
     if (enrollmentsToSave.length) await this.enrollments.save(enrollmentsToSave);
+
+    for (let index = 0; index < enrollmentsToSave.length; index += 5) {
+      const batch = enrollmentsToSave.slice(index, index + 5);
+      await Promise.all(
+        batch.map((enrollment) =>
+          this.sendEnrollmentNotification(enrollment.student, academicClass),
+        ),
+      );
+    }
 
     return {
       processedCount: normalizedEmails.length,
@@ -235,6 +249,30 @@ export class ClassesService {
         email: enrollment.student.email,
       },
     };
+  }
+
+  private async sendEnrollmentNotification(
+    student: User,
+    academicClass: AcademicClass,
+  ): Promise<boolean> {
+    try {
+      return await this.mailService.sendEnrollmentEmail(
+        student.email,
+        student.name,
+        {
+          name: academicClass.name,
+          subject: academicClass.subject,
+          code: academicClass.code,
+          period: academicClass.period,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `No fue posible enviar la notificación de matrícula a ${student.email}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return false;
+    }
   }
 
   private generateTemporaryPassword(): string {
