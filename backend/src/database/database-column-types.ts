@@ -9,6 +9,7 @@ const envPath = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '..', '.
 );
 if (envPath) loadEnv({ path: envPath, override: false });
 
-export const dateColumnType: 'datetime' | 'timestamp' = process.env.DATABASE_URL
-  ? 'timestamp'
-  : 'datetime';
+export const dateColumnType: 'datetime' | 'timestamp' =
+  process.env.DATABASE_URL && process.env.DATABASE_PATH !== ':memory:'
+    ? 'timestamp'
+    : 'datetime';

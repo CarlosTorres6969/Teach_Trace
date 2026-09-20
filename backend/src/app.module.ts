@@ -63,12 +63,14 @@ const entities = [
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const databaseUrl = config.get<string>('DATABASE_URL')?.trim();
+        const databasePath = config.get<string>('DATABASE_PATH', 'teachtrace.sqlite');
+        const forceSqlite = databasePath === ':memory:';
         const synchronize = config.get<string>(
           'DATABASE_SYNCHRONIZE',
-          databaseUrl ? 'false' : 'true',
+          databaseUrl && !forceSqlite ? 'false' : 'true',
         ) === 'true';
 
-        if (databaseUrl) {
+        if (databaseUrl && !forceSqlite) {
           return {
             type: 'postgres' as const,
             url: databaseUrl,
@@ -82,7 +84,6 @@ const entities = [
           };
         }
 
-        const databasePath = config.get<string>('DATABASE_PATH', 'teachtrace.sqlite');
         const inMemory = databasePath === ':memory:';
         return {
           type: 'sqljs' as const,
