@@ -53,7 +53,7 @@ export class Submission {
   @Column({ type: 'varchar', nullable: true })
   fileMimeType: string | null;
 
-  /** Reference to the filesystem/document repository object. */
+  /** Provider-prefixed reference to the document repository object. */
   @Column({ default: '' })
   fileStorageKey: string;
 

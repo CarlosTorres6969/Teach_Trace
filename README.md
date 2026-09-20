@@ -55,6 +55,23 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
 
+## Archivos de entregas en Azure Blob Storage
+
+Los PDF adjuntos pueden guardarse en un contenedor privado de Azure Blob Storage. Configure en
+`.env` el proveedor y las credenciales de la cuenta de almacenamiento:
+
+```env
+DOCUMENT_STORAGE_PROVIDER=azure
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net
+AZURE_STORAGE_CONTAINER=teachtrace-submissions
+```
+
+El backend crea el contenedor si no existe, carga cada archivo con su tipo MIME y conserva en la
+base de datos únicamente una referencia `azure:`. Las descargas continúan protegidas por la sesión
+y el rol docente; el contenedor no se publica. Si no se configura Azure, el proveedor
+`filesystem` utiliza `DOCUMENT_REPOSITORY_PATH`. Las referencias locales creadas anteriormente
+siguen siendo compatibles después de activar Azure.
+
 ## Seguridad de la sesión
 
 - El navegador recibe la sesión en una cookie `HttpOnly` y `SameSite=Strict`; con

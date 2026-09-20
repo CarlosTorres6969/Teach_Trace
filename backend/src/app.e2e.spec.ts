@@ -53,6 +53,7 @@ describe('TeachTrace API (integración)', () => {
     databaseSynchronize: process.env.DATABASE_SYNCHRONIZE,
     demoSeed: process.env.DEMO_SEED,
     jwtSecret: process.env.JWT_SECRET,
+    documentStorageProvider: process.env.DOCUMENT_STORAGE_PROVIDER,
   };
 
   async function requestRaw(path: string, init: RequestInit = {}) {
@@ -131,6 +132,7 @@ describe('TeachTrace API (integración)', () => {
     process.env.DATABASE_SYNCHRONIZE = 'true';
     process.env.DEMO_SEED = 'true';
     process.env.JWT_SECRET = 'clave-exclusiva-para-pruebas-de-integracion';
+    process.env.DOCUMENT_STORAGE_PROVIDER = 'filesystem';
 
     const { AppModule } = await import('./app.module');
     app = await NestFactory.create(AppModule, { logger: false });
@@ -181,6 +183,7 @@ describe('TeachTrace API (integración)', () => {
     restore('DATABASE_SYNCHRONIZE', previousEnvironment.databaseSynchronize);
     restore('DEMO_SEED', previousEnvironment.demoSeed);
     restore('JWT_SECRET', previousEnvironment.jwtSecret);
+    restore('DOCUMENT_STORAGE_PROVIDER', previousEnvironment.documentStorageProvider);
   });
 
   it('R4: protege endpoints y separa los roles en la API real', async () => {

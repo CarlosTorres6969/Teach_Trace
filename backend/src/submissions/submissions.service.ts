@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
@@ -26,6 +26,8 @@ export type UploadedAcademicFile = {
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     @InjectRepository(Submission) private readonly submissions: Repository<Submission>,
     @InjectRepository(Logbook) private readonly logbooks: Repository<Logbook>,
@@ -129,61 +131,77 @@ export class SubmissionsService {
       : null;
 
     let transactionSubmission: Submission | null = null;
-    await this.dataSource.transaction(async (manager) => {
-      const submissionRepository = manager.getRepository(Submission);
-      const declarationRepository = manager.getRepository(AiDeclaration);
-      let submission = await submissionRepository.findOne({
-        where: { student: { id: student.id }, activity: { id: activityId } },
-      });
-      if (!submission) {
-        submission = submissionRepository.create({
-          student,
-          activity,
-          fileName: null,
-          fileMimeType: null,
-          fileStorageKey: '',
-          fileSize: null,
-          fileBase64: null,
-          feedback: '',
-          evaluationStatus: EvaluationStatus.NOT_REQUESTED,
-          manualReviewRequired: false,
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const submissionRepository = manager.getRepository(Submission);
+        const declarationRepository = manager.getRepository(AiDeclaration);
+        let submission = await submissionRepository.findOne({
+          where: { student: { id: student.id }, activity: { id: activityId } },
         });
-      }
-      submission.productText = productText;
-      submission.productUrl = productUrl;
-      submission.status = SubmissionStatus.SUBMITTED;
-      submission.evaluationStatus = EvaluationStatus.NOT_REQUESTED;
-      submission.manualReviewRequired = false;
-      submission.submittedAt = new Date();
-      if (file) {
-        submission.fileName = file.originalname;
-        submission.fileMimeType = file.mimetype;
-        submission.fileStorageKey = storedDocument?.key ?? '';
-        submission.fileSize = storedDocument?.size ?? file.size;
-        submission.fileBase64 = storedDocument ? null : file.buffer.toString('base64');
-      }
-      transactionSubmission = await submissionRepository.save(submission);
+        if (!submission) {
+          submission = submissionRepository.create({
+            student,
+            activity,
+            fileName: null,
+            fileMimeType: null,
+            fileStorageKey: '',
+            fileSize: null,
+            fileBase64: null,
+            feedback: '',
+            evaluationStatus: EvaluationStatus.NOT_REQUESTED,
+            manualReviewRequired: false,
+          });
+        }
+        submission.productText = productText;
+        submission.productUrl = productUrl;
+        submission.status = SubmissionStatus.SUBMITTED;
+        submission.evaluationStatus = EvaluationStatus.NOT_REQUESTED;
+        submission.manualReviewRequired = false;
+        submission.submittedAt = new Date();
+        if (file) {
+          submission.fileName = file.originalname;
+          submission.fileMimeType = file.mimetype;
+          submission.fileStorageKey = storedDocument?.key ?? '';
+          submission.fileSize = storedDocument?.size ?? file.size;
+          submission.fileBase64 = storedDocument ? null : file.buffer.toString('base64');
+        }
+        transactionSubmission = await submissionRepository.save(submission);
 
-      let declaration = await declarationRepository.findOne({
-        where: { student: { id: student.id }, activity: { id: activityId } },
-      });
-      if (!declaration) {
-        declaration = declarationRepository.create({
-          student,
-          activity,
-          detectedUsageLevel: null,
-          usageDiscrepancy: false,
+        let declaration = await declarationRepository.findOne({
+          where: { student: { id: student.id }, activity: { id: activityId } },
         });
+        if (!declaration) {
+          declaration = declarationRepository.create({
+            student,
+            activity,
+            detectedUsageLevel: null,
+            usageDiscrepancy: false,
+          });
+        }
+        declaration.toolName = normalizeAiDeclarationText(input.toolName);
+        declaration.usageLevel = input.usageLevel;
+        declaration.purpose = purpose;
+        declaration.promptSummary = promptSummary;
+        declaration.usageDiscrepancy =
+          declaration.detectedUsageLevel !== null &&
+          declaration.detectedUsageLevel !== declaration.usageLevel;
+        await declarationRepository.save(declaration);
+      });
+    } catch (error) {
+      if (storedDocument && this.documentRepository) {
+        await this.deleteStoredDocument(storedDocument.key);
       }
-      declaration.toolName = normalizeAiDeclarationText(input.toolName);
-      declaration.usageLevel = input.usageLevel;
-      declaration.purpose = purpose;
-      declaration.promptSummary = promptSummary;
-      declaration.usageDiscrepancy =
-        declaration.detectedUsageLevel !== null &&
-        declaration.detectedUsageLevel !== declaration.usageLevel;
-      await declarationRepository.save(declaration);
-    });
+      throw error;
+    }
+
+    if (
+      storedDocument &&
+      this.documentRepository &&
+      existingSubmission?.fileStorageKey &&
+      existingSubmission.fileStorageKey !== storedDocument.key
+    ) {
+      await this.deleteStoredDocument(existingSubmission.fileStorageKey);
+    }
 
     const remainingManualReviews = await this.submissions.count({
       where: { activity: { id: activityId }, manualReviewRequired: true },
@@ -305,6 +323,14 @@ export class SubmissionsService {
       mimeType: submission.fileMimeType ?? 'application/octet-stream',
       content,
     };
+  }
+
+  private async deleteStoredDocument(storageKey: string) {
+    try {
+      await this.documentRepository?.delete(storageKey);
+    } catch {
+      this.logger.warn('No fue posible limpiar un archivo reemplazado del repositorio documental');
+    }
   }
 
   async startManualEvaluation(teacherId: number, activityId: number) {
