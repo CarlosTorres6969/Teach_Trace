@@ -35,6 +35,7 @@ export class ActivitiesService {
     return this.activities.find({
       where: {
         academicClass: { id: In(classIds) },
+        published: true,
         ...(dueDateRange ? { dueDate: Between(dueDateRange.from, dueDateRange.to) } : {}),
       },
       relations: { rubric: true },
@@ -53,7 +54,7 @@ export class ActivitiesService {
   }
 
   async getForStudent(studentId: number, activityId: number) {
-    const activity = await this.activities.findOne({ where: { id: activityId } });
+    const activity = await this.activities.findOne({ where: { id: activityId, published: true } });
     if (
       !activity ||
       !activity.academicClass ||
@@ -85,6 +86,7 @@ export class ActivitiesService {
         teacher,
         academicClass,
         manualEvaluationRequired: false,
+        published: false,
         weight: input.weight ?? 1.0,
         rubric: null,
       }),
@@ -122,6 +124,15 @@ export class ActivitiesService {
 
   async setManualEvaluationRequired(activity: Activity, required: boolean) {
     activity.manualEvaluationRequired = required;
+    return this.activities.save(activity);
+  }
+
+  async publish(teacherId: number, activityId: number) {
+    const activity = await this.ownedActivity(teacherId, activityId, true);
+    if (!activity.rubric?.criteria?.length) {
+      throw new BadRequestException('Asocia una rúbrica antes de publicar la actividad');
+    }
+    activity.published = true;
     return this.activities.save(activity);
   }
 

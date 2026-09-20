@@ -65,6 +65,36 @@ export class SubmissionsService {
     const existingSubmission = await this.submissions.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
     });
+    const logbook = await this.logbooks.findOne({
+      where: { student: { id: student.id }, activity: { id: activityId } },
+    });
+    const requiredLogbookFields = [
+      ['ideas iniciales', logbook?.initialIdeas],
+      ['prompts', logbook?.prompts],
+      ['validaciones y decisiones', logbook?.validationsAndDecisions],
+      ['reflexión final', logbook?.finalReflection],
+    ] as const;
+    const missingLogbookFields = requiredLogbookFields
+      .filter(([, value]) => !value?.trim())
+      .map(([label]) => label);
+    if (missingLogbookFields.length) {
+      throw new BadRequestException(
+        `Completa la bitácora antes de entregar. Faltan: ${missingLogbookFields.join(', ')}`,
+      );
+    }
+
+    const conversation = this.aiConversations
+      ? await this.aiConversations.getForStudent(student.id, activityId)
+      : null;
+    const messages = conversation?.messages ?? [];
+    if (
+      !messages.some((message) => message.role === 'student') ||
+      !messages.some((message) => message.role === 'ai')
+    ) {
+      throw new BadRequestException(
+        'Registra al menos un prompt del estudiante y una respuesta de IA antes de entregar',
+      );
+    }
     const productText = input.productText.trim();
     const productUrl = input.productUrl?.trim() ?? '';
     const purpose = normalizeAiDeclarationText(input.purpose);
@@ -75,8 +105,8 @@ export class SubmissionsService {
     if (!promptSummary) {
       throw new BadRequestException('El resumen de prompts es obligatorio');
     }
-    if (!productText && !productUrl && !file && !existingSubmission?.fileName) {
-      throw new BadRequestException('Debe entregar texto, un enlace o un archivo');
+    if (!file && !existingSubmission?.fileName) {
+      throw new BadRequestException('Debe adjuntar la tarea en un archivo PDF');
     }
     if (
       file &&

@@ -71,6 +71,10 @@ export class TeacherService {
     );
   }
 
+  async publishActivity(teacherId: number, activityId: number) {
+    return this.activityResponse(await this.activitiesService.publish(teacherId, activityId));
+  }
+
   async listSubmissions(teacherId: number, activityId: number) {
     return this.submissionsService.listForTeacher(teacherId, activityId);
   }
@@ -97,6 +101,7 @@ export class TeacherService {
       activityType: activity.activityType,
       evaluationPhase: activity.evaluationPhase,
       manualEvaluationRequired: activity.manualEvaluationRequired,
+      published: activity.published,
       learningOutcomes: activity.learningOutcomes,
       academicClass: activity.academicClass
         ? {

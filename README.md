@@ -9,10 +9,10 @@ El flujo base implementa:
 - Autenticación y autorización para estudiantes y docentes.
 - Gestión docente de clases y matrícula con cuentas autorizadas.
 - Creación automática de estudiantes con contraseña temporal enviada por correo y cambio obligatorio en el primer acceso.
-- Actividades asociadas a una clase y resultados de aprendizaje.
+- Actividades asociadas a una clase y resultados de aprendizaje, creadas primero como borrador y publicadas explícitamente por el docente después de asociar una rúbrica.
 - Rúbricas de exactamente siete dimensiones, con cuatro niveles por dimensión.
-- Bitácora estructurada del proceso del estudiante.
-- Entrega conjunta de producto, archivo y declaración de uso de IA.
+- Bitácora estructurada obligatoria del proceso del estudiante.
+- Entrega conjunta de PDF, declaración de uso de IA y conversación textual completa con al menos un prompt y una respuesta.
 - Roster docente y consulta de todas las evidencias entregadas.
 - Preferencias de notificación por evento y canal para estudiantes.
 - Modo claro, oscuro o automático sincronizado con la cuenta del usuario.

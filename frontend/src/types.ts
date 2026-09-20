@@ -59,6 +59,7 @@ export type Activity = {
   activityType?: string;
   evaluationPhase?: 'baseline' | 'pilot';
   manualEvaluationRequired?: boolean;
+  published?: boolean;
   learningOutcomes?: string[];
   submissionStatus?: string;
   rubric?: Rubric | null;

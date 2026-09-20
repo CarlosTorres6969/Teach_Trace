@@ -215,8 +215,22 @@ async function saveConversation() {
 }
 
 async function submitEvidence() {
-  if (!submission.productText.trim() && !submission.productUrl.trim() && !selectedFile.value && !submission.fileName) {
-    error.value = 'Entrega texto, un enlace o un archivo.';
+  const incompleteLogbook = logbookSteps
+    .filter((step) => !logbook[step.key].trim())
+    .map((step) => step.title);
+  if (incompleteLogbook.length) {
+    error.value = `Completa la bitácora antes de entregar. Faltan: ${incompleteLogbook.join(', ')}.`;
+    return;
+  }
+  if (!selectedFile.value && !submission.fileName) {
+    error.value = 'Adjunta la tarea en un archivo PDF.';
+    return;
+  }
+  if (
+    !conversation.value.some((item) => item.role === 'student' && item.content.trim()) ||
+    !conversation.value.some((item) => item.role === 'ai' && item.content.trim())
+  ) {
+    error.value = 'Registra al menos un prompt del estudiante y una respuesta de IA.';
     return;
   }
   if (!declaration.toolName.trim()) {
@@ -250,7 +264,9 @@ async function submitEvidence() {
   form.set('promptSummary', promptSummary);
   if (selectedFile.value) form.set('file', selectedFile.value);
   try {
-    if (conversation.value.length) await saveConversation();
+    const logbookSaved = await saveLogbookProgress('Bitácora guardada');
+    if (!logbookSaved) return;
+    await saveConversation();
     const result = await api<Record<string, string | null>>(
       `/student/activities/${activityId}/submission`,
       { method: 'PUT', body: form },
@@ -392,9 +408,9 @@ onMounted(() => {
           <div class="form-stack submission-fields">
             <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" /></label>
             <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" /></label>
-            <label>Archivo complementario
-              <input type="file" accept="application/pdf,.pdf" @change="selectFile" />
-              <small class="muted">Tamaño máximo: 10 MB.</small>
+            <label>Archivo PDF obligatorio
+              <input type="file" accept="application/pdf,.pdf" :required="!submission.fileName" @change="selectFile" />
+              <small class="muted">Debes adjuntar la tarea en PDF. Tamaño máximo: 10 MB.</small>
             </label>
             <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
             <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
@@ -421,7 +437,7 @@ onMounted(() => {
           <section class="conversation-editor" aria-labelledby="conversation-title">
               <div>
                 <h3 id="conversation-title">Conversación con IA</h3>
-                <p class="muted">Registra los mensajes intercambiados para conservar esta evidencia junto con la entrega.</p>
+                <p class="muted">Registra al menos un prompt del estudiante y una respuesta de IA. Esta evidencia es obligatoria.</p>
               </div>
               <div v-if="conversation.length" class="conversation-messages">
                 <article v-for="(item, index) in conversation" :key="index" class="conversation-message">

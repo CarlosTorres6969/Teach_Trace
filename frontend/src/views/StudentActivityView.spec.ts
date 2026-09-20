@@ -16,10 +16,10 @@ describe('StudentActivityView - nivel declarado de IA', () => {
       if (path.endsWith('/logbook')) {
         return Promise.resolve({
           activity: { title: 'Actividad de prueba' },
-          initialIdeas: '',
-          prompts: '',
-          validationsAndDecisions: '',
-          finalReflection: '',
+          initialIdeas: 'Ideas iniciales',
+          prompts: 'Prompt utilizado',
+          validationsAndDecisions: 'Validaciones y decisiones',
+          finalReflection: 'Reflexión final',
         });
       }
       if (path.endsWith('/ai-declaration')) {
@@ -41,12 +41,28 @@ describe('StudentActivityView - nivel declarado de IA', () => {
           manualReviewRequired: false,
         });
       }
+      if (path.endsWith('/ai-conversation')) {
+        const messages = [
+          { role: 'student', content: 'Prompt de prueba' },
+          { role: 'ai', content: 'Respuesta de prueba' },
+        ];
+        return Promise.resolve({ messages });
+      }
       if (path.endsWith('/submission') && options?.method === 'PUT') {
         return Promise.resolve({ status: 'submitted', submittedAt: new Date().toISOString() });
       }
       return Promise.reject(new Error(`Solicitud no esperada: ${path}`));
     });
   });
+
+  async function attachPdf(wrapper: ReturnType<typeof mount>) {
+    const input = wrapper.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [new File(['%PDF-1.4'], 'tarea.pdf', { type: 'application/pdf' })],
+    });
+    await input.trigger('change');
+  }
 
   it('inicia sin nivel y exige que el estudiante seleccione uno antes de entregar', async () => {
     const wrapper = mount(StudentActivityView, {
@@ -56,6 +72,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     });
     await flushPromises();
     await wrapper.get('.submission-step-button').trigger('click');
+    await attachPdf(wrapper);
 
     const select = wrapper.get('select');
     const placeholder = select.get('option');
@@ -95,6 +112,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     });
     await flushPromises();
     await wrapper.get('.submission-step-button').trigger('click');
+    await attachPdf(wrapper);
 
     await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico');
     await wrapper.get('input[placeholder^="Ej."]').setValue('ChatGPT');
@@ -130,6 +148,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     });
     await flushPromises();
     await wrapper.get('.submission-step-button').trigger('click');
+    await attachPdf(wrapper);
 
     await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico');
     await wrapper.get('input[placeholder^="Ej."]').setValue('ChatGPT');

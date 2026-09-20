@@ -118,6 +118,14 @@ export class TeacherController {
     return this.teacherService.listSubmissions(user.id, activityId);
   }
 
+  @Put('activities/:activityId/publish')
+  publishActivity(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+  ) {
+    return this.teacherService.publishActivity(user.id, activityId);
+  }
+
   @Get('submissions')
   listEvaluationDashboard(
     @CurrentUser() user: User,

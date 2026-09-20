@@ -55,7 +55,7 @@ describe('TeachTrace API (integración)', () => {
     jwtSecret: process.env.JWT_SECRET,
   };
 
-  async function request(path: string, init: RequestInit = {}) {
+  async function requestRaw(path: string, init: RequestInit = {}) {
     const response = await fetch(`${baseUrl}${path}`, init);
     const text = await response.text();
     let body: unknown = null;
@@ -69,6 +69,23 @@ describe('TeachTrace API (integración)', () => {
     return { response, body };
   }
 
+  async function request(path: string, init: RequestInit = {}) {
+    const result = await requestRaw(path, init);
+    // Las pruebas preexistentes crean actividades auxiliares para otros dominios.
+    // Se publican directamente para mantener cada prueba enfocada; el ciclo real
+    // borrador/publicación se verifica por separado usando requestRaw.
+    if (
+      path === '/api/teacher/activities' &&
+      init.method === 'POST' &&
+      result.response.status === 201 &&
+      dataSource?.isInitialized
+    ) {
+      const id = (result.body as { id: number }).id;
+      await dataSource.getRepository(Activity).update(id, { published: true });
+    }
+    return result;
+  }
+
   function sessionHeaders(cookie: string) {
     return { Cookie: cookie };
   }
@@ -77,6 +94,35 @@ describe('TeachTrace API (integración)', () => {
     const cookie = response.headers.get('set-cookie');
     if (!cookie) throw new Error('El login no devolvió la cookie de sesión');
     return cookie.split(';')[0];
+  }
+
+  async function prepareRequiredEvidence(targetActivityId: number) {
+    await dataSource.getRepository(Activity).update(targetActivityId, { published: true });
+    const logbook = await request(`/api/student/activities/${targetActivityId}/logbook`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initialIdeas: 'Ideas iniciales de prueba',
+        prompts: 'Prompt registrado para la entrega',
+        validationsAndDecisions: 'Validaciones y decisiones documentadas',
+        finalReflection: 'Reflexión final documentada',
+      }),
+    });
+    expect(logbook.response.status).toBe(200);
+    const conversation = await request(
+      `/api/student/activities/${targetActivityId}/ai-conversation`,
+      {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'student', content: 'Prompt obligatorio de prueba' },
+            { role: 'ai', content: 'Respuesta obligatoria de prueba' },
+          ],
+        }),
+      },
+    );
+    expect(conversation.response.status).toBe(200);
   }
 
   beforeAll(async () => {
@@ -121,6 +167,7 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     activityId = (activities.body as Array<{ id: number }>)[0].id;
+    await prepareRequiredEvidence(activityId);
   });
 
   afterAll(async () => {
@@ -709,6 +756,56 @@ describe('TeachTrace API (integración)', () => {
     expect((await associate('', secondActivityId, firstRubricId)).response.status).toBe(401);
   });
 
+  it('mantiene la actividad en borrador hasta que el docente la publica con rúbrica', async () => {
+    const created = await requestRaw('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Actividad borrador ${Date.now()}`,
+        classId,
+        dueDate: '2026-12-30',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.body).toMatchObject({ published: false });
+    const draftId = (created.body as { id: number }).id;
+
+    const hidden = await request('/api/student/activities?filter=all', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((hidden.body as Array<{ id: number }>).some((item) => item.id === draftId)).toBe(false);
+
+    const rejected = await request(`/api/teacher/activities/${draftId}/publish`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(rejected.response.status).toBe(400);
+
+    const rubric = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `Rúbrica publicación ${Date.now()}`, criteria: buildCriteria() }),
+    });
+    await request(`/api/teacher/activities/${draftId}/rubric`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rubricId: (rubric.body as { id: number }).id }),
+    });
+    const published = await request(`/api/teacher/activities/${draftId}/publish`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(published.response.status).toBe(200);
+    expect(published.body).toMatchObject({ published: true });
+
+    const visible = await request('/api/student/activities?filter=all', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect((visible.body as Array<{ id: number }>).some((item) => item.id === draftId)).toBe(true);
+  });
+
   it('valida, normaliza y persiste el nombre de la herramienta de IA', async () => {
     const draftActivity = await request('/api/teacher/activities', {
       method: 'POST',
@@ -723,6 +820,7 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(draftActivity.response.status).toBe(201);
     const draftActivityId = (draftActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(draftActivityId);
     const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
     const validDeclaration = {
       toolName: '  Claude  ',
@@ -813,6 +911,7 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(draftActivity.response.status).toBe(201);
     const draftActivityId = (draftActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(draftActivityId);
     const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
     const declaration = {
       toolName: 'Claude',
@@ -903,6 +1002,7 @@ describe('TeachTrace API (integración)', () => {
       form.set('usageLevel', usageLevel);
       form.set('purpose', declaration.purpose);
       form.set('promptSummary', declaration.promptSummary);
+      form.set('file', new Blob(['%PDF-1.7\nnivel'], { type: 'application/pdf' }), 'nivel.pdf');
       const submitted = await request(
         `/api/student/activities/${draftActivityId}/submission`,
         {
@@ -934,6 +1034,7 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(draftActivity.response.status).toBe(201);
     const draftActivityId = (draftActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(draftActivityId);
     const endpoint = `/api/student/activities/${draftActivityId}/ai-declaration`;
     const declaration = {
       toolName: 'Claude',
@@ -1017,6 +1118,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('usageLevel', String(declaration.usageLevel));
     form.set('purpose', `  ${submittedPurpose}  `);
     form.set('promptSummary', declaration.promptSummary);
+    form.set('file', new Blob(['%PDF-1.7\nproposito'], { type: 'application/pdf' }), 'proposito.pdf');
     const submitted = await request(
       `/api/student/activities/${draftActivityId}/submission`,
       {
@@ -1171,6 +1273,7 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const r1ActivityId = (exclusiveActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(r1ActivityId);
 
     // El estudiante entrega
     const form = new FormData();
@@ -1180,6 +1283,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('usageLevel', '2');
     form.set('purpose', 'Probar motor');
     form.set('promptSummary', 'Prompts de prueba R1');
+    form.set('file', new Blob(['%PDF-1.7\nr1'], { type: 'application/pdf' }), 'r1.pdf');
     await request(`/api/student/activities/${r1ActivityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
@@ -1490,6 +1594,7 @@ describe('TeachTrace API (integración)', () => {
     usageLevel: string;
     purpose: string;
     promptSummary: string;
+    includeFile: boolean;
   }> = {}) {
     const form = new FormData();
     form.set('productText', overrides.productText ?? 'Producto de prueba HU-18/19');
@@ -1498,6 +1603,13 @@ describe('TeachTrace API (integración)', () => {
     form.set('usageLevel', overrides.usageLevel ?? '2');
     form.set('purpose', overrides.purpose ?? 'Apoyar la redacción del análisis');
     form.set('promptSummary', overrides.promptSummary ?? 'Resumen de prompts de prueba');
+    if (overrides.includeFile !== false) {
+      form.set(
+        'file',
+        new Blob(['%PDF-1.7\nevidencia de prueba'], { type: 'application/pdf' }),
+        'evidencia.pdf',
+      );
+    }
     return form;
   }
 
@@ -1575,6 +1687,7 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const persistActivityId = (newActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(persistActivityId);
 
     await request(`/api/student/activities/${persistActivityId}/submission`, {
       method: 'PUT',
@@ -1607,6 +1720,7 @@ describe('TeachTrace API (integración)', () => {
     });
     expect(newActivity.response.status).toBe(201);
     const newActivityId = (newActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(newActivityId);
     const endpoint = `/api/student/activities/${newActivityId}/ai-declaration`;
     const declaration = {
       toolName: 'ChatGPT',
@@ -1763,7 +1877,7 @@ describe('TeachTrace API (integración)', () => {
     expect(response.response.status).toBe(413);
   });
 
-  it('HU-19: rechaza entrega vacía — sin texto, URL ni archivo previo', async () => {
+  it('HU-19: rechaza una entrega sin archivo PDF aunque incluya otros datos', async () => {
     // Actividad nueva donde el estudiante nunca ha entregado
     const newActivity = await request('/api/teacher/activities', {
       method: 'POST',
@@ -1777,13 +1891,88 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const newActivityId = (newActivity.body as { id: number }).id;
+    await prepareRequiredEvidence(newActivityId);
 
     const response = await request(`/api/student/activities/${newActivityId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),
-      body: buildSubmitForm({ productText: '', productUrl: '' }),
+      body: buildSubmitForm({ productText: 'Producto sin PDF', productUrl: '', includeFile: false }),
     });
     expect(response.response.status).toBe(400);
+  });
+
+  it('exige bitácora completa, conversación completa y PDF antes de entregar', async () => {
+    const activity = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Requisitos de entrega ${Date.now()}`,
+        classId,
+        dueDate: '2026-12-31',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const requiredActivityId = (activity.body as { id: number }).id;
+    const endpoint = `/api/student/activities/${requiredActivityId}/submission`;
+    const validPdfForm = () => buildSubmitForm();
+
+    const withoutLogbook = await request(endpoint, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: validPdfForm(),
+    });
+    expect(withoutLogbook.response.status).toBe(400);
+    expect(withoutLogbook.body).toMatchObject({
+      message: expect.stringContaining('Completa la bitácora'),
+    });
+
+    await request(`/api/student/activities/${requiredActivityId}/logbook`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initialIdeas: 'Ideas completas',
+        prompts: 'Prompt completo',
+        validationsAndDecisions: 'Decisiones completas',
+        finalReflection: 'Reflexión completa',
+      }),
+    });
+    const withoutConversation = await request(endpoint, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: validPdfForm(),
+    });
+    expect(withoutConversation.response.status).toBe(400);
+    expect(withoutConversation.body).toMatchObject({
+      message: expect.stringContaining('un prompt del estudiante y una respuesta de IA'),
+    });
+
+    await request(`/api/student/activities/${requiredActivityId}/ai-conversation`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'student', content: 'Prompt completo' },
+          { role: 'ai', content: 'Respuesta completa' },
+        ],
+      }),
+    });
+    const withoutPdf = await request(endpoint, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: buildSubmitForm({ includeFile: false }),
+    });
+    expect(withoutPdf.response.status).toBe(400);
+    expect(withoutPdf.body).toMatchObject({
+      message: expect.stringContaining('archivo PDF'),
+    });
+
+    const complete = await request(endpoint, {
+      method: 'PUT',
+      headers: sessionHeaders(student.sessionCookie),
+      body: validPdfForm(),
+    });
+    expect(complete.response.status).toBe(200);
   });
 
   it('HU-19: actualizar la entrega no genera duplicados', async () => {
@@ -2069,6 +2258,7 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const newActivityId = (activity.body as { id: number }).id;
+    await prepareRequiredEvidence(newActivityId);
 
     // El estudiante entrega
     const form = buildSubmitForm({ productText: 'Producto para HU-34' });
@@ -2118,6 +2308,7 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const newActivityId = (activity.body as { id: number }).id;
+    await prepareRequiredEvidence(newActivityId);
     const form = buildSubmitForm({ productText: 'Producto verificable' });
     await request(`/api/student/activities/${newActivityId}/submission`, {
       method: 'PUT',
@@ -2455,6 +2646,7 @@ describe('TeachTrace API (integración)', () => {
       }),
     });
     const newActivityId = (activity.body as { id: number }).id;
+    await prepareRequiredEvidence(newActivityId);
     const form = buildSubmitForm({ productText: 'Producto para resultados' });
     await request(`/api/student/activities/${newActivityId}/submission`, {
       method: 'PUT',
@@ -2674,6 +2866,7 @@ describe('TeachTrace API (integración)', () => {
           teacher: teacherEntity,
           academicClass,
           manualEvaluationRequired: false,
+          published: true,
           weight: 1,
           rubric: null,
         }));
@@ -2865,12 +3058,24 @@ describe('TeachTrace API (integración)', () => {
       (atSeventy.body as Array<Record<string, unknown>>).find((item) => item.id === createdId),
     ).toMatchObject({ completionPercentage: 70, missingSections: ['producto final'] });
 
+    await request(`/api/student/activities/${createdId}/ai-conversation`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'student', content: 'Prompt para completar la actividad' },
+          { role: 'ai', content: 'Respuesta registrada para la actividad' },
+        ],
+      }),
+    });
+
     const form = new FormData();
     form.set('productText', 'Producto final de prueba');
     form.set('toolName', 'ChatGPT');
     form.set('usageLevel', '2');
     form.set('purpose', 'Revisar estructura');
     form.set('promptSummary', 'Solicité retroalimentación');
+    form.set('file', new Blob(['%PDF-1.7\nproducto final'], { type: 'application/pdf' }), 'producto.pdf');
     const submitted = await request(`/api/student/activities/${createdId}/submission`, {
       method: 'PUT',
       headers: sessionHeaders(student.sessionCookie),

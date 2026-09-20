@@ -38,7 +38,7 @@ export class Submission {
   @Column({ default: false })
   manualReviewRequired: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   submittedAt: Date | null;
 
   @Column({ type: 'text', default: '' })
@@ -67,6 +67,6 @@ export class Submission {
   @Column({ type: 'text', default: '' })
   feedback: string;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   notificationSentAt: Date | null;
 }

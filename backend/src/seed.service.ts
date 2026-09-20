@@ -464,6 +464,7 @@ export class SeedService implements OnApplicationBootstrap {
     activity.manualEvaluationRequired = definition.work.some(
       (item) => item.submission?.manualReviewRequired,
     );
+    activity.published = true;
     activity.weight = definition.weight;
     activity.createdAt = this.dateAt(-definition.createdDaysAgo, 9);
     activity = await this.activities.save(activity);

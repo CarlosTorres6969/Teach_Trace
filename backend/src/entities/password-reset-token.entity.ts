@@ -12,13 +12,13 @@ export class PasswordResetToken {
   @Column({ unique: true })
   tokenHash: string;
 
-  @Column({ type: 'datetime' })
+  @Column()
   expiresAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   usedAt: Date | null;
 
-  @Column({ type: 'datetime' })
+  @Column()
   createdAt: Date;
 
   @Column({ type: 'varchar', nullable: true })

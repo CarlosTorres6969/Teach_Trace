@@ -56,6 +56,9 @@ export class Activity {
   @Column({ default: false })
   manualEvaluationRequired: boolean;
 
+  @Column({ default: false })
+  published: boolean;
+
   @Column({ type: 'float', default: 1.0 })
   weight: number;
 

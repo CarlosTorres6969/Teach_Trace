@@ -9,9 +9,9 @@ export class AuthSession {
   @ManyToOne(() => User, (user) => user.sessions, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column({ type: 'datetime' })
+  @Column()
   expiresAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   revokedAt: Date | null;
 }

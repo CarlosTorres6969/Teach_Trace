@@ -15,12 +15,12 @@ export class LoginAttempt {
   @Column({ type: 'int', default: 0 })
   count: number;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ nullable: true })
   lockedUntil: Date | null;
 
-  @Column({ type: 'datetime' })
+  @Column()
   createdAt: Date;
 
-  @Column({ type: 'datetime' })
+  @Column()
   updatedAt: Date;
 }

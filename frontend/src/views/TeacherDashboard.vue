@@ -201,7 +201,7 @@ function formatFileSize(bytes: number) {
 }
 
 async function createActivity() {
-  const created = await act('Actividad creada', async () => {
+  const created = await act('Actividad creada como borrador', async () => {
     await api('/teacher/activities', { method: 'POST', body: JSON.stringify(activityForm) });
     Object.assign(activityForm, {
       title: '',
@@ -247,6 +247,13 @@ async function associateRubric(activityId: number) {
   if (!rubricId) return;
   await act('Rúbrica asociada a la actividad', async () => {
     await api(`/teacher/activities/${activityId}/rubric`, { method: 'PUT', body: JSON.stringify({ rubricId }) });
+    await load();
+  });
+}
+
+async function publishActivity(activityId: number) {
+  await act('Actividad publicada para los estudiantes', async () => {
+    await api(`/teacher/activities/${activityId}/publish`, { method: 'PUT' });
     await load();
   });
 }
@@ -414,7 +421,9 @@ onBeforeUnmount(() => {
           <article v-for="activity in activities" :key="activity.id" class="teacher-catalog-card activity-catalog-card">
             <div class="catalog-card-header">
               <span class="catalog-code">{{ activity.academicClass?.code }}</span>
-              <span class="status">{{ activity.evaluationPhase === 'baseline' ? 'Línea base' : 'Piloto' }}</span>
+              <span class="status" :data-status="activity.published ? 'evaluated' : 'not_submitted'">
+                {{ activity.published ? 'Publicada' : 'Borrador' }}
+              </span>
             </div>
             <div class="catalog-card-content">
               <p class="eyebrow">{{ activity.activityType }}</p>
@@ -714,6 +723,11 @@ onBeforeUnmount(() => {
           <p v-if="selectedActivity.manualEvaluationRequired" class="alert error">
             Esta actividad requiere evaluación manual.
           </p>
+          <p class="alert" :class="selectedActivity.published ? 'success' : 'warning'">
+            {{ selectedActivity.published
+              ? 'La actividad está publicada y visible para los estudiantes.'
+              : 'La actividad está en borrador. Asocia una rúbrica antes de publicarla.' }}
+          </p>
 
           <section class="modal-section">
             <div>
@@ -767,6 +781,15 @@ onBeforeUnmount(() => {
           </section>
 
           <div class="modal-actions">
+            <button
+              v-if="!selectedActivity.published"
+              class="button primary"
+              type="button"
+              :disabled="!selectedActivity.rubric"
+              @click="publishActivity(selectedActivity.id)"
+            >
+              Publicar actividad
+            </button>
             <button class="button secondary" type="button" @click="closeModal">Cerrar</button>
             <RouterLink class="button primary" :to="`/teacher/activities/${selectedActivity.id}/submissions`">
               Ver entregas

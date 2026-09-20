@@ -14,7 +14,7 @@ describe('SubmissionsService', () => {
       submittedAt: new Date(),
       productText: 'Producto',
       productUrl: '',
-      fileName: null,
+      fileName: 'evidencia.pdf',
     };
     const submissions = {
       findOne: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(storedSubmission),
@@ -40,14 +40,33 @@ describe('SubmissionsService', () => {
       getForStudent: jest.fn().mockResolvedValue(activity),
       setManualEvaluationRequired: jest.fn().mockResolvedValue(activity),
     };
+    const logbooks = {
+      findOne: jest.fn().mockResolvedValue({
+        initialIdeas: 'Ideas iniciales',
+        prompts: 'Prompt utilizado',
+        validationsAndDecisions: 'Validaciones y decisiones',
+        finalReflection: 'Reflexión final',
+      }),
+    };
+    const aiConversations = {
+      getForStudent: jest.fn().mockResolvedValue({
+        messages: [
+          { role: 'student', content: 'Prompt' },
+          { role: 'ai', content: 'Respuesta' },
+        ],
+      }),
+      attachToSubmission: jest.fn(),
+    };
     const service = new SubmissionsService(
       submissions as never,
-      {} as never,
+      logbooks as never,
       {} as never,
       {} as never,
       dataSource as never,
       activitiesService as never,
       {} as never,
+      undefined,
+      aiConversations as never,
     );
 
     const result = await service.submit(student as never, 4, {
@@ -57,6 +76,11 @@ describe('SubmissionsService', () => {
       usageLevel: 2,
       purpose: 'Contrastar ideas',
       promptSummary: 'Consulta de contraste',
+    }, {
+      originalname: 'evidencia.pdf',
+      mimetype: 'application/pdf',
+      size: 8,
+      buffer: Buffer.from('%PDF-1.4'),
     });
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);

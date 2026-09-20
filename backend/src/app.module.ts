@@ -62,6 +62,26 @@ const entities = [
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        const databaseUrl = config.get<string>('DATABASE_URL')?.trim();
+        const synchronize = config.get<string>(
+          'DATABASE_SYNCHRONIZE',
+          databaseUrl ? 'false' : 'true',
+        ) === 'true';
+
+        if (databaseUrl) {
+          return {
+            type: 'postgres' as const,
+            url: databaseUrl,
+            // Supabase requires TLS for its hosted PostgreSQL connections.
+            ssl:
+              config.get<string>('DATABASE_SSL', 'true') === 'true'
+                ? { rejectUnauthorized: false }
+                : false,
+            entities,
+            synchronize,
+          };
+        }
+
         const databasePath = config.get<string>('DATABASE_PATH', 'teachtrace.sqlite');
         const inMemory = databasePath === ':memory:';
         return {
@@ -69,7 +89,7 @@ const entities = [
           ...(inMemory ? {} : { location: databasePath }),
           autoSave: !inMemory && config.get<string>('DATABASE_AUTOSAVE', 'true') === 'true',
           entities,
-          synchronize: config.get<string>('DATABASE_SYNCHRONIZE', 'true') === 'true',
+          synchronize,
         };
       },
     }),
