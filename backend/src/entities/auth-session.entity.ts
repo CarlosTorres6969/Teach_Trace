@@ -1,5 +1,6 @@
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { User } from './user.entity';
+import { dateColumnType } from '../database/database-column-types';
 
 @Entity('auth_sessions')
 export class AuthSession {
@@ -9,9 +10,9 @@ export class AuthSession {
   @ManyToOne(() => User, (user) => user.sessions, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column()
+  @Column({ type: dateColumnType })
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: dateColumnType, nullable: true })
   revokedAt: Date | null;
 }

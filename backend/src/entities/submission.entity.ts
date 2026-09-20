@@ -1,6 +1,7 @@
 import { Column, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Activity } from './activity.entity';
 import { User } from './user.entity';
+import { dateColumnType } from '../database/database-column-types';
 
 export enum SubmissionStatus {
   NOT_SUBMITTED = 'not_submitted',
@@ -38,7 +39,7 @@ export class Submission {
   @Column({ default: false })
   manualReviewRequired: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: dateColumnType, nullable: true })
   submittedAt: Date | null;
 
   @Column({ type: 'text', default: '' })
@@ -67,6 +68,6 @@ export class Submission {
   @Column({ type: 'text', default: '' })
   feedback: string;
 
-  @Column({ nullable: true })
+  @Column({ type: dateColumnType, nullable: true })
   notificationSentAt: Date | null;
 }

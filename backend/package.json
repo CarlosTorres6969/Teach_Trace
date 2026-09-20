@@ -5,6 +5,7 @@
     "start:dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
+    "db:migrate:sqlite": "npm run build && node dist/database/migrate-sqlite-to-postgres.js",
     "test": "jest --runInBand"
   },
   "dependencies": {

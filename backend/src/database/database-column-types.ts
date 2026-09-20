@@ -1,0 +1,14 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { config as loadEnv } from 'dotenv';
+
+// Entity decorators are evaluated before Nest's ConfigModule is initialized.
+// Load the local environment here so date columns can use the correct driver type.
+const envPath = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '..', '.env')].find(
+  (candidate) => existsSync(candidate),
+);
+if (envPath) loadEnv({ path: envPath, override: false });
+
+export const dateColumnType: 'datetime' | 'timestamp' = process.env.DATABASE_URL
+  ? 'timestamp'
+  : 'datetime';

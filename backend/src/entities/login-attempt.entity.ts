@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { dateColumnType } from '../database/database-column-types';
 
 @Entity('login_attempts')
 @Index(['ip', 'email'], { unique: false })
@@ -15,12 +16,12 @@ export class LoginAttempt {
   @Column({ type: 'int', default: 0 })
   count: number;
 
-  @Column({ nullable: true })
+  @Column({ type: dateColumnType, nullable: true })
   lockedUntil: Date | null;
 
-  @Column()
+  @Column({ type: dateColumnType })
   createdAt: Date;
 
-  @Column()
+  @Column({ type: dateColumnType })
   updatedAt: Date;
 }

@@ -1,5 +1,6 @@
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { User } from './user.entity';
+import { dateColumnType } from '../database/database-column-types';
 
 @Entity('password_reset_tokens')
 export class PasswordResetToken {
@@ -12,13 +13,13 @@ export class PasswordResetToken {
   @Column({ unique: true })
   tokenHash: string;
 
-  @Column()
+  @Column({ type: dateColumnType })
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: dateColumnType, nullable: true })
   usedAt: Date | null;
 
-  @Column()
+  @Column({ type: dateColumnType })
   createdAt: Date;
 
   @Column({ type: 'varchar', nullable: true })
