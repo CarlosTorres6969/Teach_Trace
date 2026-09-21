@@ -1,0 +1,9 @@
+document-repository
+dist
+*.sqlite
+*.db
+*.db-wal
+*.db-shm
+coverage
+*.log
+docs
