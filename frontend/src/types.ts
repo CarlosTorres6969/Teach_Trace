@@ -21,7 +21,8 @@ export type NotificationEventType =
   | 'NEW_ACTIVITY'
   | 'GRADE_PUBLISHED'
   | 'ACTIVITY_DUE_SOON'
-  | 'SUBMISSION_STATUS_CHANGED';
+  | 'SUBMISSION_STATUS_CHANGED'
+  | 'AI_ANALYSIS_READY';
 
 export type NotificationChannel = 'EMAIL' | 'PUSH' | 'IN_APP';
 
@@ -32,7 +33,7 @@ export type NotificationPreference = {
 
 export type AppNotification = {
   id: number;
-  type: 'GRADE_PUBLISHED';
+  type: 'GRADE_PUBLISHED' | 'AI_ANALYSIS_READY';
   title: string;
   message: string;
   read: boolean;

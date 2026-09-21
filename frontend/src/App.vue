@@ -20,7 +20,7 @@ let pollInterval: ReturnType<typeof setInterval> | null = null;
 let sseSource: EventSource | null = null;
 
 function startNotificationServices() {
-  if (!auth.user || auth.user.role !== 'student') return;
+  if (!auth.user) return;
 
   // Contar no leídas de inmediato
   void fetchUnreadCount();
@@ -65,7 +65,7 @@ function stopNotificationServices() {
 }
 
 async function fetchUnreadCount() {
-  if (!auth.user || auth.user.role !== 'student') return;
+  if (!auth.user) return;
   try {
     const data = await api<{ count: number }>('/notifications/unread-count');
     unreadCount.value = data.count;
@@ -114,7 +114,9 @@ async function markRead(notification: AppNotification) {
 function navigateToNotification(notification: AppNotification) {
   bellOpen.value = false;
   if (notification.activityId) {
-    void router.push(`/student/activities/${notification.activityId}/results`);
+    void router.push(auth.user?.role === 'teacher'
+      ? `/teacher/activities/${notification.activityId}/submissions`
+      : `/student/activities/${notification.activityId}/results`);
   }
 }
 
@@ -193,7 +195,7 @@ async function logout() {
 watch(
   () => auth.user,
   (user) => {
-    if (user?.role === 'student' && !user.mustChangePassword) {
+    if (user && !user.mustChangePassword) {
       startNotificationServices();
       void fetchNewActivityCount();
     } else {
@@ -208,7 +210,7 @@ watch(
 onMounted(() => {
   window.addEventListener('keydown', closeBellOnEscape);
   // Si ya hay sesión activa al montar (recarga de página), iniciar servicios
-  if (auth.user?.role === 'student' && !auth.user.mustChangePassword) {
+  if (auth.user && !auth.user.mustChangePassword) {
     startNotificationServices();
     void fetchNewActivityCount();
     window.addEventListener('teachtrace:activity-viewed', refreshActivityCount);
@@ -261,7 +263,7 @@ onBeforeUnmount(() => {
         <span class="topbar-settings-label">Accesibilidad</span>
       </RouterLink>
       <!-- Campana de notificaciones — solo estudiantes -->
-      <div v-if="auth.user.role === 'student'" class="bell-wrapper">
+      <div class="bell-wrapper">
         <button
           class="button ghost bell-button"
           type="button"
@@ -312,6 +314,7 @@ onBeforeUnmount(() => {
 
           <div class="bell-dropdown-footer">
             <RouterLink
+              v-if="auth.user.role === 'student'"
               class="text-button"
               to="/settings/notifications"
               @click="bellOpen = false"

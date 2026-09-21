@@ -54,7 +54,7 @@ export class Submission {
   @Column({ type: 'varchar', nullable: true })
   fileMimeType: string | null;
 
-  /** Reference to the filesystem/document repository object. */
+  /** Reference to the Azure Blob or local document repository object. */
   @Column({ default: '' })
   fileStorageKey: string;
 
@@ -67,6 +67,22 @@ export class Submission {
 
   @Column({ type: 'text', default: '' })
   feedback: string;
+
+  /** Sugerencias de la IA; nunca sustituyen la valoración confirmada por el docente. */
+  @Column({ type: 'float', nullable: true })
+  aiPossibleGrade: number | null;
+
+  @Column({ type: 'text', default: '' })
+  aiStrengths: string;
+
+  @Column({ type: 'text', default: '' })
+  aiImprovements: string;
+
+  @Column({ type: 'text', default: '' })
+  aiComparison: string;
+
+  @Column({ type: dateColumnType, nullable: true })
+  aiAnalyzedAt: Date | null;
 
   @Column({ type: dateColumnType, nullable: true })
   notificationSentAt: Date | null;

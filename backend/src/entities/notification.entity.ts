@@ -3,6 +3,7 @@ import { User } from './user.entity';
 
 export enum NotificationType {
   GRADE_PUBLISHED = 'GRADE_PUBLISHED',
+  AI_ANALYSIS_READY = 'AI_ANALYSIS_READY',
 }
 
 @Entity('notifications')

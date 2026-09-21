@@ -118,6 +118,61 @@ export class MailService {
     this.logger.log('SMTP aceptó el correo de recuperación para su entrega');
   }
 
+  async sendGradePublishedEmail(
+    email: string,
+    studentName: string,
+    activityTitle: string,
+    activityId: number,
+  ): Promise<boolean> {
+    const url = `${this.publicAppUrl()}/student/activities/${activityId}/results`;
+    return Boolean(await this.sendEmail({
+      to: email,
+      subject: `Calificacion publicada - ${activityTitle}`,
+      text: [
+        `Hola ${studentName},`,
+        `El docente publico la calificacion de tu entrega en "${activityTitle}".`,
+        `Consulta tus resultados en: ${url}`,
+      ].join('\n\n'),
+      html: [
+        `<p>Hola ${this.escapeHtml(studentName)},</p>`,
+        `<p>El docente publico la calificacion de tu entrega en <strong>${this.escapeHtml(activityTitle)}</strong>.</p>`,
+        `<p><a href="${this.escapeHtml(url)}">Consultar resultados</a></p>`,
+      ].join(''),
+    }));
+  }
+
+  async sendAiAnalysisEmail(
+    email: string,
+    teacherName: string,
+    studentName: string,
+    activityTitle: string,
+    activityId: number,
+    possibleGrade: number | null,
+    discrepancy: boolean,
+  ): Promise<boolean> {
+    const url = `${this.publicAppUrl()}/teacher/activities/${activityId}/submissions`;
+    const grade = possibleGrade === null ? 'pendiente' : `${possibleGrade}/100`;
+    const discrepancyText = discrepancy
+      ? ' Se detecto una diferencia entre el nivel declarado y el nivel estimado por la IA.'
+      : '';
+    return Boolean(await this.sendEmail({
+      to: email,
+      subject: `Analisis IA listo - ${activityTitle}`,
+      text: [
+        `Hola ${teacherName},`,
+        `La entrega de ${studentName} para "${activityTitle}" ya fue analizada por el motor IA.`,
+        `Nota sugerida: ${grade}.${discrepancyText}`,
+        `Revisa y confirma la evaluacion en: ${url}`,
+      ].join('\n\n'),
+      html: [
+        `<p>Hola ${this.escapeHtml(teacherName)},</p>`,
+        `<p>La entrega de <strong>${this.escapeHtml(studentName)}</strong> para <strong>${this.escapeHtml(activityTitle)}</strong> ya fue analizada por el motor IA.</p>`,
+        `<p><strong>Nota sugerida:</strong> ${this.escapeHtml(grade)}${this.escapeHtml(discrepancyText)}</p>`,
+        `<p><a href="${this.escapeHtml(url)}">Revisar evaluacion</a></p>`,
+      ].join(''),
+    }));
+  }
+
   private async sendEmail(input: {
     to: string;
     subject: string;

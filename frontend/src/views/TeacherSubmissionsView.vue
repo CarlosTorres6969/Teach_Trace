@@ -17,6 +17,7 @@ type ValuationItem = {
   criterion: string;
   dimension: string;
   aiValue: number | null;
+  aiExplanation: string;
   teacherValue: number | null;
   teacherComment: string;
   confirmed: boolean;
@@ -36,6 +37,11 @@ type SubmissionDetail = SubmissionSummary & {
   productUrl: string;
   fileName: string | null;
   feedback: string;
+  aiPossibleGrade: number | null;
+  aiStrengths: string;
+  aiImprovements: string;
+  aiComparison: string;
+  aiAnalyzedAt: string | null;
   valuations: ValuationItem[];
   aiConversation: null | { messages: ConversationMessage[] };
   logbook: null | Record<string, string>;
@@ -70,6 +76,7 @@ const closingEvaluation = ref(false);
 const savingFeedback = ref(false);
 const feedbackDraft = ref('');
 const startingEvaluation = ref(false);
+const startingAiEvaluation = ref(false);
 
 async function load() {
   try {
@@ -115,6 +122,31 @@ async function startManualEvaluation() {
     error.value = cause instanceof Error ? cause.message : 'No se pudo iniciar la evaluación manual';
   } finally {
     startingEvaluation.value = false;
+  }
+}
+
+async function runAiEvaluation() {
+  if (startingAiEvaluation.value || startingEvaluation.value) return;
+  startingAiEvaluation.value = true;
+  error.value = '';
+  try {
+    const result = await api<{
+      implemented: boolean;
+      processed: number;
+      pendingManualReview: number;
+      reason?: string;
+    }>(`/entregas/actividad/${activityId}/evaluar`, { method: 'POST' });
+    message.value = result.processed === 0
+      ? 'No hay entregas nuevas para analizar; cada documento conserva un único intento IA.'
+      : result.implemented
+        ? `Análisis IA completado para ${result.processed} entrega(s). El docente debe confirmar las valoraciones.`
+        : `La IA no pudo analizar las entregas: ${result.reason ?? 'requieren revisión manual'}.`;
+    await load();
+    if (submissions.value.length) await openSubmission(selected.value?.id ?? submissions.value[0].id);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'No se pudo ejecutar el análisis IA';
+  } finally {
+    startingAiEvaluation.value = false;
   }
 }
 
@@ -221,9 +253,14 @@ onMounted(load);
     <RouterLink to="/teacher" class="back-link">← Panel docente</RouterLink>
     <section class="page-heading compact">
       <div><span class="eyebrow">Evidencias</span><h1>Productos entregados</h1></div>
-      <button class="button primary" type="button" :disabled="startingEvaluation" @click="startManualEvaluation">
-        {{ startingEvaluation ? 'Iniciando…' : 'Iniciar evaluación manual' }}
-      </button>
+      <div class="page-heading-actions">
+        <button class="button secondary" type="button" :disabled="startingAiEvaluation || startingEvaluation" @click="runAiEvaluation">
+          {{ startingAiEvaluation ? 'Analizando…' : 'Analizar con IA' }}
+        </button>
+        <button class="button primary" type="button" :disabled="startingEvaluation || startingAiEvaluation" @click="startManualEvaluation">
+          {{ startingEvaluation ? 'Iniciando…' : 'Iniciar evaluación manual' }}
+        </button>
+      </div>
     </section>
 
     <p v-if="error" class="alert error">{{ error }}</p>
@@ -304,6 +341,14 @@ onMounted(load);
         </template>
 
         <!-- ─── Panel de valoraciones ──────────────────────────────────────── -->
+        <section v-if="selected.aiAnalyzedAt || selected.aiPossibleGrade !== null || selected.aiStrengths || selected.aiImprovements || selected.aiComparison" class="ai-analysis-summary">
+          <h3>Resultado del motor IA</h3>
+          <p v-if="selected.aiPossibleGrade !== null"><strong>Nota posible:</strong> {{ selected.aiPossibleGrade }}/100 <span class="muted">(sugerencia; no sustituye al docente)</span></p>
+          <p v-if="selected.aiStrengths"><strong>Qué hizo bien:</strong> {{ selected.aiStrengths }}</p>
+          <p v-if="selected.aiImprovements"><strong>Qué debe mejorar:</strong> {{ selected.aiImprovements }}</p>
+          <p v-if="selected.aiComparison"><strong>Comparación declaración/evidencia:</strong> {{ selected.aiComparison }}</p>
+        </section>
+
         <template v-if="selected.valuations.length > 0">
           <div class="valuation-panel-header">
             <h3>Valoración por criterio</h3>
@@ -332,6 +377,7 @@ onMounted(load);
             <div class="valuation-ai-hint" v-if="val.aiValue !== null">
               Sugerencia IA: <strong>{{ LEVEL_LABELS[val.aiValue] }}</strong>
             </div>
+            <p v-if="val.aiExplanation" class="valuation-ai-explanation">{{ val.aiExplanation }}</p>
 
             <div class="valuation-editor-fields">
               <label>

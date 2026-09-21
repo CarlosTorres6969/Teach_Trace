@@ -14,6 +14,7 @@ import {
 } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
 import { Valuation } from '../entities/valuation.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 import { DocumentRepositoryService } from './document-repository.service';
 
@@ -36,6 +37,7 @@ export class SubmissionsService {
     private readonly aiEngine: AiEngineService,
     @Optional() private readonly documentRepository?: DocumentRepositoryService,
     @Optional() private readonly aiConversations?: AiConversationsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async getStatus(studentId: number, activityId: number) {
@@ -52,6 +54,11 @@ export class SubmissionsService {
       fileName: submission?.fileName ?? null,
       evaluationStatus: submission?.evaluationStatus ?? EvaluationStatus.NOT_REQUESTED,
       manualReviewRequired: submission?.manualReviewRequired ?? false,
+      aiPossibleGrade: submission?.aiPossibleGrade ?? null,
+      aiStrengths: submission?.aiStrengths ?? '',
+      aiImprovements: submission?.aiImprovements ?? '',
+      aiComparison: submission?.aiComparison ?? '',
+      aiAnalyzedAt: submission?.aiAnalyzedAt ?? null,
     };
   }
 
@@ -145,6 +152,11 @@ export class SubmissionsService {
           fileSize: null,
           fileBase64: null,
           feedback: '',
+          aiPossibleGrade: null,
+          aiStrengths: '',
+          aiImprovements: '',
+          aiComparison: '',
+          aiAnalyzedAt: null,
           evaluationStatus: EvaluationStatus.NOT_REQUESTED,
           manualReviewRequired: false,
         });
@@ -154,6 +166,11 @@ export class SubmissionsService {
       submission.status = SubmissionStatus.SUBMITTED;
       submission.evaluationStatus = EvaluationStatus.NOT_REQUESTED;
       submission.manualReviewRequired = false;
+      submission.aiPossibleGrade = null;
+      submission.aiStrengths = '';
+      submission.aiImprovements = '';
+      submission.aiComparison = '';
+      submission.aiAnalyzedAt = null;
       submission.submittedAt = new Date();
       if (file) {
         submission.fileName = file.originalname;
@@ -217,6 +234,7 @@ export class SubmissionsService {
       evaluationStatus: submission.evaluationStatus,
       manualReviewRequired: submission.manualReviewRequired,
       submittedAt: submission.submittedAt,
+      aiPossibleGrade: submission.aiPossibleGrade,
     }));
   }
 
@@ -252,11 +270,17 @@ export class SubmissionsService {
       productUrl: submission.productUrl,
       fileName: submission.fileName,
       feedback: submission.feedback,
+      aiPossibleGrade: submission.aiPossibleGrade,
+      aiStrengths: submission.aiStrengths,
+      aiImprovements: submission.aiImprovements,
+      aiComparison: submission.aiComparison,
+      aiAnalyzedAt: submission.aiAnalyzedAt,
       valuations: valuations.map((valuation) => ({
         id: valuation.id,
         criterion: valuation.criterion,
         dimension: valuation.dimension,
         aiValue: valuation.aiValue,
+        aiExplanation: valuation.aiExplanation,
         teacherValue: valuation.teacherValue,
         teacherComment: valuation.teacherComment,
         confirmed: valuation.confirmed,
@@ -312,6 +336,8 @@ export class SubmissionsService {
     if (!activity.rubric?.criteria?.length) {
       throw new BadRequestException('Asocia una rúbrica antes de iniciar la evaluación');
     }
+    // PENDING/ANALYZED/MANUAL_REQUIRED actúan como idempotencia: una entrega no se vuelve a
+    // enviar al proveedor. Una nueva entrega (submit) reinicia NOT_REQUESTED y permite un nuevo análisis.
     const submissions = (await this.submissions.find({ where: { activity: { id: activityId } } }))
       .filter((submission) => submission.status !== SubmissionStatus.EVALUATED);
     let valuationsCreated = 0;
@@ -391,13 +417,41 @@ export class SubmissionsService {
 
   async evaluateActivity(teacherId: number, activityId: number) {
     const activity = await this.activitiesService.ownedActivity(teacherId, activityId, true);
-    const submissions = await this.submissions.find({ where: { activity: { id: activityId } } });
+    const submissions = (await this.submissions.find({ where: { activity: { id: activityId } } }))
+      .filter((submission) =>
+        submission.status !== SubmissionStatus.NOT_SUBMITTED &&
+        submission.status !== SubmissionStatus.EVALUATED &&
+        (!submission.evaluationStatus || submission.evaluationStatus === EvaluationStatus.NOT_REQUESTED),
+      );
     let pendingManualReview = 0;
+    let valuationsCreated = 0;
+    let implemented = false;
+    const failureReasons = new Set<string>();
     for (const submission of submissions) {
+      // Reclamacion condicional: dos peticiones concurrentes no pueden
+      // enviar el mismo documento al proveedor IA.
+      const repositoryWithUpdate = this.submissions as Repository<Submission> & {
+        update?: (criteria: unknown, partialEntity: unknown) => Promise<{ affected?: number }>;
+      };
+      if (repositoryWithUpdate.update) {
+        const claimed = await repositoryWithUpdate.update(
+          { id: submission.id, evaluationStatus: EvaluationStatus.NOT_REQUESTED },
+          {
+            status: SubmissionStatus.UNDER_REVIEW,
+            evaluationStatus: EvaluationStatus.PENDING,
+            manualReviewRequired: false,
+          },
+        );
+        if (!claimed.affected) continue;
+      } else {
+        submission.status = SubmissionStatus.UNDER_REVIEW;
+        submission.evaluationStatus = EvaluationStatus.PENDING;
+        submission.manualReviewRequired = false;
+        await this.submissions.save(submission);
+      }
       submission.status = SubmissionStatus.UNDER_REVIEW;
       submission.evaluationStatus = EvaluationStatus.PENDING;
       submission.manualReviewRequired = false;
-      await this.submissions.save(submission);
       const [logbook, declaration] = await Promise.all([
         this.logbooks.findOne({
           where: { student: { id: submission.student.id }, activity: { id: activityId } },
@@ -406,6 +460,9 @@ export class SubmissionsService {
           where: { student: { id: submission.student.id }, activity: { id: activityId } },
         }),
       ]);
+      const conversation = this.aiConversations
+        ? await this.aiConversations.getForTeacher(teacherId, submission.id)
+        : null;
       const result = await this.aiEngine.analyzeEvidence({
         logbook: logbook
           ? {
@@ -423,6 +480,10 @@ export class SubmissionsService {
               promptSummary: declaration.promptSummary,
             }
           : null,
+        conversation: conversation?.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
         product: {
           text: submission.productText,
           url: submission.productUrl,
@@ -431,13 +492,66 @@ export class SubmissionsService {
         rubric: activity.rubric?.criteria ?? [],
       });
       if (!result.implemented) {
+        failureReasons.add(result.reason);
         pendingManualReview += 1;
         submission.evaluationStatus = EvaluationStatus.MANUAL_REQUIRED;
         submission.manualReviewRequired = true;
       } else {
+        implemented = true;
+        const existingValuations = await this.valuations.find({
+          where: { submission: { id: submission.id } },
+        });
+        const byCriterion = new Map(existingValuations.map((valuation) => [valuation.criterion, valuation]));
+        const pendingValuations = result.valuations.map((suggestion) => {
+          const valuation = byCriterion.get(suggestion.criterion) ?? this.valuations.create({
+            activity,
+            submission,
+            dimension: suggestion.dimension,
+            criterion: suggestion.criterion,
+            teacherValue: null,
+            teacherComment: '',
+            confirmed: false,
+          });
+          if (!valuation.id) valuationsCreated += 1;
+          valuation.dimension = suggestion.dimension;
+          valuation.aiValue = suggestion.level;
+          valuation.aiExplanation = suggestion.explanation;
+          return valuation;
+        });
+        if (pendingValuations.length) await this.valuations.save(pendingValuations);
+        if (declaration && result.detectedUsageLevel !== null) {
+          declaration.detectedUsageLevel = result.detectedUsageLevel;
+          declaration.usageDiscrepancy = declaration.usageLevel !== declaration.detectedUsageLevel;
+          await this.declarations.save(declaration);
+        }
+        if (!submission.feedback.trim() && (result.feedback || result.comparison)) {
+          submission.feedback = [
+            result.feedback ? `Retroalimentación IA: ${result.feedback}` : '',
+          ].filter(Boolean).join('\n\n');
+        }
+        submission.aiPossibleGrade = result.possibleGrade;
+        submission.aiStrengths = result.strengths;
+        submission.aiImprovements = result.improvements;
+        submission.aiComparison = result.comparison;
+        submission.aiAnalyzedAt = new Date();
         submission.evaluationStatus = EvaluationStatus.ANALYZED;
+        // La IA solo propone; el docente debe revisar y confirmar cada criterio.
+        submission.manualReviewRequired = true;
+        pendingManualReview += 1;
       }
       await this.submissions.save(submission);
+      if (this.notificationsService) {
+        await this.notificationsService.dispatchAiAnalysisReady(
+          activity.teacher,
+          submission.student,
+          activity.title,
+          activity.id,
+          result.implemented ? result.possibleGrade : null,
+          result.implemented && declaration
+            ? declaration.usageLevel !== result.detectedUsageLevel
+            : false,
+        );
+      }
     }
     await this.activitiesService.setManualEvaluationRequired(
       activity,
@@ -446,9 +560,10 @@ export class SubmissionsService {
     return {
       activityId,
       processed: submissions.length,
-      valuationsCreated: 0,
+      valuationsCreated,
       pendingManualReview,
-      implemented: false,
+      implemented,
+      reason: failureReasons.size ? [...failureReasons].join('; ') : undefined,
     };
   }
 }

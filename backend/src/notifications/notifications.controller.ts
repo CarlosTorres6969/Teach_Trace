@@ -46,7 +46,7 @@ export class NotificationsController {
 
   /** SSE: stream de badge en tiempo real — el cliente abre esta conexión una sola vez */
   @Sse('badge-stream')
-  @Roles(UserRole.STUDENT)
+  @Roles(UserRole.STUDENT, UserRole.TEACHER)
   badgeStream(@CurrentUser() user: User, @Res() res: Response): Observable<{ data: string }> {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');

@@ -12,6 +12,7 @@ import {
 import { NotificationPreferencesService } from '../notification-preferences/notification-preferences.service';
 import { SavePushSubscriptionDto } from './notifications.dto';
 import { NotificationsSseService } from './notifications-sse.service';
+import { MailService } from '../mail/mail.service';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const webpush = require('web-push') as typeof import('web-push');
@@ -30,6 +31,7 @@ export class NotificationsService {
     private readonly pushSubscriptions: Repository<PushSubscriptionEntity>,
     private readonly preferencesService: NotificationPreferencesService,
     private readonly config: ConfigService,
+    private readonly mailService: MailService,
     @Inject(forwardRef(() => NotificationsSseService))
     private readonly sseService: NotificationsSseService,
   ) {
@@ -144,10 +146,84 @@ export class NotificationsService {
       await this.sendPush(student.id, title, message, `/student/activities/${activityId}/results`);
     }
 
+    const emailEnabled = await this.preferencesService.isChannelEnabled(
+      student.id,
+      NotificationEventType.GRADE_PUBLISHED,
+      NotificationChannel.EMAIL,
+    );
+    if (emailEnabled) {
+      await this.sendEmailSafely(() => this.mailService.sendGradePublishedEmail(
+        student.email,
+        student.name,
+        activityTitle,
+        activityId,
+      ));
+    }
+
+    return notification;
+  }
+
+  async dispatchAiAnalysisReady(
+    teacher: User,
+    student: User,
+    activityTitle: string,
+    activityId: number,
+    possibleGrade: number | null,
+    discrepancy: boolean,
+  ) {
+    const title = `Analisis IA listo: ${activityTitle}`;
+    const message = discrepancy
+      ? `La entrega de ${student.name} tiene una discrepancia en el uso declarado de IA.`
+      : `La entrega de ${student.name} ya tiene una sugerencia de evaluacion IA.`;
+    const notification = await this.notifications.save(
+      this.notifications.create({
+        user: teacher,
+        type: NotificationType.AI_ANALYSIS_READY,
+        title,
+        message,
+        read: false,
+        activityId,
+      }),
+    );
+    this.sseService.emit(teacher.id, await this.unreadCount(teacher.id));
+
+    const pushEnabled = await this.preferencesService.isChannelEnabled(
+      teacher.id,
+      NotificationEventType.AI_ANALYSIS_READY,
+      NotificationChannel.PUSH,
+    );
+    if (pushEnabled && this.vapidConfigured) {
+      await this.sendPush(teacher.id, title, message, `/teacher/activities/${activityId}/submissions`);
+    }
+
+    const emailEnabled = await this.preferencesService.isChannelEnabled(
+      teacher.id,
+      NotificationEventType.AI_ANALYSIS_READY,
+      NotificationChannel.EMAIL,
+    );
+    if (emailEnabled) {
+      await this.sendEmailSafely(() => this.mailService.sendAiAnalysisEmail(
+        teacher.email,
+        teacher.name,
+        student.name,
+        activityTitle,
+        activityId,
+        possibleGrade,
+        discrepancy,
+      ));
+    }
     return notification;
   }
 
   // ─── Internos ────────────────────────────────────────────────────────────────
+
+  private async sendEmailSafely(send: () => Promise<boolean>) {
+    try {
+      await send();
+    } catch (error: unknown) {
+      this.logger.error(`No fue posible enviar una notificacion por correo: ${String(error)}`);
+    }
+  }
 
   private async sendPush(userId: number, title: string, body: string, url: string) {
     const subscriptions = await this.pushSubscriptions.find({
