@@ -5,7 +5,7 @@ import { AiDeclarationsModule } from '../ai-declarations/ai-declarations.module'
 import { AuthModule } from '../auth/auth.module';
 import { Submission } from '../entities/submission.entity';
 import { Valuation } from '../entities/valuation.entity';
-import { AiDeclaration } from '../entities/ai-declaration.entity';
+import { AiConversation } from '../entities/ai-conversation.entity';
 import { Logbook } from '../entities/logbook.entity';
 import { LogbooksModule } from '../logbooks/logbooks.module';
 import { SubmissionsModule } from '../submissions/submissions.module';
@@ -19,7 +19,7 @@ import { StudentService } from './student.service';
     LogbooksModule,
     AiDeclarationsModule,
     SubmissionsModule,
-    TypeOrmModule.forFeature([Submission, Valuation, Logbook, AiDeclaration]),
+    TypeOrmModule.forFeature([Submission, Valuation, Logbook, AiConversation]),
   ],
   controllers: [StudentController],
   providers: [StudentService],

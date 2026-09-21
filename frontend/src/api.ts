@@ -23,7 +23,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
     throw new ApiError(message ?? 'No fue posible completar la solicitud', response.status);
   }
-  return response.json() as Promise<T>;
+  const body = await response.text();
+  if (!body.trim()) return null as T;
+  return JSON.parse(body) as T;
 }
 
 export async function apiBlob(path: string): Promise<Blob> {

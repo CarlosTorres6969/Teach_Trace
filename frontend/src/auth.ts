@@ -52,12 +52,17 @@ export async function restoreSession(force = false) {
 
   restorePromise = (async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/me`, { credentials: 'include' });
+      const response = await fetch(`${API_URL}/auth/session`, { credentials: 'include' });
       if (!response.ok) {
         clearSession(false);
         return;
       }
-      setSession((await response.json()) as User, false);
+      const session = (await response.json()) as { user: User | null };
+      if (!session.user) {
+        clearSession(false);
+        return;
+      }
+      setSession(session.user, false);
     } catch {
       clearSession(false);
     } finally {

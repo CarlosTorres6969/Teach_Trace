@@ -53,6 +53,7 @@ describe('TeachTrace API (integración)', () => {
     databaseSynchronize: process.env.DATABASE_SYNCHRONIZE,
     demoSeed: process.env.DEMO_SEED,
     jwtSecret: process.env.JWT_SECRET,
+    documentStorageProvider: process.env.DOCUMENT_STORAGE_PROVIDER,
   };
 
   async function requestRaw(path: string, init: RequestInit = {}) {
@@ -131,6 +132,7 @@ describe('TeachTrace API (integración)', () => {
     process.env.DATABASE_SYNCHRONIZE = 'true';
     process.env.DEMO_SEED = 'true';
     process.env.JWT_SECRET = 'clave-exclusiva-para-pruebas-de-integracion';
+    process.env.DOCUMENT_STORAGE_PROVIDER = 'filesystem';
 
     const { AppModule } = await import('./app.module');
     app = await NestFactory.create(AppModule, { logger: false });
@@ -181,6 +183,7 @@ describe('TeachTrace API (integración)', () => {
     restore('DATABASE_SYNCHRONIZE', previousEnvironment.databaseSynchronize);
     restore('DEMO_SEED', previousEnvironment.demoSeed);
     restore('JWT_SECRET', previousEnvironment.jwtSecret);
+    restore('DOCUMENT_STORAGE_PROVIDER', previousEnvironment.documentStorageProvider);
   });
 
   it('R4: protege endpoints y separa los roles en la API real', async () => {
@@ -226,6 +229,20 @@ describe('TeachTrace API (integración)', () => {
       expect.stringContaining('SameSite=Strict'),
     );
     expect(login.response.headers.get('set-cookie')).toEqual(expect.stringContaining('Path=/api'));
+  });
+
+  it('consulta opcionalmente la sesión sin generar 401 para visitantes', async () => {
+    const anonymous = await request('/api/auth/session');
+    expect(anonymous.response.status).toBe(200);
+    expect(anonymous.body).toEqual({ user: null });
+
+    const authenticated = await request('/api/auth/session', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(authenticated.response.status).toBe(200);
+    expect(authenticated.body).toMatchObject({
+      user: { email: 'docente@unah.edu.hn', role: 'teacher' },
+    });
   });
 
   it('rechaza el inicio de sesión de un docente inactivo', async () => {
@@ -3003,7 +3020,13 @@ describe('TeachTrace API (integración)', () => {
       completionPercentage: 0,
       logbookStatus: 'not_started',
       isNew: true,
-      missingSections: ['bitácora', 'declaración IA', 'producto final'],
+      missingSections: [
+        'ideas iniciales',
+        'interacción con IA',
+        'validaciones y decisiones',
+        'reflexión final',
+        'entrega final',
+      ],
     });
 
     const afterCreateCount = await request('/api/student/activities/new-count', {
@@ -3051,12 +3074,17 @@ describe('TeachTrace API (integración)', () => {
         promptSummary: 'Solicité retroalimentación',
       }),
     });
-    const atSeventy = await request('/api/student/activities?filter=all', {
+    const beforeConversation = await request('/api/student/activities?filter=all', {
       headers: sessionHeaders(student.sessionCookie),
     });
     expect(
-      (atSeventy.body as Array<Record<string, unknown>>).find((item) => item.id === createdId),
-    ).toMatchObject({ completionPercentage: 70, missingSections: ['producto final'] });
+      (beforeConversation.body as Array<Record<string, unknown>>).find(
+        (item) => item.id === createdId,
+      ),
+    ).toMatchObject({
+      completionPercentage: 60,
+      missingSections: ['interacción con IA', 'entrega final'],
+    });
 
     await request(`/api/student/activities/${createdId}/ai-conversation`, {
       method: 'PUT',
@@ -3068,6 +3096,15 @@ describe('TeachTrace API (integración)', () => {
         ],
       }),
     });
+
+    const beforeSubmission = await request('/api/student/activities?filter=all', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(
+      (beforeSubmission.body as Array<Record<string, unknown>>).find(
+        (item) => item.id === createdId,
+      ),
+    ).toMatchObject({ completionPercentage: 80, missingSections: ['entrega final'] });
 
     const form = new FormData();
     form.set('productText', 'Producto final de prueba');

@@ -7,7 +7,8 @@
     "start": "node dist/main.js",
     "db:migrate:sqlite": "npm run build && node dist/database/migrate-sqlite-to-postgres.js",
     "db:verify:postgres": "npm run build && node dist/database/verify-postgres.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "verify:azure-storage": "node scripts/verify-azure-storage.cjs"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.33.0",

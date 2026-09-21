@@ -20,8 +20,10 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request & { user?: unknown; session?: AuthSession }>();
+    const optionalSessionCheck = this.isOptionalSessionRoute(request.path);
     const token = this.accessToken(request);
     if (!token) {
+      if (optionalSessionCheck) return true;
       this.clearSessionCookie(request);
       throw new UnauthorizedException('Sesión no válida');
     }
@@ -46,14 +48,24 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       this.clearSessionCookie(request);
+      if (optionalSessionCheck) {
+        delete request.user;
+        delete request.session;
+        return true;
+      }
       if (error instanceof UnauthorizedException || error instanceof ForbiddenException) throw error;
       throw new UnauthorizedException('Sesión no válida');
     }
   }
 
+  private isOptionalSessionRoute(path: string): boolean {
+    return path === '/api/auth/session';
+  }
+
   private isTemporaryPasswordRoute(path: string): boolean {
     return [
       '/api/auth/me',
+      '/api/auth/session',
       '/api/auth/logout',
       '/api/auth/temporary-password/change',
     ].includes(path);
