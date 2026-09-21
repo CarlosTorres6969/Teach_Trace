@@ -94,7 +94,7 @@ export class MailService {
     return true;
   }
 
-  async sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
+  async sendPasswordResetEmail(email: string, resetUrl: string): Promise<boolean> {
     const result = await this.sendEmail({
       to: email,
       subject: 'Recuperación de contraseña de TeachTrace',
@@ -113,9 +113,10 @@ export class MailService {
       if (this.config.get<string>('NODE_ENV', 'development') !== 'production') {
         this.logger.warn(`MAIL_ENABLED=false. Enlace de recuperación para ${email}: ${resetUrl}`);
       }
-      return;
+      return false;
     }
     this.logger.log('SMTP aceptó el correo de recuperación para su entrega');
+    return true;
   }
 
   async sendGradePublishedEmail(

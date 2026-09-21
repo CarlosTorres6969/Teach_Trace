@@ -7,12 +7,17 @@ const form = reactive({ email: '' });
 const loading = ref(false);
 const submitted = ref(false);
 const error = ref('');
+const developmentResetUrl = ref('');
 
 async function requestReset() {
   error.value = '';
   loading.value = true;
   try {
-    await api('/auth/password-reset/request', { method: 'POST', body: JSON.stringify(form) });
+    const result = await api<{ resetUrl?: string }>('/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify(form),
+    });
+    developmentResetUrl.value = result.resetUrl ?? '';
     submitted.value = true;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No fue posible procesar la solicitud';
@@ -39,6 +44,10 @@ async function requestReset() {
         <h2>Recuperar contraseña</h2>
         <p class="muted">Escribe tu correo institucional y te enviaremos un enlace de recuperación.</p>
         <div v-if="submitted" class="alert success">Si el correo está registrado, recibirás un enlace para recuperar tu contraseña. Revisa también la carpeta de correo no deseado.</div>
+        <div v-if="submitted && developmentResetUrl" class="development-reset-link">
+          <strong>Enlace de desarrollo:</strong>
+          <a :href="developmentResetUrl">Continuar con la recuperaciÃ³n</a>
+        </div>
         <form v-else @submit.prevent="requestReset">
           <label>Correo institucional<input v-model.trim="form.email" type="email" autocomplete="email" required /></label>
           <p v-if="error" class="alert error">{{ error }}</p>
@@ -96,6 +105,7 @@ async function requestReset() {
 .login-card .button.primary:hover:not(:disabled) { background: #e0941a; }
 .alert { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
 .alert.success { margin-top: 1.75rem; }
+.development-reset-link { display: grid; gap: .45rem; margin-top: 1rem; padding: .85rem; border: 1px dashed var(--green); border-radius: 6px; line-height: 1.5; overflow-wrap: anywhere; }
 .back-link { display: block; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); text-align: center; line-height: 1.5; }
 .back-link:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
 @media (max-width: 800px) {

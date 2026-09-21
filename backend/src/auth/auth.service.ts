@@ -102,19 +102,26 @@ export class AuthService {
         const publicAppUrl = (this.config?.get<string>('PUBLIC_APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '');
         const resetUrl = `${publicAppUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
-        void this.deliverPasswordResetEmail(token.id, user.email, resetUrl);
+        const delivered = await this.deliverPasswordResetEmail(user.email, resetUrl);
+        if (!delivered && this.config?.get<string>('NODE_ENV', 'development') !== 'production') {
+          return { message: RESET_REQUEST_MESSAGE, resetUrl };
+        }
       }
     }
 
     return { message: RESET_REQUEST_MESSAGE };
   }
 
-  private async deliverPasswordResetEmail(tokenId: string, email: string, resetUrl: string) {
+  private async deliverPasswordResetEmail(email: string, resetUrl: string): Promise<boolean> {
     try {
-      await this.mailService?.sendPasswordResetEmail(email, resetUrl);
+      return await this.mailService?.sendPasswordResetEmail(email, resetUrl) ?? false;
     } catch (error) {
       this.logger.error('No fue posible enviar el correo de recuperación', error instanceof Error ? error.stack : undefined);
-      await this.resetTokens?.delete(tokenId);
+      if (this.config?.get<string>('NODE_ENV', 'development') !== 'production') {
+        this.logger.warn(`Enlace de recuperaciÃ³n disponible para pruebas: ${resetUrl}`);
+      }
+      // Conservamos el token: un fallo temporal de SMTP no debe invalidar la recuperaciÃ³n.
+      return false;
     }
   }
 
