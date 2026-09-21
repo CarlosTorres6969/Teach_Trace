@@ -23,7 +23,7 @@ describe('Configuración de seguridad', () => {
     expect(sessionCookieOptions(config({ NODE_ENV: 'production' }))).toMatchObject({
       httpOnly: true,
       secure: true,
-      sameSite: 'strict',
+      sameSite: 'none',
       path: '/api',
     });
     expect(sessionCookieOptions(config({ NODE_ENV: 'development' })).secure).toBe(false);
