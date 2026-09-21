@@ -97,6 +97,39 @@ describe('Auth - Session management', () => {
     clearSession(false);
     expect(auth.user).toBeNull();
   });
+
+  it('restaura la sesión mediante el endpoint opcional que no genera 401 anónimo', async () => {
+    const user = createStudentUser();
+    auth.initialized = false;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ user }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await restoreSession();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/session'),
+      { credentials: 'include' },
+    );
+    expect(auth.user).toEqual(user);
+    vi.unstubAllGlobals();
+  });
+
+  it('inicializa como anónimo cuando no existe una sesión activa', async () => {
+    auth.initialized = false;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ user: null }),
+    }));
+
+    await restoreSession();
+
+    expect(auth.user).toBeNull();
+    expect(auth.initialized).toBe(true);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('Router - Role-based access control (logic)', () => {

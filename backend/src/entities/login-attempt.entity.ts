@@ -15,7 +15,7 @@ export class LoginAttempt {
   @Column({ type: 'int', default: 0 })
   count: number;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   lockedUntil: Date | null;
 
   @Column()

@@ -35,6 +35,27 @@ describe('JwtAuthGuard', () => {
     expect(currentRequest).toMatchObject({ user, session });
   });
 
+  it('permite consultar el estado de sesión sin cookie y sin responder 401', async () => {
+    const currentRequest = {
+      headers: {},
+      path: '/api/auth/session',
+      res: { clearCookie: jest.fn() },
+    };
+    const guard = new JwtAuthGuard({} as never, {} as never, config);
+
+    await expect(guard.canActivate(context(currentRequest))).resolves.toBe(true);
+    expect(currentRequest.res.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it('trata una cookie inválida como sesión anónima en la consulta opcional', async () => {
+    const currentRequest = { ...request(), path: '/api/auth/session' };
+    const jwt = { verifyAsync: jest.fn().mockRejectedValue(new Error('firma inválida')) };
+    const guard = new JwtAuthGuard(jwt as never, {} as never, config);
+
+    await expect(guard.canActivate(context(currentRequest))).resolves.toBe(true);
+    expect(currentRequest.res.clearCookie).toHaveBeenCalled();
+  });
+
   it('rechaza y limpia la cookie de una sesión expirada', async () => {
     const currentRequest = request();
     const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };

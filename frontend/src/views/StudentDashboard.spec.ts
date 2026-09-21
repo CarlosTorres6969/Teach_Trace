@@ -40,9 +40,9 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
         finalScore: null,
         academicClass: { id: 3, name: 'Programación II', code: 'IS-210' },
         submissionStatus: 'not_submitted',
-        completionPercentage: 40,
-        missingSections: ['declaración IA', 'producto final'],
-        logbookStatus: 'complete',
+        completionPercentage: 60,
+        missingSections: ['reflexión final', 'entrega final'],
+        logbookStatus: 'in_progress',
         isNew: true,
       },
       {
@@ -81,8 +81,8 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
     expect(wrapper.text()).toContain('Proyecto urgente');
     expect(wrapper.text()).toContain('Menos de 48 h');
     expect(wrapper.text()).toContain('Nuevo');
-    expect(wrapper.text()).toContain('40%');
-    expect(wrapper.text()).toContain('Faltan: declaración IA, producto final');
+    expect(wrapper.text()).toContain('60%');
+    expect(wrapper.text()).toContain('Faltan: reflexión final, entrega final');
     expect(wrapper.text()).not.toContain('Ensayo completado');
 
     await wrapper.get('.completed-toggle').trigger('click');

@@ -12,6 +12,6 @@ export class AuthSession {
   @Column()
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   revokedAt: Date | null;
 }

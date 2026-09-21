@@ -6,7 +6,10 @@ import {
   StudentActivityFilter,
 } from '../activities/activities.service';
 import { AiDeclarationsService } from '../ai-declarations/ai-declarations.service';
-import { AiDeclaration } from '../entities/ai-declaration.entity';
+import {
+  AiConversation,
+  AiMessageRole,
+} from '../entities/ai-conversation.entity';
 import { Logbook } from '../entities/logbook.entity';
 import { Submission, SubmissionStatus } from '../entities/submission.entity';
 import { Valuation } from '../entities/valuation.entity';
@@ -30,21 +33,22 @@ export class StudentService {
     private readonly valuations: Repository<Valuation>,
     @InjectRepository(Logbook)
     private readonly logbooks: Repository<Logbook>,
-    @InjectRepository(AiDeclaration)
-    private readonly declarations: Repository<AiDeclaration>,
+    @InjectRepository(AiConversation)
+    private readonly conversations: Repository<AiConversation>,
   ) {}
 
   async listActivities(studentId: number, requestedFilter?: string) {
     const filter = (requestedFilter ?? 'all') as StudentActivityFilter;
     const activities = await this.activitiesService.listForStudent(studentId, filter);
     const activityIds = activities.map((activity) => activity.id);
-    const [logbooks, declarations, submissions] = activityIds.length
+    const [logbooks, conversations, submissions] = activityIds.length
       ? await Promise.all([
           this.logbooks.find({
             where: { student: { id: studentId }, activity: { id: In(activityIds) } },
           }),
-          this.declarations.find({
+          this.conversations.find({
             where: { student: { id: studentId }, activity: { id: In(activityIds) } },
+            relations: { messages: true },
           }),
           this.submissions.find({
             where: { student: { id: studentId }, activity: { id: In(activityIds) } },
@@ -52,8 +56,8 @@ export class StudentService {
         ])
       : [[], [], []];
     const logbooksByActivity = new Map(logbooks.map((item) => [item.activity.id, item]));
-    const declarationsByActivity = new Map(
-      declarations.map((item) => [item.activity.id, item]),
+    const conversationsByActivity = new Map(
+      conversations.map((item) => [item.activity.id, item]),
     );
     const submissionsByActivity = new Map(
       submissions.map((item) => [item.activity.id, item]),
@@ -63,7 +67,7 @@ export class StudentService {
         const submission = submissionsByActivity.get(activity.id);
         const progress = this.completionProgress(
           logbooksByActivity.get(activity.id),
-          declarationsByActivity.get(activity.id),
+          conversationsByActivity.get(activity.id),
           submission,
         );
         const finalScore = await this.getActivityFinalScore(studentId, activity.id);
@@ -188,42 +192,54 @@ export class StudentService {
 
   private completionProgress(
     logbook?: Logbook,
-    declaration?: AiDeclaration,
+    conversation?: AiConversation,
     submission?: Submission,
   ) {
-    const logbookFields = logbook
-      ? [
-          logbook.initialIdeas,
-          logbook.prompts,
-          logbook.validationsAndDecisions,
-          logbook.finalReflection,
-        ]
-      : [];
-    const completedLogbookFields = logbookFields.filter((value) => value.trim().length > 0).length;
-    const logbookComplete = completedLogbookFields === 4;
-    const declarationComplete = Boolean(
-      declaration?.toolName.trim() &&
-        declaration.usageLevel &&
-        declaration.purpose.trim() &&
-        declaration.promptSummary.trim(),
+    const messages = conversation?.messages ?? [];
+    const conversationComplete = Boolean(
+      messages.length > 0 &&
+        messages.every((message) => message.content.trim()) &&
+        messages.some(
+          (message) => message.role === AiMessageRole.STUDENT && message.content.trim(),
+        ) &&
+        messages.some(
+          (message) => message.role === AiMessageRole.AI && message.content.trim(),
+        ),
     );
     const productDelivered = Boolean(
       submission && submission.status !== SubmissionStatus.NOT_SUBMITTED,
     );
-    const missingSections: string[] = [];
-    if (!logbookComplete) missingSections.push('bitácora');
-    if (!declarationComplete) missingSections.push('declaración IA');
-    if (!productDelivered) missingSections.push('producto final');
+    const steps = [
+      { name: 'ideas iniciales', complete: Boolean(logbook?.initialIdeas.trim()) },
+      {
+        name: 'interacción con IA',
+        complete: Boolean(logbook?.prompts.trim()) && conversationComplete,
+      },
+      {
+        name: 'validaciones y decisiones',
+        complete: Boolean(logbook?.validationsAndDecisions.trim()),
+      },
+      { name: 'reflexión final', complete: Boolean(logbook?.finalReflection.trim()) },
+      { name: 'entrega final', complete: productDelivered },
+    ];
+    const completedLogbookSteps = steps.slice(0, 4).filter((step) => step.complete).length;
+    const logbookStarted = Boolean(
+      logbook &&
+        [
+          logbook.initialIdeas,
+          logbook.prompts,
+          logbook.validationsAndDecisions,
+          logbook.finalReflection,
+        ].some((value) => value.trim()),
+    ) || messages.some((message) => message.content.trim());
+    const completedSteps = steps.filter((step) => step.complete).length;
     return {
-      percentage:
-        (logbookComplete ? 40 : 0) +
-        (declarationComplete ? 30 : 0) +
-        (productDelivered ? 30 : 0),
-      missingSections,
+      percentage: completedSteps * 20,
+      missingSections: steps.filter((step) => !step.complete).map((step) => step.name),
       logbookStatus:
-        completedLogbookFields === 4
+        completedLogbookSteps === 4
           ? 'complete'
-          : completedLogbookFields > 0
+          : logbookStarted
             ? 'in_progress'
             : 'not_started',
     };

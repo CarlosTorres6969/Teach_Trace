@@ -79,6 +79,12 @@ export class AuthController {
     return this.authService.safeUser(user);
   }
 
+  @Get('session')
+  @UseGuards(JwtAuthGuard)
+  session(@CurrentUser() user?: User) {
+    return { user: user ? this.authService.safeUser(user) : null };
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   async logout(

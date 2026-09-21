@@ -15,7 +15,7 @@ export class PasswordResetToken {
   @Column()
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   usedAt: Date | null;
 
   @Column()
