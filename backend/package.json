@@ -7,6 +7,7 @@
     "start": "node dist/main.js",
     "db:migrate:sqlite": "npm run build && node dist/database/migrate-sqlite-to-postgres.js",
     "db:verify:postgres": "npm run build && node dist/database/verify-postgres.js",
+    "db:enable-rls": "node scripts/apply-rls.cjs",
     "test": "jest --runInBand",
     "verify:azure-storage": "node scripts/verify-azure-storage.cjs"
   },
