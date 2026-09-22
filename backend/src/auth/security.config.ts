@@ -20,15 +20,23 @@ export function requiredJwtSecret(config: ConfigService): string {
 }
 
 export function sessionCookieOptions(config: ConfigService): CookieOptions {
-  const production = config.get<string>('NODE_ENV') === 'production';
+  const production =
+    config.get<string>('NODE_ENV') === 'production' ||
+    config.get<string>('VERCEL_ENV') === 'production';
   const configuredSameSite = config.get<string>('SESSION_COOKIE_SAMESITE')?.toLowerCase();
   const sameSite = configuredSameSite === 'strict' || configuredSameSite === 'lax' || configuredSameSite === 'none'
     ? configuredSameSite
-    : production ? 'none' : 'strict';
+    : production ? 'lax' : 'strict';
+  const configuredSecure = config.get<string>('SESSION_COOKIE_SECURE')?.toLowerCase();
+  const secure = configuredSecure === 'true'
+    ? true
+    : configuredSecure === 'false'
+      ? false
+      : production || sameSite === 'none';
 
   return {
     httpOnly: true,
-    secure: production || sameSite === 'none',
+    secure,
     sameSite,
     path: '/api',
   };
