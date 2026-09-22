@@ -71,6 +71,20 @@ const entities = [
         ) === 'true';
 
         if (databaseUrl && !forceSqlite) {
+          // Vercel/serverless instances must keep a very small pool. Each
+          // warm function can have its own pool and Supabase limits the
+          // number of clients per pooler, so the default is intentionally
+          // conservative and configurable for persistent deployments.
+          const parsePositiveInt = (name: string, fallback: number) => {
+            const value = Number.parseInt(config.get<string>(name, String(fallback)), 10);
+            return Number.isFinite(value) && value > 0 ? value : fallback;
+          };
+
+          const poolMax = parsePositiveInt(
+            'DB_POOL_MAX',
+            config.get<string>('NODE_ENV') === 'production' ? 2 : 10,
+          );
+
           return {
             type: 'postgres' as const,
             url: databaseUrl,
@@ -79,6 +93,12 @@ const entities = [
               config.get<string>('DATABASE_SSL', 'true') === 'true'
                 ? { rejectUnauthorized: false }
                 : false,
+            extra: {
+              max: poolMax,
+              idleTimeoutMillis: parsePositiveInt('DB_IDLE_TIMEOUT_MS', 10_000),
+              connectionTimeoutMillis: parsePositiveInt('DB_CONNECTION_TIMEOUT_MS', 10_000),
+              allowExitOnIdle: true,
+            },
             entities,
             synchronize,
           };

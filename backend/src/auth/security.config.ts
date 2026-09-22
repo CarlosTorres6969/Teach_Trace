@@ -28,7 +28,7 @@ export function sessionCookieOptions(config: ConfigService): CookieOptions {
 
   return {
     httpOnly: true,
-    secure: production,
+    secure: production || sameSite === 'none',
     sameSite,
     path: '/api',
   };
