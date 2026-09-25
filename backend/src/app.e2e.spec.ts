@@ -54,6 +54,13 @@ describe('TeachTrace API (integración)', () => {
     demoSeed: process.env.DEMO_SEED,
     jwtSecret: process.env.JWT_SECRET,
     documentStorageProvider: process.env.DOCUMENT_STORAGE_PROVIDER,
+    mailEnabled: process.env.MAIL_ENABLED,
+    aiApiUrl: process.env.AI_API_URL,
+    aiApiKey: process.env.AI_API_KEY,
+    aiModel: process.env.AI_MODEL,
+    vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
+    vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
+    vapidSubject: process.env.VAPID_SUBJECT,
   };
 
   async function requestRaw(path: string, init: RequestInit = {}) {
@@ -133,6 +140,15 @@ describe('TeachTrace API (integración)', () => {
     process.env.DEMO_SEED = 'true';
     process.env.JWT_SECRET = 'clave-exclusiva-para-pruebas-de-integracion';
     process.env.DOCUMENT_STORAGE_PROVIDER = 'filesystem';
+    // Las pruebas de integración deben ser deterministas y no enviar correos,
+    // llamar proveedores IA ni publicar notificaciones push reales.
+    process.env.MAIL_ENABLED = 'false';
+    delete process.env.AI_API_URL;
+    delete process.env.AI_API_KEY;
+    delete process.env.AI_MODEL;
+    delete process.env.VAPID_PUBLIC_KEY;
+    delete process.env.VAPID_PRIVATE_KEY;
+    delete process.env.VAPID_SUBJECT;
 
     const { AppModule } = await import('./app.module');
     app = await NestFactory.create(AppModule, { logger: false });
@@ -184,6 +200,13 @@ describe('TeachTrace API (integración)', () => {
     restore('DEMO_SEED', previousEnvironment.demoSeed);
     restore('JWT_SECRET', previousEnvironment.jwtSecret);
     restore('DOCUMENT_STORAGE_PROVIDER', previousEnvironment.documentStorageProvider);
+    restore('MAIL_ENABLED', previousEnvironment.mailEnabled);
+    restore('AI_API_URL', previousEnvironment.aiApiUrl);
+    restore('AI_API_KEY', previousEnvironment.aiApiKey);
+    restore('AI_MODEL', previousEnvironment.aiModel);
+    restore('VAPID_PUBLIC_KEY', previousEnvironment.vapidPublicKey);
+    restore('VAPID_PRIVATE_KEY', previousEnvironment.vapidPrivateKey);
+    restore('VAPID_SUBJECT', previousEnvironment.vapidSubject);
   });
 
   it('R4: protege endpoints y separa los roles en la API real', async () => {
@@ -2704,11 +2727,17 @@ describe('TeachTrace API (integración)', () => {
     const anonSse = await request('/api/notifications/badge-stream');
     expect(anonSse.response.status).toBe(401);
 
-    // Docente debe recibir 403
-    const teacherSse = await request('/api/notifications/badge-stream', {
+    // El docente tambiÃ©n tiene bandeja de notificaciones. Comprobamos que el
+    // stream estÃ¡ autenticado y cerramos la conexiÃ³n permanente del SSE.
+    const controller = new AbortController();
+    const teacherSse = await fetch(`${baseUrl}/api/notifications/badge-stream`, {
       headers: sessionHeaders(teacher.sessionCookie),
+      signal: controller.signal,
     });
-    expect(teacherSse.response.status).toBe(403);
+    expect(teacherSse.status).toBe(200);
+    expect(teacherSse.headers.get('content-type')).toContain('text/event-stream');
+    await teacherSse.body?.cancel();
+    controller.abort();
   });
 
   it('HU-34: el stream autenticado emite el nuevo conteo al publicar una calificación', async () => {
