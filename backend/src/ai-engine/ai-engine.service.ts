@@ -94,7 +94,6 @@ export class AiEngineService {
         },
         body: JSON.stringify({
           model,
-          temperature: 0,
           messages: [
             {
               role: 'system',
