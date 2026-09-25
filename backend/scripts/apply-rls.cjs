@@ -16,6 +16,22 @@ const client = new Client({
 
 async function main() {
   await client.connect();
+
+  const enumExists = await client.query(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_type
+      JOIN pg_namespace ON pg_namespace.oid = pg_type.typnamespace
+      WHERE pg_namespace.nspname = 'public'
+        AND pg_type.typname = 'notification_preferences_eventtype_enum'
+    ) AS exists
+  `);
+  if (enumExists.rows[0]?.exists) {
+    await client.query(
+      "ALTER TYPE public.notification_preferences_eventtype_enum ADD VALUE IF NOT EXISTS 'AI_ANALYSIS_READY'",
+    );
+  }
+
   await client.query(sql);
 
   const result = await client.query(`

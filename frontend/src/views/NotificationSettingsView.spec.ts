@@ -13,6 +13,7 @@ const defaultPreferences = [
   'GRADE_PUBLISHED',
   'ACTIVITY_DUE_SOON',
   'SUBMISSION_STATUS_CHANGED',
+  'AI_ANALYSIS_READY',
 ].map((eventType) => ({ eventType, channels: ['EMAIL', 'PUSH', 'IN_APP'] }));
 
 describe('NotificationSettingsView', () => {
@@ -32,12 +33,13 @@ describe('NotificationSettingsView', () => {
     });
     await flushPromises();
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(4);
+    expect(wrapper.findAll('tbody tr')).toHaveLength(5);
     expect(wrapper.text()).toContain('Nueva actividad');
     expect(wrapper.text()).toContain('Calificación publicada');
 
     const inAppCheckboxes = wrapper.findAll('input[aria-label$="En plataforma"]');
-    expect(inAppCheckboxes).toHaveLength(4);
+    expect(wrapper.text()).toContain('Analisis IA listo');
+    expect(inAppCheckboxes).toHaveLength(5);
     for (const checkbox of inAppCheckboxes) {
       expect((checkbox.element as HTMLInputElement).checked).toBe(true);
       expect(checkbox.attributes('disabled')).toBeDefined();

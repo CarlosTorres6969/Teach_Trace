@@ -32,6 +32,11 @@ const eventDefinitions: Array<{
     label: 'Estado de entrega actualizado',
     description: 'Cuando cambie el estado de revisión de uno de tus productos.',
   },
+  {
+    type: 'AI_ANALYSIS_READY',
+    label: 'Analisis IA listo',
+    description: 'Cuando el analisis auxiliar de IA termine y quede disponible para revision.',
+  },
 ];
 
 const channels: Array<{ type: NotificationChannel; label: string }> = [
