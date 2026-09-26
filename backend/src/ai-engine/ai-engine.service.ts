@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import { RubricCriterion } from '../entities/rubric.entity';
 
 export type AcademicEvidence = {
@@ -217,12 +217,19 @@ export class AiEngineService {
     if (document.mimeType !== 'application/pdf') {
       throw new Error('Formato de documento no compatible');
     }
-    const parser = new PDFParse({ data: new Uint8Array(document.content) });
+    const result = await pdfParse(document.content);
+    if (typeof result.text === 'string') return result.text.trim();
+
+    // Compatibilidad con el adaptador de parser usado por versiones previas.
+    const parser = result as unknown as {
+      getText?: () => Promise<{ text?: unknown }>;
+      destroy?: () => Promise<void>;
+    };
     try {
-      const result = await parser.getText();
-      return result.text.trim();
+      const extracted = await parser.getText?.();
+      return typeof extracted?.text === 'string' ? extracted.text.trim() : '';
     } finally {
-      await parser.destroy();
+      await parser.destroy?.();
     }
   }
 

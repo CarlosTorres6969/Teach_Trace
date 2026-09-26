@@ -1,7 +1,7 @@
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import { AiEngineService } from './ai-engine.service';
 
-jest.mock('pdf-parse', () => ({ PDFParse: jest.fn() }));
+jest.mock('pdf-parse', () => ({ __esModule: true, default: jest.fn() }));
 
 const rubric = [{
   name: 'Argumentación',
@@ -120,7 +120,7 @@ describe('AiEngineService', () => {
 
   it('extrae el texto del PDF y lo incorpora al análisis sin enviar el nombre del archivo', async () => {
     const destroy = jest.fn().mockResolvedValue(undefined);
-    (PDFParse as unknown as jest.Mock).mockImplementation(() => ({
+    (pdfParse as unknown as jest.Mock).mockImplementation(() => ({
       getText: jest.fn().mockResolvedValue({ text: 'Contenido académico dentro del PDF' }),
       destroy,
     }));
