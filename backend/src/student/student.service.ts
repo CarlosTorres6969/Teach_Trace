@@ -550,7 +550,9 @@ export class StudentService {
         confirmed: v.confirmed,
       })),
       finalScore,
-      feedback: submission?.feedback ?? '',
+      // La retroalimentación —incluida cualquier sugerencia IA— se publica
+      // únicamente después de la confirmación explícita del docente.
+      feedback: isEvaluated ? submission?.feedback ?? '' : '',
     };
   }
 }

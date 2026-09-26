@@ -1,9 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
 import { AiConversationsService } from '../ai-conversations/ai-conversations.service';
-import { AiEngineService } from '../ai-engine/ai-engine.service';
+import { AiAnalysisResult, AiEngineService } from '../ai-engine/ai-engine.service';
 import { normalizeAiDeclarationText } from '../ai-declarations/update-ai-declaration.dto';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Logbook } from '../entities/logbook.entity';
@@ -25,8 +32,12 @@ export type UploadedAcademicFile = {
   buffer: Buffer;
 };
 
+const MAX_SUBMISSION_FILE_SIZE = 10 * 1024 * 1024;
+
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     @InjectRepository(Submission) private readonly submissions: Repository<Submission>,
     @InjectRepository(Logbook) private readonly logbooks: Repository<Logbook>,
@@ -54,7 +65,6 @@ export class SubmissionsService {
       fileName: submission?.fileName ?? null,
       evaluationStatus: submission?.evaluationStatus ?? EvaluationStatus.NOT_REQUESTED,
       manualReviewRequired: submission?.manualReviewRequired ?? false,
-      aiPossibleGrade: submission?.aiPossibleGrade ?? null,
       aiStrengths: submission?.aiStrengths ?? '',
       aiImprovements: submission?.aiImprovements ?? '',
       aiComparison: submission?.aiComparison ?? '',
@@ -117,6 +127,12 @@ export class SubmissionsService {
     }
     if (
       file &&
+      (file.size > MAX_SUBMISSION_FILE_SIZE || file.buffer.length > MAX_SUBMISSION_FILE_SIZE)
+    ) {
+      throw new PayloadTooLargeException('El archivo de la entrega no puede superar 10 MB');
+    }
+    if (
+      file &&
       (file.mimetype !== 'application/pdf' ||
         !file.originalname.toLowerCase().endsWith('.pdf') ||
         file.buffer.subarray(0, 5).toString('ascii') !== '%PDF-')
@@ -139,6 +155,7 @@ export class SubmissionsService {
     await this.dataSource.transaction(async (manager) => {
       const submissionRepository = manager.getRepository(Submission);
       const declarationRepository = manager.getRepository(AiDeclaration);
+      const valuationRepository = manager.getRepository(Valuation);
       let submission = await submissionRepository.findOne({
         where: { student: { id: student.id }, activity: { id: activityId } },
       });
@@ -171,6 +188,8 @@ export class SubmissionsService {
       submission.aiImprovements = '';
       submission.aiComparison = '';
       submission.aiAnalyzedAt = null;
+      submission.feedback = '';
+      submission.notificationSentAt = null;
       submission.submittedAt = new Date();
       if (file) {
         submission.fileName = file.originalname;
@@ -180,6 +199,7 @@ export class SubmissionsService {
         submission.fileBase64 = storedDocument ? null : file.buffer.toString('base64');
       }
       transactionSubmission = await submissionRepository.save(submission);
+      await valuationRepository.delete({ submission: { id: transactionSubmission.id } });
 
       let declaration = await declarationRepository.findOne({
         where: { student: { id: student.id }, activity: { id: activityId } },
@@ -196,9 +216,8 @@ export class SubmissionsService {
       declaration.usageLevel = input.usageLevel;
       declaration.purpose = purpose;
       declaration.promptSummary = promptSummary;
-      declaration.usageDiscrepancy =
-        declaration.detectedUsageLevel !== null &&
-        declaration.detectedUsageLevel !== declaration.usageLevel;
+      declaration.detectedUsageLevel = null;
+      declaration.usageDiscrepancy = false;
       await declarationRepository.save(declaration);
     });
 
@@ -234,7 +253,6 @@ export class SubmissionsService {
       evaluationStatus: submission.evaluationStatus,
       manualReviewRequired: submission.manualReviewRequired,
       submittedAt: submission.submittedAt,
-      aiPossibleGrade: submission.aiPossibleGrade,
     }));
   }
 
@@ -270,7 +288,6 @@ export class SubmissionsService {
       productUrl: submission.productUrl,
       fileName: submission.fileName,
       feedback: submission.feedback,
-      aiPossibleGrade: submission.aiPossibleGrade,
       aiStrengths: submission.aiStrengths,
       aiImprovements: submission.aiImprovements,
       aiComparison: submission.aiComparison,
@@ -421,21 +438,31 @@ export class SubmissionsService {
       .filter((submission) =>
         submission.status !== SubmissionStatus.NOT_SUBMITTED &&
         submission.status !== SubmissionStatus.EVALUATED &&
-        (!submission.evaluationStatus || submission.evaluationStatus === EvaluationStatus.NOT_REQUESTED),
+        (!submission.evaluationStatus ||
+          submission.evaluationStatus === EvaluationStatus.NOT_REQUESTED ||
+          submission.evaluationStatus === EvaluationStatus.MANUAL_REQUIRED),
       );
-    let pendingManualReview = 0;
+    let processed = 0;
+    let analyzed = 0;
+    let failed = 0;
     let valuationsCreated = 0;
-    let implemented = false;
     const failureReasons = new Set<string>();
     for (const submission of submissions) {
-      // Reclamacion condicional: dos peticiones concurrentes no pueden
-      // enviar el mismo documento al proveedor IA.
+      // Reclamación condicional: dos peticiones concurrentes no pueden
+      // enviar el mismo documento al proveedor IA. MANUAL_REQUIRED se admite
+      // para reintentar fallos transitorios sin pedir una nueva entrega.
       const repositoryWithUpdate = this.submissions as Repository<Submission> & {
         update?: (criteria: unknown, partialEntity: unknown) => Promise<{ affected?: number }>;
       };
       if (repositoryWithUpdate.update) {
         const claimed = await repositoryWithUpdate.update(
-          { id: submission.id, evaluationStatus: EvaluationStatus.NOT_REQUESTED },
+          {
+            id: submission.id,
+            evaluationStatus: In([
+              EvaluationStatus.NOT_REQUESTED,
+              EvaluationStatus.MANUAL_REQUIRED,
+            ]),
+          },
           {
             status: SubmissionStatus.UNDER_REVIEW,
             evaluationStatus: EvaluationStatus.PENDING,
@@ -449,6 +476,7 @@ export class SubmissionsService {
         submission.manualReviewRequired = false;
         await this.submissions.save(submission);
       }
+      processed += 1;
       submission.status = SubmissionStatus.UNDER_REVIEW;
       submission.evaluationStatus = EvaluationStatus.PENDING;
       submission.manualReviewRequired = false;
@@ -463,45 +491,62 @@ export class SubmissionsService {
       const conversation = this.aiConversations
         ? await this.aiConversations.getForTeacher(teacherId, submission.id)
         : null;
-      const result = await this.aiEngine.analyzeEvidence({
-        logbook: logbook
-          ? {
-              initialIdeas: logbook.initialIdeas,
-              prompts: logbook.prompts,
-              validationsAndDecisions: logbook.validationsAndDecisions,
-              finalReflection: logbook.finalReflection,
-            }
-          : null,
-        declaration: declaration
-          ? {
-              toolName: declaration.toolName,
-              usageLevel: declaration.usageLevel,
-              purpose: declaration.purpose,
-              promptSummary: declaration.promptSummary,
-            }
-          : null,
-        conversation: conversation?.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-        product: {
-          text: submission.productText,
-          url: submission.productUrl,
-          fileName: submission.fileName,
-        },
-        rubric: activity.rubric?.criteria ?? [],
-      });
+      let result: AiAnalysisResult;
+      try {
+        const document = await this.getDocumentForAnalysis(submission);
+        result = await this.aiEngine.analyzeEvidence({
+          logbook: logbook
+            ? {
+                initialIdeas: logbook.initialIdeas,
+                prompts: logbook.prompts,
+                validationsAndDecisions: logbook.validationsAndDecisions,
+                finalReflection: logbook.finalReflection,
+              }
+            : null,
+          declaration: declaration
+            ? {
+                toolName: declaration.toolName,
+                usageLevel: declaration.usageLevel,
+                purpose: declaration.purpose,
+                promptSummary: declaration.promptSummary,
+              }
+            : null,
+          conversation: conversation?.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          product: {
+            text: submission.productText,
+            url: submission.productUrl,
+            document,
+          },
+          rubric: activity.rubric?.criteria ?? [],
+          identityTerms: [submission.student.name, submission.student.email],
+        });
+      } catch (error: unknown) {
+        this.logger.warn(`No fue posible preparar la entrega ${submission.id}: ${String(error)}`);
+        result = {
+          implemented: false,
+          reason: 'No fue posible leer el documento almacenado; requiere evaluación manual',
+        };
+      }
       if (!result.implemented) {
         failureReasons.add(result.reason);
-        pendingManualReview += 1;
+        failed += 1;
         submission.evaluationStatus = EvaluationStatus.MANUAL_REQUIRED;
         submission.manualReviewRequired = true;
+        submission.aiAnalyzedAt = null;
       } else {
-        implemented = true;
+        analyzed += 1;
         const existingValuations = await this.valuations.find({
           where: { submission: { id: submission.id } },
         });
         const byCriterion = new Map(existingValuations.map((valuation) => [valuation.criterion, valuation]));
+        const expectedCriteria = new Set(result.valuations.map((valuation) => valuation.criterion));
+        const obsoleteValuations = existingValuations.filter(
+          (valuation) => !expectedCriteria.has(valuation.criterion),
+        );
+        if (obsoleteValuations.length) await this.valuations.remove(obsoleteValuations);
         const pendingValuations = result.valuations.map((suggestion) => {
           const valuation = byCriterion.get(suggestion.criterion) ?? this.valuations.create({
             activity,
@@ -519,9 +564,11 @@ export class SubmissionsService {
           return valuation;
         });
         if (pendingValuations.length) await this.valuations.save(pendingValuations);
-        if (declaration && result.detectedUsageLevel !== null) {
+        if (declaration) {
           declaration.detectedUsageLevel = result.detectedUsageLevel;
-          declaration.usageDiscrepancy = declaration.usageLevel !== declaration.detectedUsageLevel;
+          declaration.usageDiscrepancy =
+            result.detectedUsageLevel !== null &&
+            declaration.usageLevel !== result.detectedUsageLevel;
           await this.declarations.save(declaration);
         }
         if (!submission.feedback.trim() && (result.feedback || result.comparison)) {
@@ -529,7 +576,7 @@ export class SubmissionsService {
             result.feedback ? `Retroalimentación IA: ${result.feedback}` : '',
           ].filter(Boolean).join('\n\n');
         }
-        submission.aiPossibleGrade = result.possibleGrade;
+        submission.aiPossibleGrade = null;
         submission.aiStrengths = result.strengths;
         submission.aiImprovements = result.improvements;
         submission.aiComparison = result.comparison;
@@ -537,33 +584,66 @@ export class SubmissionsService {
         submission.evaluationStatus = EvaluationStatus.ANALYZED;
         // La IA solo propone; el docente debe revisar y confirmar cada criterio.
         submission.manualReviewRequired = true;
-        pendingManualReview += 1;
       }
       await this.submissions.save(submission);
-      if (this.notificationsService) {
-        await this.notificationsService.dispatchAiAnalysisReady(
-          activity.teacher,
-          submission.student,
-          activity.title,
-          activity.id,
-          result.implemented ? result.possibleGrade : null,
-          result.implemented && declaration
-            ? declaration.usageLevel !== result.detectedUsageLevel
-            : false,
-        );
+      if (result.implemented && this.notificationsService) {
+        try {
+          await this.notificationsService.dispatchAiAnalysisReady(
+            activity.teacher,
+            submission.student,
+            activity.title,
+            activity.id,
+            Boolean(declaration?.usageDiscrepancy),
+          );
+        } catch (error: unknown) {
+          // La notificación es secundaria: nunca debe invalidar un análisis ya persistido.
+          this.logger.warn(`No fue posible notificar el análisis de la entrega ${submission.id}: ${String(error)}`);
+        }
       }
     }
+    const pendingManualReview = await this.submissions.count({
+      where: {
+        activity: { id: activityId },
+        manualReviewRequired: true,
+        status: Not(SubmissionStatus.EVALUATED),
+      },
+    });
     await this.activitiesService.setManualEvaluationRequired(
       activity,
       pendingManualReview > 0,
     );
     return {
       activityId,
-      processed: submissions.length,
+      processed,
+      analyzed,
+      failed,
       valuationsCreated,
       pendingManualReview,
-      implemented,
+      implemented: analyzed > 0,
       reason: failureReasons.size ? [...failureReasons].join('; ') : undefined,
+    };
+  }
+
+  private async getDocumentForAnalysis(submission: Submission) {
+    if (!submission.fileName) return null;
+    if (submission.fileStorageKey && this.documentRepository) {
+      return {
+        mimeType: submission.fileMimeType ?? 'application/pdf',
+        content: await this.documentRepository.read(submission.fileStorageKey),
+      };
+    }
+
+    const legacySubmission = await this.submissions
+      .createQueryBuilder('submission')
+      .addSelect('submission.fileBase64')
+      .where('submission.id = :submissionId', { submissionId: submission.id })
+      .getOne();
+    if (!legacySubmission?.fileBase64) {
+      throw new NotFoundException('No se encontró el contenido del PDF entregado');
+    }
+    return {
+      mimeType: legacySubmission.fileMimeType ?? 'application/pdf',
+      content: Buffer.from(legacySubmission.fileBase64, 'base64'),
     };
   }
 }

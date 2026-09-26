@@ -148,11 +148,9 @@ export class MailService {
     studentName: string,
     activityTitle: string,
     activityId: number,
-    possibleGrade: number | null,
     discrepancy: boolean,
   ): Promise<boolean> {
     const url = `${this.publicAppUrl()}/teacher/activities/${activityId}/submissions`;
-    const grade = possibleGrade === null ? 'pendiente' : `${possibleGrade}/100`;
     const discrepancyText = discrepancy
       ? ' Se detecto una diferencia entre el nivel declarado y el nivel estimado por la IA.'
       : '';
@@ -162,13 +160,13 @@ export class MailService {
       text: [
         `Hola ${teacherName},`,
         `La entrega de ${studentName} para "${activityTitle}" ya fue analizada por el motor IA.`,
-        `Nota sugerida: ${grade}.${discrepancyText}`,
+        `La IA generó una valoración preliminar por criterio.${discrepancyText}`,
         `Revisa y confirma la evaluacion en: ${url}`,
       ].join('\n\n'),
       html: [
         `<p>Hola ${this.escapeHtml(teacherName)},</p>`,
         `<p>La entrega de <strong>${this.escapeHtml(studentName)}</strong> para <strong>${this.escapeHtml(activityTitle)}</strong> ya fue analizada por el motor IA.</p>`,
-        `<p><strong>Nota sugerida:</strong> ${this.escapeHtml(grade)}${this.escapeHtml(discrepancyText)}</p>`,
+        `<p>La IA generó una valoración preliminar por criterio.${this.escapeHtml(discrepancyText)}</p>`,
         `<p><a href="${this.escapeHtml(url)}">Revisar evaluacion</a></p>`,
       ].join(''),
     }));

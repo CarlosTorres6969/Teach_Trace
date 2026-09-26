@@ -37,7 +37,6 @@ type SubmissionDetail = SubmissionSummary & {
   productUrl: string;
   fileName: string | null;
   feedback: string;
-  aiPossibleGrade: number | null;
   aiStrengths: string;
   aiImprovements: string;
   aiComparison: string;
@@ -86,9 +85,9 @@ async function load() {
   }
 }
 
-async function openSubmission(id: number) {
+async function openSubmission(id: number, preserveMessage = false) {
   error.value = '';
-  message.value = '';
+  if (!preserveMessage) message.value = '';
   try {
     const detail = await api<SubmissionDetail>(`/teacher/submissions/${id}`);
     selected.value = {
@@ -117,7 +116,7 @@ async function startManualEvaluation() {
     await api(`/teacher/activities/${activityId}/evaluation`, { method: 'POST' });
     message.value = 'Evaluación manual iniciada.';
     await load();
-    if (submissions.value.length) await openSubmission(submissions.value[0].id);
+    if (submissions.value.length) await openSubmission(submissions.value[0].id, true);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo iniciar la evaluación manual';
   } finally {
@@ -133,16 +132,22 @@ async function runAiEvaluation() {
     const result = await api<{
       implemented: boolean;
       processed: number;
+      analyzed: number;
+      failed: number;
       pendingManualReview: number;
       reason?: string;
     }>(`/entregas/actividad/${activityId}/evaluar`, { method: 'POST' });
     message.value = result.processed === 0
-      ? 'No hay entregas nuevas para analizar; cada documento conserva un único intento IA.'
-      : result.implemented
-        ? `Análisis IA completado para ${result.processed} entrega(s). El docente debe confirmar las valoraciones.`
-        : `La IA no pudo analizar las entregas: ${result.reason ?? 'requieren revisión manual'}.`;
+      ? 'No hay entregas pendientes de análisis.'
+      : result.failed === 0
+        ? `Análisis IA completado para ${result.analyzed} entrega(s). El docente debe confirmar las valoraciones.`
+        : result.analyzed > 0
+          ? `Análisis parcial: ${result.analyzed} entrega(s) analizadas y ${result.failed} pendientes de revisión o reintento. ${result.reason ?? ''}`.trim()
+          : `La IA no pudo analizar ${result.failed} entrega(s): ${result.reason ?? 'requieren revisión manual o reintento'}.`;
     await load();
-    if (submissions.value.length) await openSubmission(selected.value?.id ?? submissions.value[0].id);
+    if (submissions.value.length) {
+      await openSubmission(selected.value?.id ?? submissions.value[0].id, true);
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo ejecutar el análisis IA';
   } finally {
@@ -341,9 +346,9 @@ onMounted(load);
         </template>
 
         <!-- ─── Panel de valoraciones ──────────────────────────────────────── -->
-        <section v-if="selected.aiAnalyzedAt || selected.aiPossibleGrade !== null || selected.aiStrengths || selected.aiImprovements || selected.aiComparison" class="ai-analysis-summary">
+        <section v-if="selected.aiAnalyzedAt || selected.aiStrengths || selected.aiImprovements || selected.aiComparison" class="ai-analysis-summary">
           <h3>Resultado del motor IA</h3>
-          <p v-if="selected.aiPossibleGrade !== null"><strong>Nota posible:</strong> {{ selected.aiPossibleGrade }}/100 <span class="muted">(sugerencia; no sustituye al docente)</span></p>
+          <p class="muted">Valoración preliminar por criterio; la IA no asigna una calificación final.</p>
           <p v-if="selected.aiStrengths"><strong>Qué hizo bien:</strong> {{ selected.aiStrengths }}</p>
           <p v-if="selected.aiImprovements"><strong>Qué debe mejorar:</strong> {{ selected.aiImprovements }}</p>
           <p v-if="selected.aiComparison"><strong>Comparación declaración/evidencia:</strong> {{ selected.aiComparison }}</p>

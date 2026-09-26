@@ -168,7 +168,6 @@ export class NotificationsService {
     student: User,
     activityTitle: string,
     activityId: number,
-    possibleGrade: number | null,
     discrepancy: boolean,
   ) {
     const title = `Analisis IA listo: ${activityTitle}`;
@@ -208,7 +207,6 @@ export class NotificationsService {
         student.name,
         activityTitle,
         activityId,
-        possibleGrade,
         discrepancy,
       ));
     }

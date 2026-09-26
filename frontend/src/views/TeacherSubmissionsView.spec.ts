@@ -72,4 +72,37 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(summaryIndex).toBeGreaterThanOrEqual(0);
     expect(values[summaryIndex].text()).toBe('Primer prompt.\n\nSegundo prompt.');
   });
+
+  it('informa correctamente cuando un lote queda analizado solo de forma parcial', async () => {
+    const baseImplementation = apiMock.getMockImplementation();
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/entregas/actividad/12/evaluar') {
+        return Promise.resolve({
+          implemented: true,
+          processed: 2,
+          analyzed: 1,
+          failed: 1,
+          pendingManualReview: 2,
+          reason: 'El proveedor de IA respondió HTTP 503',
+        });
+      }
+      return baseImplementation?.(path);
+    });
+    const wrapper = mount(TeacherSubmissionsView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+
+    const analyzeButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('Analizar con IA'),
+    );
+    expect(analyzeButton).toBeDefined();
+    await analyzeButton!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Análisis parcial: 1 entrega(s) analizadas y 1 pendientes');
+    expect(wrapper.text()).toContain('HTTP 503');
+  });
 });

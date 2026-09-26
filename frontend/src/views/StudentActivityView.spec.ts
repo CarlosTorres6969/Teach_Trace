@@ -219,7 +219,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     expect(wrapper.text()).toContain('Selecciona tu nivel declarado de uso de IA.');
-    expect(apiMock).not.toHaveBeenCalled();
+    expect(apiMock.mock.calls.some(([path]) => String(path).endsWith('/submission'))).toBe(false);
 
     await select.setValue('2');
     await wrapper.get('form').trigger('submit');

@@ -68,7 +68,7 @@ export class Submission {
   @Column({ type: 'text', default: '' })
   feedback: string;
 
-  /** Sugerencias de la IA; nunca sustituyen la valoración confirmada por el docente. */
+  /** @deprecated Conservado para compatibilidad de esquema; la IA ya no propone notas globales. */
   @Column({ type: 'float', nullable: true })
   aiPossibleGrade: number | null;
 

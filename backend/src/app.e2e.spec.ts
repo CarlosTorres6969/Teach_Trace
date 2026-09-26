@@ -1299,6 +1299,19 @@ describe('TeachTrace API (integración)', () => {
     });
   });
 
+  it('R1: protege el análisis IA para docentes autenticados', async () => {
+    const anonymous = await request(`/api/entregas/actividad/${activityId}/evaluar`, {
+      method: 'POST',
+    });
+    expect(anonymous.response.status).toBe(401);
+
+    const asStudent = await request(`/api/entregas/actividad/${activityId}/evaluar`, {
+      method: 'POST',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(asStudent.response.status).toBe(403);
+  });
+
   it('R1: persiste la degradación manual cuando el motor todavía no está disponible', async () => {
     // Crear actividad exclusiva para este test (evita contaminación con submissions del seed)
     const exclusiveActivity = await request('/api/teacher/activities', {
@@ -2695,20 +2708,32 @@ describe('TeachTrace API (integración)', () => {
     });
 
     // Antes de evaluated: valuations debe estar vacío
-    const resultsBefore = await request(`/api/student/activities/${newActivityId}/results`, {
-      headers: sessionHeaders(student.sessionCookie),
-    });
-    expect(resultsBefore.response.status).toBe(200);
-    const body = resultsBefore.body as { status: string; valuations: unknown[]; finalScore: null };
-    expect(body.status).toBe(SubmissionStatus.SUBMITTED);
-    expect(body.valuations).toHaveLength(0);
-    expect(body.finalScore).toBeNull();
-
-    // Publicar la evaluación
     const subs = await request(`/api/teacher/activities/${newActivityId}/submissions`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });
     const submId = (subs.body as Array<{ id: number }>)[0].id;
+    await request(`/api/teacher/submissions/${submId}/feedback`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedback: 'Retroalimentación todavía no publicada' }),
+    });
+
+    const resultsBefore = await request(`/api/student/activities/${newActivityId}/results`, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(resultsBefore.response.status).toBe(200);
+    const body = resultsBefore.body as {
+      status: string;
+      valuations: unknown[];
+      finalScore: null;
+      feedback: string;
+    };
+    expect(body.status).toBe(SubmissionStatus.SUBMITTED);
+    expect(body.valuations).toHaveLength(0);
+    expect(body.finalScore).toBeNull();
+    expect(body.feedback).toBe('');
+
+    // Publicar la evaluación
     await request(`/api/teacher/submissions/${submId}/close`, {
       method: 'PUT',
       headers: sessionHeaders(teacher.sessionCookie),
@@ -2719,7 +2744,10 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(student.sessionCookie),
     });
     expect(resultsAfter.response.status).toBe(200);
-    expect((resultsAfter.body as { status: string }).status).toBe(SubmissionStatus.EVALUATED);
+    expect(resultsAfter.body).toMatchObject({
+      status: SubmissionStatus.EVALUATED,
+      feedback: 'Retroalimentación todavía no publicada',
+    });
   });
 
   it('HU-34: GET /notifications/badge-stream existe y requiere autenticación', async () => {

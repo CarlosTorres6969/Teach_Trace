@@ -4,9 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
-import { Submission, SubmissionStatus } from '../entities/submission.entity';
+import {
+  EvaluationStatus,
+  Submission,
+  SubmissionStatus,
+} from '../entities/submission.entity';
 import { Valuation } from '../entities/valuation.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfirmValuationDto } from './confirm-valuation.dto';
@@ -93,10 +97,24 @@ export class TeacherValuationsService {
     const alreadyNotified = submission.notificationSentAt !== null;
 
     submission.status = SubmissionStatus.EVALUATED;
+    submission.evaluationStatus = EvaluationStatus.VALIDATED;
+    submission.manualReviewRequired = false;
     if (!alreadyNotified) {
       submission.notificationSentAt = new Date();
     }
     await this.submissions.save(submission);
+
+    const remainingManualReviews = await this.submissions.count({
+      where: {
+        activity: { id: submission.activity.id },
+        manualReviewRequired: true,
+        status: Not(SubmissionStatus.EVALUATED),
+      },
+    });
+    await this.activitiesService.setManualEvaluationRequired(
+      submission.activity,
+      remainingManualReviews > 0,
+    );
 
     if (!alreadyNotified) {
       await this.notificationsService.dispatchGradePublished(

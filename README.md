@@ -51,7 +51,9 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `submissions`: entrega conjunta, archivos, evidencias y disparo de evaluación.
 - `notification-preferences`: canales habilitados por usuario y tipo de evento.
 - `users`: preferencias personales sincronizadas con la cuenta.
-- `ai-engine`: contrato del motor de IA; permanece como stub seguro.
+- `ai-engine`: motor de valoración preliminar conectado a Gemini, con salida estructurada,
+  anonimización de identificadores conocidos, lectura del contenido PDF y degradación segura a
+  revisión manual.
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
 
@@ -98,9 +100,12 @@ Configure en `.env` los valores de `PUBLIC_APP_URL`, `MAIL_ENABLED`, `SMTP_HOST`
 `SMTP_USER` y `SMTP_PASS`. Para Gmail, `SMTP_USER` es la cuenta remitente y `SMTP_PASS` es la
 contraseña de aplicación, no la contraseña normal de la cuenta.
 
-El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` ya recorre las entregas e invoca
-el contrato del motor. Mientras el proveedor no esté implementado no persiste valoraciones falsas
-y marca las entregas para revisión manual.
+El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` recorre las entregas, extrae de
+forma local el texto del PDF privado, anonimiza los identificadores conocidos y solicita a Gemini
+una valoración preliminar por cada criterio. La IA no genera una calificación global: el docente
+debe confirmar todos los criterios antes de publicar. Los fallos temporales se reintentan y, si el
+proveedor continúa sin responder o el PDF no contiene texto extraíble, la entrega queda disponible
+para revisión manual y para un nuevo intento posterior.
 
 El modelo, sus relaciones y restricciones están descritos en
 [docs/MODELO_DATOS.md](docs/MODELO_DATOS.md).
