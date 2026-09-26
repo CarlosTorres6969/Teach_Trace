@@ -33,7 +33,13 @@ const MAX_LEARNING_OUTCOMES = 20;
 const MAX_LEARNING_OUTCOME_LENGTH = 500;
 const MAX_LEARNING_OUTCOMES_TEXT_LENGTH =
   MAX_LEARNING_OUTCOMES * MAX_LEARNING_OUTCOME_LENGTH + MAX_LEARNING_OUTCOMES - 1;
-type TeacherModal = 'create-class' | 'class-detail' | 'create-activity' | 'activity-detail' | null;
+type TeacherModal =
+  | 'create-class'
+  | 'class-detail'
+  | 'create-activity'
+  | 'activity-detail'
+  | 'delete-activity'
+  | null;
 type EnrollmentMode = 'excel' | 'individual';
 type BulkEnrollmentResult = {
   processedCount: number;
@@ -48,11 +54,28 @@ const enrollmentMode = ref<EnrollmentMode>('excel');
 const selectedEnrollmentFile = ref<File | null>(null);
 const bulkEnrollmentResult = ref<BulkEnrollmentResult | null>(null);
 const bulkEnrollmentBusy = ref(false);
+const deletingActivity = ref(false);
 const selectedClass = computed(
   () => classes.value.find((academicClass) => academicClass.id === selectedClassId.value) ?? null,
 );
 const selectedActivity = computed(
   () => activities.value.find((activity) => activity.id === selectedActivityId.value) ?? null,
+);
+const activityGroups = computed(() =>
+  classes.value
+    .map((academicClass) => ({
+      academicClass,
+      activities: activities.value
+        .filter((activity) => activity.academicClass?.id === academicClass.id)
+        .sort((first, second) =>
+          (first.dueDate ?? '').localeCompare(second.dueDate ?? '') || first.title.localeCompare(second.title),
+        ),
+    }))
+    .filter((group) => group.activities.length > 0)
+    .sort((first, second) =>
+      first.academicClass.code.localeCompare(second.academicClass.code) ||
+      first.academicClass.name.localeCompare(second.academicClass.name),
+    ),
 );
 
 // Errores de validación inline por criterio (índice → mensaje)
@@ -258,6 +281,36 @@ async function publishActivity(activityId: number) {
   });
 }
 
+function requestActivityDeletion(activityId: number) {
+  clearFeedback();
+  selectedActivityId.value = activityId;
+  activeModal.value = 'delete-activity';
+}
+
+function cancelActivityDeletion() {
+  clearFeedback();
+  activeModal.value = 'activity-detail';
+}
+
+async function deleteActivity() {
+  const activity = selectedActivity.value;
+  if (!activity || deletingActivity.value) return;
+  clearFeedback();
+  deletingActivity.value = true;
+  try {
+    await api(`/teacher/activities/${activity.id}`, { method: 'DELETE' });
+    const deletedTitle = activity.title;
+    activeModal.value = null;
+    selectedActivityId.value = null;
+    await load();
+    message.value = `Actividad "${deletedTitle}" eliminada`;
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    deletingActivity.value = false;
+  }
+}
+
 async function createRubric() {
   // Validación de dimensiones duplicadas en cliente antes de enviar
   if (hasDuplicateDimensions.value) {
@@ -417,8 +470,22 @@ onBeforeUnmount(() => {
         <p v-if="!classes.length" class="alert error">
           Primero debes crear una clase antes de registrar actividades.
         </p>
-        <div v-if="activities.length" class="teacher-catalog-grid">
-          <article v-for="activity in activities" :key="activity.id" class="teacher-catalog-card activity-catalog-card">
+        <div v-if="activities.length" class="activity-class-groups">
+          <section v-for="group in activityGroups" :key="group.academicClass.id" class="panel activity-class-group">
+            <header class="activity-class-header">
+              <div>
+                <span class="catalog-code">{{ group.academicClass.code }}</span>
+                <div>
+                  <h3>{{ group.academicClass.name }}</h3>
+                  <p class="muted">{{ group.academicClass.subject }} · {{ group.academicClass.period }}</p>
+                </div>
+              </div>
+              <span class="status">
+                {{ group.activities.length }} {{ group.activities.length === 1 ? 'actividad' : 'actividades' }}
+              </span>
+            </header>
+            <div class="teacher-catalog-grid activity-group-grid">
+          <article v-for="activity in group.activities" :key="activity.id" class="teacher-catalog-card activity-catalog-card">
             <div class="catalog-card-header">
               <span class="catalog-code">{{ activity.academicClass?.code }}</span>
               <span class="status" :data-status="activity.published ? 'evaluated' : 'not_submitted'">
@@ -440,6 +507,8 @@ onBeforeUnmount(() => {
               <RouterLink class="button primary" :to="`/teacher/activities/${activity.id}/submissions`">Ver entregas</RouterLink>
             </div>
           </article>
+            </div>
+          </section>
         </div>
         <div v-else class="panel empty-state">
           <h3>Aún no tienes actividades</h3>
@@ -782,6 +851,13 @@ onBeforeUnmount(() => {
 
           <div class="modal-actions">
             <button
+              class="button danger modal-danger-action"
+              type="button"
+              @click="requestActivityDeletion(selectedActivity.id)"
+            >
+              Eliminar actividad
+            </button>
+            <button
               v-if="!selectedActivity.published"
               class="button primary"
               type="button"
@@ -794,6 +870,61 @@ onBeforeUnmount(() => {
             <RouterLink class="button primary" :to="`/teacher/activities/${selectedActivity.id}/submissions`">
               Ver entregas
             </RouterLink>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="activeModal === 'delete-activity' && selectedActivity"
+      class="modal-backdrop"
+      @click.self="cancelActivityDeletion"
+    >
+      <section
+        class="modal-dialog confirmation-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-activity-title"
+        aria-describedby="delete-activity-description"
+      >
+        <header class="modal-header">
+          <div>
+            <span class="eyebrow">Acción irreversible</span>
+            <h2 id="delete-activity-title">Eliminar actividad</h2>
+          </div>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Cancelar eliminación"
+            :disabled="deletingActivity"
+            @click="cancelActivityDeletion"
+          >×</button>
+        </header>
+        <div class="modal-body">
+          <p id="delete-activity-description">
+            ¿Deseas eliminar <strong>“{{ selectedActivity.title }}”</strong> de
+            <strong>{{ selectedActivity.academicClass?.name }}</strong>?
+          </p>
+          <p class="alert warning">
+            Solo se puede eliminar si ningún estudiante ha registrado avances o entregas.
+            La rúbrica asociada no se eliminará y podrá reutilizarse.
+          </p>
+          <p v-if="error" class="alert error" role="alert">{{ error }}</p>
+          <div class="modal-actions">
+            <button
+              class="button secondary"
+              type="button"
+              :disabled="deletingActivity"
+              @click="cancelActivityDeletion"
+            >Cancelar</button>
+            <button
+              class="button danger"
+              type="button"
+              :disabled="deletingActivity"
+              @click="deleteActivity"
+            >
+              {{ deletingActivity ? 'Eliminando…' : 'Sí, eliminar actividad' }}
+            </button>
           </div>
         </div>
       </section>

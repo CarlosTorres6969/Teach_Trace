@@ -846,6 +846,68 @@ describe('TeachTrace API (integración)', () => {
     expect((visible.body as Array<{ id: number }>).some((item) => item.id === draftId)).toBe(true);
   });
 
+  it('permite al docente eliminar una actividad sin avances y protege la evidencia existente', async () => {
+    const created = await requestRaw('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Actividad para eliminar ${Date.now()}`,
+        classId,
+        dueDate: '2026-12-29',
+        activityType: 'Ensayo',
+        evaluationPhase: 'pilot',
+      }),
+    });
+    const removableId = (created.body as { id: number }).id;
+    const rubric = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `Rúbrica reutilizable ${Date.now()}`,
+        criteria: buildCriteria(),
+      }),
+    });
+    const reusableRubricId = (rubric.body as { id: number }).id;
+    await request(`/api/teacher/activities/${removableId}/rubric`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rubricId: reusableRubricId }),
+    });
+
+    const forbiddenForStudent = await request(`/api/teacher/activities/${removableId}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(forbiddenForStudent.response.status).toBe(403);
+
+    const removed = await request(`/api/teacher/activities/${removableId}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(removed.response.status).toBe(200);
+    expect(removed.body).toEqual({ id: removableId, deleted: true });
+
+    const persisted = await dataSource.getRepository(Activity).findOneBy({ id: removableId });
+    expect(persisted).toBeNull();
+    const rubrics = await request('/api/teacher/rubrics', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(rubrics.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: reusableRubricId, activityId: null }),
+      ]),
+    );
+
+    const protectedActivity = await request(`/api/teacher/activities/${activityId}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(protectedActivity.response.status).toBe(409);
+    expect(protectedActivity.body).toMatchObject({
+      message: expect.stringContaining('avances o entregas'),
+    });
+  });
+
   it('valida, normaliza y persiste el nombre de la herramienta de IA', async () => {
     const draftActivity = await request('/api/teacher/activities', {
       method: 'POST',

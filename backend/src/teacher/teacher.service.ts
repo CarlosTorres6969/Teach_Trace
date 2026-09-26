@@ -75,6 +75,10 @@ export class TeacherService {
     return this.activityResponse(await this.activitiesService.publish(teacherId, activityId));
   }
 
+  deleteActivity(teacherId: number, activityId: number) {
+    return this.activitiesService.remove(teacherId, activityId);
+  }
+
   async listSubmissions(teacherId: number, activityId: number) {
     return this.submissionsService.listForTeacher(teacherId, activityId);
   }

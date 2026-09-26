@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -124,6 +125,14 @@ export class TeacherController {
     @Param('activityId', ParseIntPipe) activityId: number,
   ) {
     return this.teacherService.publishActivity(user.id, activityId);
+  }
+
+  @Delete('activities/:activityId')
+  deleteActivity(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+  ) {
+    return this.teacherService.deleteActivity(user.id, activityId);
   }
 
   @Get('submissions')

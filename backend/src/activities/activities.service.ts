@@ -1,9 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
 import { ClassesService } from '../classes/classes.service';
 import { Activity } from '../entities/activity.entity';
+import { AiConversation } from '../entities/ai-conversation.entity';
+import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Enrollment } from '../entities/enrollment.entity';
+import { Logbook } from '../entities/logbook.entity';
+import { Notification } from '../entities/notification.entity';
+import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
 import {
   CreateActivityDto,
@@ -134,6 +144,30 @@ export class ActivitiesService {
     }
     activity.published = true;
     return this.activities.save(activity);
+  }
+
+  async remove(teacherId: number, activityId: number) {
+    const activity = await this.ownedActivity(teacherId, activityId);
+    const manager = this.activities.manager;
+    const studentWorkRepositories = [Submission, Logbook, AiDeclaration, AiConversation];
+    const studentWorkExists = await Promise.all(
+      studentWorkRepositories.map((entity) =>
+        manager.getRepository(entity).exist({ where: { activity: { id: activityId } } }),
+      ),
+    );
+
+    if (studentWorkExists.some(Boolean)) {
+      throw new ConflictException(
+        'No se puede eliminar la actividad porque ya contiene avances o entregas de estudiantes',
+      );
+    }
+
+    await manager.transaction(async (transaction) => {
+      await transaction.getRepository(Notification).delete({ activityId });
+      await transaction.getRepository(Activity).delete(activity.id);
+    });
+
+    return { id: activity.id, deleted: true };
   }
 
   private dateRange(filter: StudentActivityFilter) {

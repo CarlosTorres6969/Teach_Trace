@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ActivityPhase } from '../entities/activity.entity';
 import { ActivitiesService } from './activities.service';
 
@@ -86,5 +86,46 @@ describe('ActivitiesService', () => {
       service.updateLearningOutcomes(2, 8, { learningOutcomes: ['   '] }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(activities.save).not.toHaveBeenCalled();
+  });
+
+  it('elimina una actividad propia sin trabajo estudiantil', async () => {
+    const activity = { id: 8, title: 'Actividad creada por error' };
+    const notificationRepository = { delete: jest.fn().mockResolvedValue({ affected: 0 }) };
+    const activityRepository = { delete: jest.fn().mockResolvedValue({ affected: 1 }) };
+    const transactionManager = {
+      getRepository: jest.fn((entity: { name: string }) =>
+        entity.name === 'Notification' ? notificationRepository : activityRepository,
+      ),
+    };
+    const manager = {
+      getRepository: jest.fn(() => ({ exist: jest.fn().mockResolvedValue(false) })),
+      transaction: jest.fn(async (work) => work(transactionManager)),
+    };
+    const activities = {
+      findOne: jest.fn().mockResolvedValue(activity),
+      manager,
+    };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+
+    await expect(service.remove(2, 8)).resolves.toEqual({ id: 8, deleted: true });
+    expect(notificationRepository.delete).toHaveBeenCalledWith({ activityId: 8 });
+    expect(activityRepository.delete).toHaveBeenCalledWith(8);
+  });
+
+  it('protege una actividad que ya contiene avances o entregas', async () => {
+    const transaction = jest.fn();
+    const activities = {
+      findOne: jest.fn().mockResolvedValue({ id: 8 }),
+      manager: {
+        getRepository: jest.fn((entity: { name: string }) => ({
+          exist: jest.fn().mockResolvedValue(entity.name === 'Logbook'),
+        })),
+        transaction,
+      },
+    };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+
+    await expect(service.remove(2, 8)).rejects.toBeInstanceOf(ConflictException);
+    expect(transaction).not.toHaveBeenCalled();
   });
 });
