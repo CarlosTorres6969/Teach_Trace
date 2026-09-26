@@ -51,8 +51,12 @@ type ProviderResponse = {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_INPUT_CHARS = 100_000;
-const DEFAULT_MAX_RETRIES = 2;
-const DEFAULT_RETRY_BASE_DELAY_MS = 500;
+// Los proveedores gratuitos pueden responder 503 durante unos segundos aun
+// cuando la clave y el modelo sean correctos. Un backoff algo más amplio
+// evita degradar inmediatamente a revisión manual por una indisponibilidad
+// transitoria.
+const DEFAULT_MAX_RETRIES = 4;
+const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
 const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 const ANALYSIS_SCHEMA = {
@@ -217,7 +221,12 @@ export class AiEngineService {
     if (document.mimeType !== 'application/pdf') {
       throw new Error('Formato de documento no compatible');
     }
-    const result = await pdfParse(document.content);
+    // pdf-parse v1 usa el ArrayBuffer subyacente. Buffer.allocUnsafe puede
+    // compartir el pool interno de Node y hacer que el parser lea bytes
+    // anteriores al PDF cuando el archivo es pequeno; una copia Uint8Array
+    // garantiza que siempre comience en el byte cero del documento.
+    const parserInput = Uint8Array.from(document.content) as unknown as Buffer;
+    const result = await pdfParse(parserInput);
     if (typeof result.text === 'string') return result.text.trim();
 
     // Compatibilidad con el adaptador de parser usado por versiones previas.

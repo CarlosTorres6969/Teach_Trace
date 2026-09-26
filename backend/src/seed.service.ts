@@ -571,9 +571,8 @@ export class SeedService implements OnApplicationBootstrap {
     }
 
     const fileContent = seed.withFile
-      ? Buffer.from(
+      ? this.createDemoPdf(
           `Evidencia de demostración\nActividad: ${activity.title}\nEstudiante: ${student.name}\n`,
-          'utf8',
         ).toString('base64')
       : null;
     const submittedAt = this.dateAt(-seed.submittedDaysAgo, 15);
@@ -596,6 +595,44 @@ export class SeedService implements OnApplicationBootstrap {
             : null,
       }),
     );
+  }
+
+  /**
+   * Genera un PDF pequeno pero valido para los datos de demostracion.
+   * Antes se guardaba texto plano con extension PDF y pdf-parse lo rechazaba,
+   * dejando esas entregas en revision manual.
+   */
+  private createDemoPdf(text: string): Buffer {
+    const printable = text.replace(/[^\x20-\x7E\n]/g, ' ');
+    const escaped = printable
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      .replace(/\n/g, ') Tj 0 -16 Td (');
+    const stream = `BT /F1 11 Tf 50 740 Td (${escaped}) Tj ET`;
+    const objects = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+      `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`,
+    ];
+    const chunks = ['%PDF-1.4\n%\xE2\xE3\xCF\xD3\n'];
+    const offsets = [0];
+    for (let index = 0; index < objects.length; index += 1) {
+      offsets.push(Buffer.byteLength(chunks.join(''), 'latin1'));
+      chunks.push(`${index + 1} 0 obj\n${objects[index]}\nendobj\n`);
+    }
+    const xrefOffset = Buffer.byteLength(chunks.join(''), 'latin1');
+    chunks.push(`xref\n0 ${objects.length + 1}\n`);
+    chunks.push('0000000000 65535 f \n');
+    for (const offset of offsets.slice(1)) {
+      chunks.push(`${String(offset).padStart(10, '0')} 00000 n \n`);
+    }
+    chunks.push(
+      `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+    );
+    return Buffer.from(chunks.join(''), 'latin1');
   }
 
   private async ensureValuations(

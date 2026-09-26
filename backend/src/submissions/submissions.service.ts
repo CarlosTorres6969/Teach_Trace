@@ -639,11 +639,28 @@ export class SubmissionsService {
       .where('submission.id = :submissionId', { submissionId: submission.id })
       .getOne();
     if (!legacySubmission?.fileBase64) {
+      // Las entregas creadas antes del repositorio documental pueden conservar
+      // un nombre de archivo sin contenido. No bloqueamos su análisis si aún
+      // tienen texto de producto; las nuevas entregas siempre llegan con una
+      // referencia de almacenamiento y siguen exigiendo un PDF real.
+      if (!submission.fileStorageKey && submission.productText.trim()) return null;
       throw new NotFoundException('No se encontró el contenido del PDF entregado');
+    }
+    const content = Buffer.from(legacySubmission.fileBase64, 'base64');
+    if (
+      (!legacySubmission.fileMimeType || legacySubmission.fileMimeType !== 'application/pdf' ||
+        content.subarray(0, 5).toString('ascii') !== '%PDF-') &&
+      !submission.fileStorageKey &&
+      submission.productText.trim()
+    ) {
+      // Compatibilidad con datos legados que guardaban texto plano como
+      // "PDF". El texto de la entrega continúa siendo evidencia útil para la
+      // IA, pero no se presenta como si el archivo fuese válido.
+      return null;
     }
     return {
       mimeType: legacySubmission.fileMimeType ?? 'application/pdf',
-      content: Buffer.from(legacySubmission.fileBase64, 'base64'),
+      content,
     };
   }
 }
