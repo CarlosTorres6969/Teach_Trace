@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
 
@@ -31,27 +31,6 @@ type ConversationMessage = {
   createdAt: string;
 };
 
-type PromptPurpose =
-  | 'exploration'
-  | 'generation'
-  | 'drafting'
-  | 'correction'
-  | 'verification'
-  | 'refinement'
-  | 'other';
-
-type PromptAssessment = {
-  scorePercentage: number | null;
-  summary: string;
-  dimensions: Record<'relevance' | 'clarity' | 'refinement' | 'verification' | 'criticalThinking', number | null>;
-  prompts: Array<{
-    sequence: number;
-    purpose: PromptPurpose;
-    score: number | null;
-    explanation: string;
-  }>;
-};
-
 type SubmissionDetail = SubmissionSummary & {
   activity: { id: number; title: string };
   productText: string;
@@ -61,17 +40,6 @@ type SubmissionDetail = SubmissionSummary & {
   aiStrengths: string;
   aiImprovements: string;
   aiComparison: string;
-  aiUnderstandingScore: number | null;
-  aiUnderstandingExplanation: string;
-  aiLearningOutcomeAssessments: Array<{
-    learningOutcome: string;
-    score: number | null;
-    explanation: string;
-    evidence: string[];
-  }>;
-  aiPromptAssessment: PromptAssessment | null;
-  aiSuggestedGradePercentage: number | null;
-  teacherGradePercentage: number | null;
   aiAnalyzedAt: string | null;
   valuations: ValuationItem[];
   aiConversation: null | { messages: ConversationMessage[] };
@@ -93,27 +61,6 @@ const LEVEL_LABELS: Record<number, string> = {
   4: 'Nivel 4 — Excelente',
 };
 
-const PROMPT_PURPOSE_LABELS: Record<PromptPurpose, string> = {
-  exploration: 'Exploración inicial',
-  generation: 'Generación de ideas',
-  drafting: 'Redacción',
-  correction: 'Corrección',
-  verification: 'Verificación',
-  refinement: 'Refinamiento',
-  other: 'Otro propósito',
-};
-
-const PROMPT_DIMENSION_LABELS: Array<{
-  key: keyof PromptAssessment['dimensions'];
-  label: string;
-}> = [
-  { key: 'relevance', label: 'Pertinencia' },
-  { key: 'clarity', label: 'Claridad' },
-  { key: 'refinement', label: 'Refinamiento' },
-  { key: 'verification', label: 'Verificación' },
-  { key: 'criticalThinking', label: 'Pensamiento crítico' },
-];
-
 const route = useRoute();
 const activityId = Number(route.params.id);
 const submissions = ref<SubmissionSummary[]>([]);
@@ -129,37 +76,6 @@ const savingFeedback = ref(false);
 const feedbackDraft = ref('');
 const startingEvaluation = ref(false);
 const startingAiEvaluation = ref(false);
-
-const currentTeacherGradePercentage = computed(() => {
-  const valuations = selected.value?.valuations ?? [];
-  if (
-    !valuations.length ||
-    valuations.some((valuation) => !valuation.confirmed || valuation.teacherValue === null)
-  ) {
-    return null;
-  }
-  const total = valuations.reduce((sum, valuation) => sum + (valuation.teacherValue ?? 0), 0);
-  return Math.round((total / (valuations.length * 4)) * 10_000) / 100;
-});
-
-function promptAssessmentFor(sequence: number) {
-  return selected.value?.aiPromptAssessment?.prompts.find(
-    (assessment) => assessment.sequence === sequence,
-  );
-}
-
-function promptPurposeLabel(sequence: number) {
-  const assessment = promptAssessmentFor(sequence);
-  return assessment ? PROMPT_PURPOSE_LABELS[assessment.purpose] : '';
-}
-
-function promptScoreLabel(sequence: number) {
-  return promptAssessmentFor(sequence)?.score ?? '—';
-}
-
-function promptExplanation(sequence: number) {
-  return promptAssessmentFor(sequence)?.explanation || 'Sin explicación disponible.';
-}
 
 async function load() {
   try {
@@ -392,41 +308,15 @@ onMounted(load);
 
         <section v-if="selected.aiConversation?.messages.length" class="conversation-review">
           <div class="valuation-panel-header">
-            <div>
-              <h3>Prompts ordenados y respuestas</h3>
-              <p class="muted">Secuencia cronológica registrada durante la actividad.</p>
-            </div>
+            <h3>Conversación con IA</h3>
             <button class="button secondary" type="button" @click="downloadConversation">Exportar TXT</button>
           </div>
           <ol class="conversation-transcript">
             <li v-for="item in selected.aiConversation.messages" :key="item.id">
               <strong>{{ item.role === 'student' ? 'Estudiante' : 'IA' }}</strong>
               <p>{{ item.content }}</p>
-              <div
-                v-if="item.role === 'student' && promptAssessmentFor(item.sequence)"
-                class="prompt-item-assessment"
-              >
-                <span>{{ promptPurposeLabel(item.sequence) }}</span>
-                <strong>{{ promptScoreLabel(item.sequence) }}/4</strong>
-                <p>{{ promptExplanation(item.sequence) }}</p>
-              </div>
             </li>
           </ol>
-          <div v-if="selected.aiPromptAssessment" class="prompt-assessment-summary">
-            <div class="analysis-score-heading">
-              <div>
-                <span class="eyebrow">Calidad del proceso de prompting</span>
-                <strong>{{ selected.aiPromptAssessment.scorePercentage ?? '—' }}%</strong>
-              </div>
-              <p>{{ selected.aiPromptAssessment.summary || 'Sin resumen disponible.' }}</p>
-            </div>
-            <div class="prompt-dimension-grid">
-              <div v-for="dimension in PROMPT_DIMENSION_LABELS" :key="dimension.key">
-                <span>{{ dimension.label }}</span>
-                <strong>{{ selected.aiPromptAssessment.dimensions[dimension.key] ?? '—' }}/4</strong>
-              </div>
-            </div>
-          </div>
         </section>
 
         <!-- Bitácora -->
@@ -462,61 +352,6 @@ onMounted(load);
           <p v-if="selected.aiStrengths"><strong>Qué hizo bien:</strong> {{ selected.aiStrengths }}</p>
           <p v-if="selected.aiImprovements"><strong>Qué debe mejorar:</strong> {{ selected.aiImprovements }}</p>
           <p v-if="selected.aiComparison"><strong>Comparación declaración/evidencia:</strong> {{ selected.aiComparison }}</p>
-        </section>
-
-        <section v-if="selected.aiAnalyzedAt" class="analysis-overview-grid">
-          <article class="analysis-metric-card">
-            <span class="eyebrow">Comprensión estimada</span>
-            <div class="analysis-metric-value">
-              <strong>{{ selected.aiUnderstandingScore ?? '—' }}</strong><span>/100</span>
-            </div>
-            <div class="analysis-meter" aria-hidden="true">
-              <span :style="{ width: `${selected.aiUnderstandingScore ?? 0}%` }" />
-            </div>
-            <p>{{ selected.aiUnderstandingExplanation || 'No fue posible determinar la comprensión.' }}</p>
-            <small>Indicador diagnóstico preliminar; no corresponde a la nota final.</small>
-          </article>
-
-          <article class="analysis-metric-card">
-            <span class="eyebrow">Calificación porcentual</span>
-            <div class="grade-comparison">
-              <div>
-                <span>Sugerencia IA</span>
-                <strong>{{ selected.aiSuggestedGradePercentage ?? '—' }}%</strong>
-              </div>
-              <div>
-                <span>Decisión docente</span>
-                <strong>{{ currentTeacherGradePercentage ?? '—' }}%</strong>
-              </div>
-            </div>
-            <p class="muted">
-              Se calcula desde los niveles de la rúbrica. La nota docente aparece cuando todos los criterios están confirmados.
-            </p>
-          </article>
-        </section>
-
-        <section
-          v-if="(selected.aiLearningOutcomeAssessments ?? []).length"
-          class="learning-outcome-analysis"
-        >
-          <div>
-            <h3>Comprensión por resultado de aprendizaje</h3>
-            <p class="muted">La estimación debe estar respaldada por evidencia concreta de la entrega.</p>
-          </div>
-          <article
-            v-for="assessment in selected.aiLearningOutcomeAssessments"
-            :key="assessment.learningOutcome"
-            class="learning-outcome-card"
-          >
-            <div>
-              <strong>{{ assessment.learningOutcome }}</strong>
-              <span>{{ assessment.score ?? '—' }}/100</span>
-            </div>
-            <p>{{ assessment.explanation || 'Sin explicación disponible.' }}</p>
-            <ul v-if="assessment.evidence.length">
-              <li v-for="evidence in assessment.evidence" :key="evidence">{{ evidence }}</li>
-            </ul>
-          </article>
         </section>
 
         <template v-if="selected.valuations.length > 0">

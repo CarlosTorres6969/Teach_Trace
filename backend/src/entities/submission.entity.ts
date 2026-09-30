@@ -18,40 +18,6 @@ export enum EvaluationStatus {
   VALIDATED = 'validated',
 }
 
-export type LearningOutcomeAssessment = {
-  learningOutcome: string;
-  score: number | null;
-  explanation: string;
-  evidence: string[];
-};
-
-export type PromptPurpose =
-  | 'exploration'
-  | 'generation'
-  | 'drafting'
-  | 'correction'
-  | 'verification'
-  | 'refinement'
-  | 'other';
-
-export type PromptAssessment = {
-  scorePercentage: number | null;
-  summary: string;
-  dimensions: {
-    relevance: number | null;
-    clarity: number | null;
-    refinement: number | null;
-    verification: number | null;
-    criticalThinking: number | null;
-  };
-  prompts: Array<{
-    sequence: number;
-    purpose: PromptPurpose;
-    score: number | null;
-    explanation: string;
-  }>;
-};
-
 @Entity('submissions')
 @Index(['student', 'activity'], { unique: true })
 export class Submission {
@@ -114,18 +80,6 @@ export class Submission {
 
   @Column({ type: 'text', default: '' })
   aiComparison: string;
-
-  @Column({ type: 'integer', nullable: true })
-  aiUnderstandingScore: number | null;
-
-  @Column({ type: 'text', default: '' })
-  aiUnderstandingExplanation: string;
-
-  @Column({ type: 'simple-json', default: '[]' })
-  aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
-
-  @Column({ type: 'simple-json', nullable: true })
-  aiPromptAssessment: PromptAssessment | null;
 
   @Column({ type: dateColumnType, nullable: true })
   aiAnalyzedAt: Date | null;

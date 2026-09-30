@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AddAiEvaluationProductionSchema202609290001 } from './database/migrations/202609290001-add-ai-evaluation-production-schema';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
 import { AiConversationsModule } from './ai-conversations/ai-conversations.module';
@@ -101,8 +100,6 @@ const entities = [
               allowExitOnIdle: true,
             },
             entities,
-            migrations: [AddAiEvaluationProductionSchema202609290001],
-            migrationsRun: true,
             synchronize,
           };
         }

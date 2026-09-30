@@ -235,26 +235,6 @@ describe('SubmissionsService', () => {
         strengths: 'Fortalezas',
         improvements: 'Mejoras',
         comparison: 'Existe una diferencia.',
-        understandingScore: 84,
-        understandingExplanation: 'Comprende el propósito principal.',
-        learningOutcomeAssessments: [{
-          learningOutcome: 'Resultado 1',
-          score: 84,
-          explanation: 'Evidencia suficiente.',
-          evidence: ['Argumento documentado.'],
-        }],
-        promptAssessment: {
-          scorePercentage: 75,
-          summary: 'Prompts pertinentes.',
-          dimensions: {
-            relevance: 4,
-            clarity: 3,
-            refinement: 3,
-            verification: 2,
-            criticalThinking: 3,
-          },
-          prompts: [],
-        },
       }),
     };
     const notifications = { dispatchAiAnalysisReady: jest.fn().mockResolvedValue(undefined) };
@@ -288,8 +268,6 @@ describe('SubmissionsService', () => {
       evaluationStatus: EvaluationStatus.ANALYZED,
       manualReviewRequired: true,
       aiPossibleGrade: null,
-      aiUnderstandingScore: 84,
-      aiPromptAssessment: expect.objectContaining({ scorePercentage: 75 }),
     }));
     expect(declarations.save).toHaveBeenCalledWith(expect.objectContaining({
       detectedUsageLevel: 3,
@@ -359,10 +337,6 @@ describe('SubmissionsService', () => {
       strengths: '',
       improvements: '',
       comparison: '',
-      understandingScore: 80,
-      understandingExplanation: 'Comprensión suficiente.',
-      learningOutcomeAssessments: [],
-      promptAssessment: null,
     };
     const aiEngine = {
       analyzeEvidence: jest.fn()

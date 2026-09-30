@@ -535,12 +535,6 @@ export class StudentService {
       confirmedValues.length > 0
         ? confirmedValues.reduce((a, b) => a + b, 0) / confirmedValues.length
         : null;
-    const finalGradePercentage = confirmedValues.length > 0
-      ? Math.round(
-          (confirmedValues.reduce((sum, value) => sum + value, 0) /
-            (confirmedValues.length * 4)) * 10_000,
-        ) / 100
-      : null;
 
     return {
       activity: { id: activity.id, title: activity.title },
@@ -556,7 +550,6 @@ export class StudentService {
         confirmed: v.confirmed,
       })),
       finalScore,
-      finalGradePercentage,
       // La retroalimentación —incluida cualquier sugerencia IA— se publica
       // únicamente después de la confirmación explícita del docente.
       feedback: isEvaluated ? submission?.feedback ?? '' : '',

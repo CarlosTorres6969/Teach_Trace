@@ -19,7 +19,6 @@ type ResultsResponse = {
   status: string;
   valuations: ValuationItem[];
   finalScore: number | null;
-  finalGradePercentage: number | null;
   feedback: string;
 };
 
@@ -102,12 +101,10 @@ onMounted(load);
           </span>
         </div>
 
-        <div v-if="results.finalGradePercentage !== null" class="results-score">
-          <span class="eyebrow">Nota final confirmada por el docente</span>
-          <strong class="results-score-value">{{ results.finalGradePercentage.toFixed(2) }}%</strong>
-          <span v-if="results.finalScore !== null" class="muted">
-            Promedio {{ results.finalScore.toFixed(2) }}/4.00
-          </span>
+        <div v-if="results.finalScore !== null" class="results-score">
+          <span class="eyebrow">Promedio de niveles</span>
+          <strong class="results-score-value">{{ results.finalScore.toFixed(2) }}</strong>
+          <span class="muted">/ 4.00</span>
         </div>
 
         <div v-if="results.feedback" class="results-feedback">
