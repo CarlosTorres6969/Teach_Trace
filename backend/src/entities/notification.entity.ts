@@ -6,6 +6,14 @@ export enum NotificationType {
   AI_ANALYSIS_READY = 'AI_ANALYSIS_READY',
 }
 
+// TypeORM debe aceptar estos valores al recrear tablas de bases antiguas,
+// aunque ya no formen parte de las funciones vigentes de la aplicacion.
+const NOTIFICATION_STORAGE_TYPES = [
+  ...Object.values(NotificationType),
+  'MESSAGE_RECEIVED',
+  'FORUM_REPLY',
+];
+
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn()
@@ -14,7 +22,7 @@ export class Notification {
   @ManyToOne(() => User, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column({ type: 'simple-enum', enum: NotificationType })
+  @Column({ type: 'simple-enum', enum: NOTIFICATION_STORAGE_TYPES })
   type: NotificationType;
 
   @Column()
@@ -28,6 +36,16 @@ export class Notification {
 
   @Column({ type: 'integer', nullable: true })
   activityId: number | null;
+
+  /** Referencias históricas: evitan perder datos al sincronizar bases de versiones anteriores. */
+  @Column({ type: 'integer', nullable: true })
+  conversationId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  forumThreadId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  classId: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

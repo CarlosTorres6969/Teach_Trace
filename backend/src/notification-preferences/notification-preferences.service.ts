@@ -9,7 +9,15 @@ import {
 import { User } from '../entities/user.entity';
 import { UpdateNotificationPreferencesDto } from './notification-preferences.dto';
 
-export const NOTIFICATION_EVENT_TYPES = Object.values(NotificationEventType);
+// Los enums incluyen valores históricos para poder sincronizar bases antiguas,
+// pero solo estos eventos forman parte de la configuración vigente.
+export const NOTIFICATION_EVENT_TYPES = [
+  NotificationEventType.NEW_ACTIVITY,
+  NotificationEventType.GRADE_PUBLISHED,
+  NotificationEventType.ACTIVITY_DUE_SOON,
+  NotificationEventType.SUBMISSION_STATUS_CHANGED,
+  NotificationEventType.AI_ANALYSIS_READY,
+];
 export const DEFAULT_NOTIFICATION_CHANNELS = Object.values(NotificationChannel);
 
 @Injectable()

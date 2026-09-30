@@ -16,6 +16,14 @@ export enum NotificationEventType {
   AI_ANALYSIS_READY = 'AI_ANALYSIS_READY',
 }
 
+// Compatibilidad de almacenamiento con HU-35 y la version temporal del foro.
+// No se exponen como preferencias activas en la API actual.
+const NOTIFICATION_EVENT_STORAGE_TYPES = [
+  ...Object.values(NotificationEventType),
+  'MESSAGE_RECEIVED',
+  'FORUM_REPLY',
+];
+
 export enum NotificationChannel {
   EMAIL = 'EMAIL',
   PUSH = 'PUSH',
@@ -31,7 +39,7 @@ export class NotificationPreference {
   @ManyToOne(() => User, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column({ type: 'simple-enum', enum: NotificationEventType })
+  @Column({ type: 'simple-enum', enum: NOTIFICATION_EVENT_STORAGE_TYPES })
   eventType: NotificationEventType;
 
   @Column({ type: 'simple-json' })
