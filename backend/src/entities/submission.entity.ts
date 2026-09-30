@@ -18,6 +18,13 @@ export enum EvaluationStatus {
   VALIDATED = 'validated',
 }
 
+export type LearningOutcomeAssessment = {
+  learningOutcome: string;
+  score: number | null;
+  explanation: string;
+  evidence: string[];
+};
+
 @Entity('submissions')
 @Index(['student', 'activity'], { unique: true })
 export class Submission {
@@ -80,6 +87,15 @@ export class Submission {
 
   @Column({ type: 'text', default: '' })
   aiComparison: string;
+
+  @Column({ type: 'integer', nullable: true })
+  aiUnderstandingScore: number | null;
+
+  @Column({ type: 'text', default: '' })
+  aiUnderstandingExplanation: string;
+
+  @Column({ type: 'simple-json', default: '[]' })
+  aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
 
   @Column({ type: dateColumnType, nullable: true })
   aiAnalyzedAt: Date | null;

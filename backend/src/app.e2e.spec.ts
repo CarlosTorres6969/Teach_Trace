@@ -1374,6 +1374,76 @@ describe('TeachTrace API (integración)', () => {
     expect(asStudent.response.status).toBe(403);
   });
 
+  it('expone al docente la comprensión temática persistida sin agregar una nota IA', async () => {
+    const submissions = dataSource.getRepository(Submission);
+    let submission = await submissions.findOne({
+      where: {
+        student: { id: student.user.id },
+        activity: { id: activityId },
+      },
+    });
+    if (!submission) {
+      const studentEntity = await dataSource
+        .getRepository(User)
+        .findOneByOrFail({ id: student.user.id });
+      const activityEntity = await dataSource
+        .getRepository(Activity)
+        .findOneByOrFail({ id: activityId });
+      submission = await submissions.save(submissions.create({
+        student: studentEntity,
+        activity: activityEntity,
+        status: SubmissionStatus.SUBMITTED,
+        evaluationStatus: EvaluationStatus.NOT_REQUESTED,
+        submittedAt: new Date(),
+        productText: 'Producto para verificar el diagnóstico de comprensión.',
+      }));
+    }
+    submissionId = submission.id;
+    const previousAssessment = {
+      score: submission.aiUnderstandingScore,
+      explanation: submission.aiUnderstandingExplanation,
+      outcomes: submission.aiLearningOutcomeAssessments,
+      analyzedAt: submission.aiAnalyzedAt,
+    };
+    submission.aiUnderstandingScore = 82;
+    submission.aiUnderstandingExplanation =
+      'Comprende el tema y relaciona la solución con el propósito de la actividad.';
+    submission.aiLearningOutcomeAssessments = [{
+      learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+      score: 82,
+      explanation: 'La conclusión está vinculada con evidencia concreta.',
+      evidence: ['Contrasta dos casos en el producto final.'],
+    }];
+    submission.aiAnalyzedAt = new Date();
+    await submissions.save(submission);
+
+    try {
+      const detail = await request(`/api/teacher/submissions/${submissionId}`, {
+        headers: sessionHeaders(teacher.sessionCookie),
+      });
+
+      expect(detail.response.status).toBe(200);
+      expect(detail.body).toMatchObject({
+        aiUnderstandingScore: 82,
+        aiUnderstandingExplanation:
+          'Comprende el tema y relaciona la solución con el propósito de la actividad.',
+        aiLearningOutcomeAssessments: [{
+          learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+          score: 82,
+          evidence: ['Contrasta dos casos en el producto final.'],
+        }],
+      });
+      expect(detail.body).not.toHaveProperty('aiSuggestedGradePercentage');
+      expect(detail.body).not.toHaveProperty('aiPromptAssessment');
+    } finally {
+      submission.aiUnderstandingScore = previousAssessment.score;
+      submission.aiUnderstandingExplanation = previousAssessment.explanation;
+      submission.aiLearningOutcomeAssessments = previousAssessment.outcomes;
+      submission.aiAnalyzedAt = previousAssessment.analyzedAt;
+      await submissions.save(submission);
+    }
+  });
+
   it('R1: persiste la degradación manual cuando el motor todavía no está disponible', async () => {
     // Crear actividad exclusiva para este test (evita contaminación con submissions del seed)
     const exclusiveActivity = await request('/api/teacher/activities', {

@@ -52,8 +52,9 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `notification-preferences`: canales habilitados por usuario y tipo de evento.
 - `users`: preferencias personales sincronizadas con la cuenta.
 - `ai-engine`: motor de valoración preliminar conectado a Gemini, con salida estructurada,
-  anonimización de identificadores conocidos, lectura del contenido PDF y degradación segura a
-  revisión manual.
+  anonimización de identificadores conocidos, lectura del contenido PDF, estimación de comprensión
+  de 1 a 100 por resultado de aprendizaje y degradación segura a revisión manual. La comprensión es
+  un indicador diagnóstico y no una calificación.
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
 
@@ -73,6 +74,9 @@ base de datos únicamente una referencia `azure:`. Las descargas continúan prot
 y el rol docente; el contenedor no se publica. Si no se configura Azure, el proveedor
 `filesystem` utiliza `DOCUMENT_REPOSITORY_PATH`. Las referencias locales creadas anteriormente
 siguen siendo compatibles después de activar Azure.
+
+En PostgreSQL se mantiene `DATABASE_SYNCHRONIZE=false`; las migraciones registradas se ejecutan al
+iniciar el backend para agregar cambios pendientes sin recrear las tablas ni borrar información.
 
 ## Seguridad de la sesión
 

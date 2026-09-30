@@ -31,6 +31,13 @@ type ConversationMessage = {
   createdAt: string;
 };
 
+type LearningOutcomeAssessment = {
+  learningOutcome: string;
+  score: number | null;
+  explanation: string;
+  evidence: string[];
+};
+
 type SubmissionDetail = SubmissionSummary & {
   activity: { id: number; title: string };
   productText: string;
@@ -40,6 +47,9 @@ type SubmissionDetail = SubmissionSummary & {
   aiStrengths: string;
   aiImprovements: string;
   aiComparison: string;
+  aiUnderstandingScore: number | null;
+  aiUnderstandingExplanation: string;
+  aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
   aiAnalyzedAt: string | null;
   valuations: ValuationItem[];
   aiConversation: null | { messages: ConversationMessage[] };
@@ -93,6 +103,11 @@ async function openSubmission(id: number, preserveMessage = false) {
     selected.value = {
       ...detail,
       valuations: Array.isArray(detail.valuations) ? detail.valuations : [],
+      aiUnderstandingScore: detail.aiUnderstandingScore ?? null,
+      aiUnderstandingExplanation: detail.aiUnderstandingExplanation ?? '',
+      aiLearningOutcomeAssessments: Array.isArray(detail.aiLearningOutcomeAssessments)
+        ? detail.aiLearningOutcomeAssessments
+        : [],
     };
     feedbackDraft.value = detail.feedback ?? '';
     // Inicializar valores de edición con los ya confirmados (o vacíos)
@@ -352,6 +367,49 @@ onMounted(load);
           <p v-if="selected.aiStrengths"><strong>Qué hizo bien:</strong> {{ selected.aiStrengths }}</p>
           <p v-if="selected.aiImprovements"><strong>Qué debe mejorar:</strong> {{ selected.aiImprovements }}</p>
           <p v-if="selected.aiComparison"><strong>Comparación declaración/evidencia:</strong> {{ selected.aiComparison }}</p>
+        </section>
+
+        <section v-if="selected.aiAnalyzedAt" class="understanding-assessment">
+          <div class="understanding-heading">
+            <div>
+              <span class="eyebrow">Indicador auxiliar</span>
+              <h3>Comprensión del tema y propósito</h3>
+            </div>
+            <strong class="understanding-score">
+              {{ selected.aiUnderstandingScore ?? '—' }}<small>/100</small>
+            </strong>
+          </div>
+          <div
+            class="understanding-meter"
+            role="progressbar"
+            aria-label="Comprensión estimada por IA"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="selected.aiUnderstandingScore ?? undefined"
+          >
+            <span :style="{ width: `${selected.aiUnderstandingScore ?? 0}%` }" />
+          </div>
+          <p class="muted">
+            Estimación diagnóstica basada en evidencia; no constituye una calificación y debe ser revisada por el docente.
+          </p>
+          <p>{{ selected.aiUnderstandingExplanation }}</p>
+
+          <div v-if="selected.aiLearningOutcomeAssessments.length" class="learning-outcome-list">
+            <article
+              v-for="assessment in selected.aiLearningOutcomeAssessments"
+              :key="assessment.learningOutcome"
+              class="learning-outcome-card"
+            >
+              <div class="learning-outcome-heading">
+                <strong>{{ assessment.learningOutcome }}</strong>
+                <span>{{ assessment.score === null ? 'No determinable' : `${assessment.score}/100` }}</span>
+              </div>
+              <p>{{ assessment.explanation }}</p>
+              <ul v-if="assessment.evidence.length">
+                <li v-for="item in assessment.evidence" :key="item">{{ item }}</li>
+              </ul>
+            </article>
+          </div>
         </section>
 
         <template v-if="selected.valuations.length > 0">

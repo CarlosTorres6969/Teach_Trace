@@ -41,6 +41,21 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
           productText: 'Producto académico',
           productUrl: '',
           fileName: null,
+          feedback: '',
+          aiStrengths: 'Argumentación clara.',
+          aiImprovements: 'Profundizar la validación.',
+          aiComparison: '',
+          aiUnderstandingScore: 82,
+          aiUnderstandingExplanation: 'Comprende el tema y el propósito con evidencia suficiente.',
+          aiLearningOutcomeAssessments: [{
+            learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+            score: 82,
+            explanation: 'Relaciona la conclusión con evidencia concreta.',
+            evidence: ['Contrasta dos casos en el producto final.'],
+          }],
+          aiAnalyzedAt: '2026-09-01T13:00:00.000Z',
+          valuations: [],
+          aiConversation: null,
           logbook: null,
           aiDeclaration: {
             toolName: 'ChatGPT',
@@ -104,5 +119,25 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
 
     expect(wrapper.text()).toContain('Análisis parcial: 1 entrega(s) analizadas y 1 pendientes');
     expect(wrapper.text()).toContain('HTTP 503');
+  });
+
+  it('muestra solo la comprensión temática con su evidencia y sin las otras mejoras', async () => {
+    const wrapper = mount(TeacherSubmissionsView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-list button').trigger('click');
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain('Comprensión del tema y propósito');
+    expect(text).toContain('82/100');
+    expect(text).toContain('Argumenta una solución usando evidencia verificable.');
+    expect(text).toContain('Contrasta dos casos en el producto final.');
+    expect(text).toContain('no constituye una calificación');
+    expect(text).not.toContain('Calificación porcentual');
+    expect(text).not.toContain('Valoración de prompts');
   });
 });

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1790726400000-add-understanding-assessment';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
 import { AiConversationsModule } from './ai-conversations/ai-conversations.module';
@@ -100,6 +101,8 @@ const entities = [
               allowExitOnIdle: true,
             },
             entities,
+            migrations: [AddUnderstandingAssessment1790726400000],
+            migrationsRun: true,
             synchronize,
           };
         }

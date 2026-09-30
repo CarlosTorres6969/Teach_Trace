@@ -25,6 +25,13 @@ const providerResult = (overrides: Record<string, unknown> = {}) => ({
   feedback: 'Buen trabajo.',
   strengths: 'Argumentación clara.',
   improvements: 'Profundizar la validación.',
+  understandingExplanation: 'Comprende el tema y relaciona la evidencia con el propósito.',
+  learningOutcomeAssessments: [{
+    learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+    score: 82,
+    explanation: 'La conclusión se apoya en evidencia concreta.',
+    evidence: ['Relaciona evidencia y conclusiones en el producto.'],
+  }],
   ...overrides,
 });
 
@@ -49,6 +56,11 @@ function configuredService(overrides: Record<string, string> = {}) {
 
 function evidence() {
   return {
+    activity: {
+      title: 'Ensayo de verificación',
+      subject: 'Ingeniería de software',
+      activityType: 'Ensayo',
+    },
     logbook: null,
     declaration: {
       toolName: 'ChatGPT',
@@ -58,6 +70,7 @@ function evidence() {
     },
     product: { text: 'Producto académico', url: '' },
     rubric,
+    learningOutcomes: ['Argumenta una solución usando evidencia verificable.'],
   };
 }
 
@@ -90,12 +103,117 @@ describe('AiEngineService', () => {
       expect(result.valuations[0]).toMatchObject({ criterion: 'Argumentación', level: 3 });
       expect(result.requiresManualReview).toBe(true);
       expect(result.comparison).toContain('coincide');
+      expect(result.understandingScore).toBe(82);
+      expect(result.learningOutcomeAssessments[0]).toMatchObject({
+        learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+        score: 82,
+      });
       expect(result).not.toHaveProperty('possibleGrade');
     }
     const request = JSON.parse(
       (global.fetch as jest.Mock).mock.calls[0][1].body as string,
     ) as { messages: Array<{ content: string }> };
     expect(request.messages[1].content).not.toContain('possibleGrade');
+    expect(request.messages[1].content).toContain('RESULTADOS_APRENDIZAJE_JSON');
+  });
+
+  it('calcula la comprensión global como promedio de todos los resultados justificados', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult({
+      learningOutcomeAssessments: [
+        {
+          learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+          score: 80,
+          explanation: 'Argumenta con evidencia.',
+          evidence: ['Evidencia A.'],
+        },
+        {
+          learningOutcome: 'Valida decisiones mediante casos límite.',
+          score: 90,
+          explanation: 'Valida decisiones de forma explícita.',
+          evidence: ['Evidencia B.'],
+        },
+      ],
+    })));
+    const input = evidence();
+    input.learningOutcomes.push('Valida decisiones mediante casos límite.');
+
+    const result = await configuredService().analyzeEvidence(input);
+
+    expect(result).toMatchObject({ implemented: true, understandingScore: 85 });
+  });
+
+  it('rechaza puntajes transformados o sin evidencia y no completa un promedio parcial', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult({
+      learningOutcomeAssessments: [{
+        learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+        score: '82',
+        explanation: 'Explicación presente.',
+        evidence: ['Evidencia presente.'],
+      }],
+    })));
+
+    const result = await configuredService().analyzeEvidence(evidence());
+
+    expect(result).toMatchObject({ implemented: true, understandingScore: null });
+    if (result.implemented) {
+      expect(result.learningOutcomeAssessments[0].score).toBeNull();
+    }
+  });
+
+  it('exige evidencia para todos los resultados e ignora resultados inventados por el proveedor', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult({
+      learningOutcomeAssessments: [
+        {
+          learningOutcome: 'Argumenta una solución usando evidencia verificable.',
+          score: 80,
+          explanation: 'Argumenta con evidencia.',
+          evidence: ['Evidencia A.'],
+        },
+        {
+          learningOutcome: 'Valida decisiones mediante casos límite.',
+          score: 90,
+          explanation: 'La explicación existe, pero no cita evidencia.',
+          evidence: [],
+        },
+        {
+          learningOutcome: 'Resultado no configurado por el docente.',
+          score: 100,
+          explanation: 'No debe persistirse.',
+          evidence: ['Evidencia inventada.'],
+        },
+      ],
+    })));
+    const input = evidence();
+    input.learningOutcomes.push('Valida decisiones mediante casos límite.');
+
+    const result = await configuredService().analyzeEvidence(input);
+
+    expect(result).toMatchObject({ implemented: true, understandingScore: null });
+    if (result.implemented) {
+      expect(result.learningOutcomeAssessments).toHaveLength(2);
+      expect(result.learningOutcomeAssessments[0].score).toBe(80);
+      expect(result.learningOutcomeAssessments[1].score).toBeNull();
+      expect(result.learningOutcomeAssessments).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ learningOutcome: 'Resultado no configurado por el docente.' }),
+      ]));
+    }
+  });
+
+  it('marca la comprensión como no determinable cuando la actividad no tiene resultados', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
+    const input = evidence();
+    input.learningOutcomes = [];
+
+    const result = await configuredService().analyzeEvidence(input);
+
+    expect(result).toMatchObject({
+      implemented: true,
+      understandingScore: null,
+      learningOutcomeAssessments: [],
+    });
+    if (result.implemented) {
+      expect(result.understandingExplanation).toContain('no tiene resultados de aprendizaje');
+    }
   });
 
   it('no incluye el nivel declarado ni identificadores conocidos en la evidencia enviada', async () => {

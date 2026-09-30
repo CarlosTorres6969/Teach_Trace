@@ -173,6 +173,9 @@ export class SubmissionsService {
           aiStrengths: '',
           aiImprovements: '',
           aiComparison: '',
+          aiUnderstandingScore: null,
+          aiUnderstandingExplanation: '',
+          aiLearningOutcomeAssessments: [],
           aiAnalyzedAt: null,
           evaluationStatus: EvaluationStatus.NOT_REQUESTED,
           manualReviewRequired: false,
@@ -187,6 +190,9 @@ export class SubmissionsService {
       submission.aiStrengths = '';
       submission.aiImprovements = '';
       submission.aiComparison = '';
+      submission.aiUnderstandingScore = null;
+      submission.aiUnderstandingExplanation = '';
+      submission.aiLearningOutcomeAssessments = [];
       submission.aiAnalyzedAt = null;
       submission.feedback = '';
       submission.notificationSentAt = null;
@@ -308,6 +314,9 @@ export class SubmissionsService {
       aiStrengths: submission.aiStrengths,
       aiImprovements: submission.aiImprovements,
       aiComparison: submission.aiComparison,
+      aiUnderstandingScore: submission.aiUnderstandingScore,
+      aiUnderstandingExplanation: submission.aiUnderstandingExplanation,
+      aiLearningOutcomeAssessments: submission.aiLearningOutcomeAssessments,
       aiAnalyzedAt: submission.aiAnalyzedAt,
       valuations: valuations.map((valuation) => ({
         id: valuation.id,
@@ -512,6 +521,11 @@ export class SubmissionsService {
       try {
         const document = await this.getDocumentForAnalysis(submission);
         result = await this.aiEngine.analyzeEvidence({
+          activity: {
+            title: activity.title,
+            subject: activity.subject,
+            activityType: activity.activityType,
+          },
           logbook: logbook
             ? {
                 initialIdeas: logbook.initialIdeas,
@@ -538,6 +552,7 @@ export class SubmissionsService {
             document,
           },
           rubric: activity.rubric?.criteria ?? [],
+          learningOutcomes: activity.learningOutcomes ?? [],
           identityTerms: [submission.student.name, submission.student.email],
         });
       } catch (error: unknown) {
@@ -597,6 +612,9 @@ export class SubmissionsService {
         submission.aiStrengths = result.strengths;
         submission.aiImprovements = result.improvements;
         submission.aiComparison = result.comparison;
+        submission.aiUnderstandingScore = result.understandingScore;
+        submission.aiUnderstandingExplanation = result.understandingExplanation;
+        submission.aiLearningOutcomeAssessments = result.learningOutcomeAssessments;
         submission.aiAnalyzedAt = new Date();
         submission.evaluationStatus = EvaluationStatus.ANALYZED;
         // La IA solo propone; el docente debe revisar y confirmar cada criterio.

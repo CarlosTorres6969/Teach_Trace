@@ -115,7 +115,14 @@ describe('SubmissionsService', () => {
         },
       },
     ];
-    const activity = { id: 4, rubric: { id: 6, criteria } };
+    const activity = {
+      id: 4,
+      title: 'Actividad',
+      subject: 'Ingeniería de software',
+      activityType: 'Ensayo',
+      learningOutcomes: ['Argumenta una solución usando evidencia verificable.'],
+      rubric: { id: 6, criteria },
+    };
     const submission = {
       id: 8,
       student: { id: 2 },
@@ -149,7 +156,15 @@ describe('SubmissionsService', () => {
 
     expect(activitiesService.ownedActivity).toHaveBeenCalledWith(3, 4, true);
     expect(aiEngine.analyzeEvidence).toHaveBeenCalledWith(
-      expect.objectContaining({ rubric: criteria }),
+      expect.objectContaining({
+        activity: {
+          title: activity.title,
+          subject: activity.subject,
+          activityType: activity.activityType,
+        },
+        rubric: criteria,
+        learningOutcomes: activity.learningOutcomes,
+      }),
     );
   });
 
@@ -167,6 +182,9 @@ describe('SubmissionsService', () => {
     const activity = {
       id: 4,
       title: 'Actividad',
+      subject: 'Ingeniería de software',
+      activityType: 'Ensayo',
+      learningOutcomes: ['Argumenta una solución usando evidencia verificable.'],
       teacher: { id: 3 },
       rubric: { id: 6, criteria },
     };
@@ -235,6 +253,14 @@ describe('SubmissionsService', () => {
         strengths: 'Fortalezas',
         improvements: 'Mejoras',
         comparison: 'Existe una diferencia.',
+        understandingScore: 84,
+        understandingExplanation: 'Comprende el tema con evidencia suficiente.',
+        learningOutcomeAssessments: [{
+          learningOutcome: activity.learningOutcomes[0],
+          score: 84,
+          explanation: 'Argumenta con evidencia.',
+          evidence: ['Evidencia concreta del producto.'],
+        }],
       }),
     };
     const notifications = { dispatchAiAnalysisReady: jest.fn().mockResolvedValue(undefined) };
@@ -268,6 +294,10 @@ describe('SubmissionsService', () => {
       evaluationStatus: EvaluationStatus.ANALYZED,
       manualReviewRequired: true,
       aiPossibleGrade: null,
+      aiUnderstandingScore: 84,
+      aiLearningOutcomeAssessments: expect.arrayContaining([
+        expect.objectContaining({ score: 84 }),
+      ]),
     }));
     expect(declarations.save).toHaveBeenCalledWith(expect.objectContaining({
       detectedUsageLevel: 3,
@@ -296,6 +326,9 @@ describe('SubmissionsService', () => {
     const activity = {
       id: 9,
       title: 'Lote parcial',
+      subject: 'Ingeniería de software',
+      activityType: 'Ensayo',
+      learningOutcomes: ['Argumenta una solución usando evidencia verificable.'],
       teacher: { id: 3 },
       rubric: { id: 5, criteria: [criterion] },
     };
@@ -337,6 +370,14 @@ describe('SubmissionsService', () => {
       strengths: '',
       improvements: '',
       comparison: '',
+      understandingScore: 76,
+      understandingExplanation: 'Comprensión suficiente.',
+      learningOutcomeAssessments: [{
+        learningOutcome: activity.learningOutcomes[0],
+        score: 76,
+        explanation: 'Existe evidencia suficiente.',
+        evidence: ['Producto 2.'],
+      }],
     };
     const aiEngine = {
       analyzeEvidence: jest.fn()
