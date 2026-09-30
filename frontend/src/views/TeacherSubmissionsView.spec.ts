@@ -53,6 +53,8 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
             explanation: 'Relaciona la conclusión con evidencia concreta.',
             evidence: ['Contrasta dos casos en el producto final.'],
           }],
+          aiSuggestedGradePercentage: 66.67,
+          teacherGradePercentage: null,
           aiAnalyzedAt: '2026-09-01T13:00:00.000Z',
           valuations: [],
           aiConversation: null,
@@ -121,7 +123,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(wrapper.text()).toContain('HTTP 503');
   });
 
-  it('muestra solo la comprensión temática con su evidencia y sin las otras mejoras', async () => {
+  it('muestra comprensión y nota sugerida sin agregar la valoración de prompts', async () => {
     const wrapper = mount(TeacherSubmissionsView, {
       global: {
         stubs: { RouterLink: { template: '<a><slot /></a>' } },
@@ -137,7 +139,66 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(text).toContain('Argumenta una solución usando evidencia verificable.');
     expect(text).toContain('Contrasta dos casos en el producto final.');
     expect(text).toContain('no constituye una calificación');
-    expect(text).not.toContain('Calificación porcentual');
+    expect(text).toContain('Sugerencia porcentual de la IA');
+    expect(text).toContain('Sugerencia IA66.67%');
+    expect(text).toContain('Decisión docente confirmadaPendiente');
+    expect(text).toContain('no publica ni reemplaza la calificación');
     expect(text).not.toContain('Valoración de prompts');
+  });
+
+  it('actualiza la decisión porcentual después de confirmar el criterio docente', async () => {
+    const baseImplementation = apiMock.getMockImplementation();
+    let confirmed = false;
+    apiMock.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === '/teacher/submissions/7/valuations/21' && options?.method === 'PUT') {
+        confirmed = true;
+        return Promise.resolve({
+          id: 21,
+          criterion: 'Argumentación',
+          dimension: 'Análisis',
+          aiValue: 3,
+          aiExplanation: 'Evidencia suficiente.',
+          teacherValue: 4,
+          teacherComment: '',
+          confirmed: true,
+        });
+      }
+      if (path === '/teacher/submissions/7') {
+        return Promise.resolve(baseImplementation?.(path)).then((detail) => ({
+          ...(detail as Record<string, unknown>),
+          teacherGradePercentage: confirmed ? 100 : null,
+          valuations: [{
+            id: 21,
+            criterion: 'Argumentación',
+            dimension: 'Análisis',
+            aiValue: 3,
+            aiExplanation: 'Evidencia suficiente.',
+            teacherValue: confirmed ? 4 : null,
+            teacherComment: '',
+            confirmed,
+          }],
+        }));
+      }
+      return baseImplementation?.(path);
+    });
+    const wrapper = mount(TeacherSubmissionsView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-list button').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Decisión docente confirmadaPendiente');
+    await wrapper.get('.valuation-editor select').setValue('4');
+    await wrapper.get('.valuation-editor button').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    expect(apiMock).toHaveBeenCalledWith(
+      '/teacher/submissions/7/valuations/21',
+      expect.objectContaining({ method: 'PUT' }),
+    );
   });
 });

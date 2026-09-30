@@ -102,6 +102,113 @@ describe('SubmissionsService', () => {
     expect(result.status).toBe(SubmissionStatus.SUBMITTED);
   });
 
+  it('calcula la sugerencia porcentual IA y la decisión docente con la escala académica', async () => {
+    const submission = {
+      id: 8,
+      activity: { id: 4, title: 'Actividad' },
+      student: { id: 2, name: 'Estudiante', email: 'estudiante@unah.edu.hn' },
+      aiAnalyzedAt: new Date('2026-09-30T12:00:00.000Z') as Date | null,
+      aiLearningOutcomeAssessments: [],
+    };
+    const valuationList = [
+      {
+        id: 1,
+        criterion: 'Criterio 1',
+        dimension: 'Dimensión 1',
+        aiValue: 1,
+        aiExplanation: 'Evidencia inicial.',
+        teacherValue: 2,
+        teacherComment: 'Ajuste docente.',
+        confirmed: true,
+      },
+      {
+        id: 2,
+        criterion: 'Criterio 2',
+        dimension: 'Dimensión 2',
+        aiValue: 4,
+        aiExplanation: 'Evidencia avanzada.',
+        teacherValue: 4,
+        teacherComment: 'Confirmado.',
+        confirmed: true,
+      },
+    ];
+    const activitiesService = {
+      ownedActivity: jest.fn().mockResolvedValue({
+        id: 4,
+        rubric: { criteria: [{ name: 'Criterio 1' }, { name: 'Criterio 2' }] },
+      }),
+    };
+    const service = new SubmissionsService(
+      { findOne: jest.fn().mockResolvedValue(submission) } as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { find: jest.fn().mockResolvedValue(valuationList) } as never,
+      {} as never,
+      activitiesService as never,
+      {} as never,
+    );
+
+    const detail = await service.getForTeacher(3, 8);
+
+    expect(activitiesService.ownedActivity).toHaveBeenCalledWith(3, 4, true);
+    expect(detail.aiSuggestedGradePercentage).toBe(50);
+    expect(detail.teacherGradePercentage).toBe(66.67);
+  });
+
+  it('no sugiere porcentaje con criterios incompletos, inválidos o sin análisis IA', async () => {
+    const submission = {
+      id: 8,
+      activity: { id: 4, title: 'Actividad' },
+      student: { id: 2, name: 'Estudiante', email: 'estudiante@unah.edu.hn' },
+      aiAnalyzedAt: new Date('2026-09-30T12:00:00.000Z') as Date | null,
+      aiLearningOutcomeAssessments: [],
+    };
+    const valuations = {
+      find: jest.fn()
+        .mockResolvedValueOnce([{
+          id: 1,
+          criterion: 'Criterio 1',
+          aiValue: 3,
+          teacherValue: 3,
+          confirmed: false,
+        }])
+        .mockResolvedValueOnce([
+          { id: 1, criterion: 'Criterio 1', aiValue: 3, teacherValue: 3, confirmed: true },
+          { id: 2, criterion: 'Criterio 2', aiValue: 5, teacherValue: 3, confirmed: true },
+        ])
+        .mockResolvedValueOnce([
+          { id: 1, criterion: 'Criterio 1', aiValue: 3, teacherValue: 3, confirmed: true },
+          { id: 2, criterion: 'Criterio 2', aiValue: 3, teacherValue: 3, confirmed: true },
+        ]),
+    };
+    const activitiesService = {
+      ownedActivity: jest.fn().mockResolvedValue({
+        id: 4,
+        rubric: { criteria: [{ name: 'Criterio 1' }, { name: 'Criterio 2' }] },
+      }),
+    };
+    const service = new SubmissionsService(
+      { findOne: jest.fn().mockResolvedValue(submission) } as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      valuations as never,
+      {} as never,
+      activitiesService as never,
+      {} as never,
+    );
+
+    const incomplete = await service.getForTeacher(3, 8);
+    expect(incomplete.aiSuggestedGradePercentage).toBeNull();
+    expect(incomplete.teacherGradePercentage).toBeNull();
+
+    const invalid = await service.getForTeacher(3, 8);
+    expect(invalid.aiSuggestedGradePercentage).toBeNull();
+
+    submission.aiAnalyzedAt = null;
+    const notAnalyzed = await service.getForTeacher(3, 8);
+    expect(notAnalyzed.aiSuggestedGradePercentage).toBeNull();
+  });
+
   it('envía al motor los criterios de la rúbrica asociada', async () => {
     const criteria = [
       {

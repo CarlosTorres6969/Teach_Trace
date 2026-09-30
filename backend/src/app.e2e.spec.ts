@@ -1374,7 +1374,7 @@ describe('TeachTrace API (integración)', () => {
     expect(asStudent.response.status).toBe(403);
   });
 
-  it('expone al docente la comprensión temática persistida sin agregar una nota IA', async () => {
+  it('expone comprensión y sugerencia porcentual sin reemplazar la decisión docente', async () => {
     const submissions = dataSource.getRepository(Submission);
     let submission = await submissions.findOne({
       where: {
@@ -1417,6 +1417,53 @@ describe('TeachTrace API (integración)', () => {
     submission.aiAnalyzedAt = new Date();
     await submissions.save(submission);
 
+    const activity = await dataSource.getRepository(Activity).findOneOrFail({
+      where: { id: activityId },
+      relations: { rubric: true },
+    });
+    const valuationRepository = dataSource.getRepository(Valuation);
+    const originalValuations = await valuationRepository.find({
+      where: { submission: { id: submission.id } },
+    });
+    const originalValuationState = new Map(originalValuations.map((valuation) => [
+      valuation.id,
+      {
+        aiValue: valuation.aiValue,
+        aiExplanation: valuation.aiExplanation,
+        teacherValue: valuation.teacherValue,
+        teacherComment: valuation.teacherComment,
+        confirmed: valuation.confirmed,
+      },
+    ]));
+    const byCriterion = new Map(originalValuations.map((valuation) => [valuation.criterion, valuation]));
+    const createdValuations: Valuation[] = [];
+    const testValuations: Valuation[] = [];
+    for (const criterion of activity.rubric?.criteria ?? []) {
+      let valuation = byCriterion.get(criterion.name);
+      if (!valuation) {
+        valuation = await valuationRepository.save(valuationRepository.create({
+          activity,
+          submission,
+          dimension: criterion.dimension,
+          criterion: criterion.name,
+          aiValue: null,
+          aiExplanation: '',
+          teacherValue: null,
+          teacherComment: '',
+          confirmed: false,
+        }));
+        createdValuations.push(valuation);
+      }
+      valuation.aiValue = 3;
+      valuation.aiExplanation = 'Evidencia suficiente para sugerir el nivel 3.';
+      valuation.teacherValue = null;
+      valuation.teacherComment = '';
+      valuation.confirmed = false;
+      testValuations.push(valuation);
+    }
+    expect(testValuations.length).toBeGreaterThan(0);
+    await valuationRepository.save(testValuations);
+
     try {
       const detail = await request(`/api/teacher/submissions/${submissionId}`, {
         headers: sessionHeaders(teacher.sessionCookie),
@@ -1432,10 +1479,49 @@ describe('TeachTrace API (integración)', () => {
           score: 82,
           evidence: ['Contrasta dos casos en el producto final.'],
         }],
+        aiSuggestedGradePercentage: 66.67,
+        teacherGradePercentage: null,
       });
-      expect(detail.body).not.toHaveProperty('aiSuggestedGradePercentage');
       expect(detail.body).not.toHaveProperty('aiPromptAssessment');
+
+      const studentResults = await request(`/api/student/activities/${activityId}/results`, {
+        headers: sessionHeaders(student.sessionCookie),
+      });
+      expect(studentResults.response.status).toBe(200);
+      expect(studentResults.body).not.toHaveProperty('aiSuggestedGradePercentage');
+      expect(studentResults.body).not.toHaveProperty('teacherGradePercentage');
+
+      testValuations[0].aiValue = null;
+      await valuationRepository.save(testValuations[0]);
+      const incomplete = await request(`/api/teacher/submissions/${submissionId}`, {
+        headers: sessionHeaders(teacher.sessionCookie),
+      });
+      expect(incomplete.body).toMatchObject({
+        aiSuggestedGradePercentage: null,
+        teacherGradePercentage: null,
+      });
+
+      for (const valuation of testValuations) {
+        valuation.aiValue = 3;
+        valuation.teacherValue = 4;
+        valuation.teacherComment = 'Decisión final del docente.';
+        valuation.confirmed = true;
+      }
+      await valuationRepository.save(testValuations);
+      const confirmed = await request(`/api/teacher/submissions/${submissionId}`, {
+        headers: sessionHeaders(teacher.sessionCookie),
+      });
+      expect(confirmed.body).toMatchObject({
+        aiSuggestedGradePercentage: 66.67,
+        teacherGradePercentage: 100,
+      });
     } finally {
+      if (createdValuations.length) await valuationRepository.remove(createdValuations);
+      for (const valuation of originalValuations) {
+        const original = originalValuationState.get(valuation.id)!;
+        Object.assign(valuation, original);
+      }
+      if (originalValuations.length) await valuationRepository.save(originalValuations);
       submission.aiUnderstandingScore = previousAssessment.score;
       submission.aiUnderstandingExplanation = previousAssessment.explanation;
       submission.aiLearningOutcomeAssessments = previousAssessment.outcomes;

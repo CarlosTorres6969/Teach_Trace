@@ -50,6 +50,8 @@ type SubmissionDetail = SubmissionSummary & {
   aiUnderstandingScore: number | null;
   aiUnderstandingExplanation: string;
   aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
+  aiSuggestedGradePercentage: number | null;
+  teacherGradePercentage: number | null;
   aiAnalyzedAt: string | null;
   valuations: ValuationItem[];
   aiConversation: null | { messages: ConversationMessage[] };
@@ -108,6 +110,8 @@ async function openSubmission(id: number, preserveMessage = false) {
       aiLearningOutcomeAssessments: Array.isArray(detail.aiLearningOutcomeAssessments)
         ? detail.aiLearningOutcomeAssessments
         : [],
+      aiSuggestedGradePercentage: detail.aiSuggestedGradePercentage ?? null,
+      teacherGradePercentage: detail.teacherGradePercentage ?? null,
     };
     feedbackDraft.value = detail.feedback ?? '';
     // Inicializar valores de edición con los ya confirmados (o vacíos)
@@ -223,6 +227,7 @@ async function saveValuation(valuationId: number) {
     const idx = selected.value.valuations.findIndex((v) => v.id === valuationId);
     if (idx >= 0) selected.value.valuations[idx] = updated;
     message.value = `Criterio "${updated.criterion}" guardado.`;
+    await openSubmission(selected.value.id, true);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la valoración';
   } finally {
@@ -410,6 +415,46 @@ onMounted(load);
               </ul>
             </article>
           </div>
+        </section>
+
+        <section v-if="selected.aiAnalyzedAt" class="grade-suggestion">
+          <div>
+            <span class="eyebrow">Referencia para el docente</span>
+            <h3>Sugerencia porcentual de la IA</h3>
+          </div>
+          <div class="grade-comparison">
+            <article>
+              <span>Sugerencia IA</span>
+              <strong>
+                {{ selected.aiSuggestedGradePercentage === null
+                  ? 'No determinable'
+                  : `${selected.aiSuggestedGradePercentage}%` }}
+              </strong>
+            </article>
+            <article>
+              <span>Decisión docente confirmada</span>
+              <strong>
+                {{ selected.teacherGradePercentage === null
+                  ? 'Pendiente'
+                  : `${selected.teacherGradePercentage}%` }}
+              </strong>
+            </article>
+          </div>
+          <div
+            v-if="selected.aiSuggestedGradePercentage !== null"
+            class="suggested-grade-meter"
+            role="progressbar"
+            aria-label="Nota porcentual sugerida por IA"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="selected.aiSuggestedGradePercentage"
+          >
+            <span :style="{ width: `${selected.aiSuggestedGradePercentage}%` }" />
+          </div>
+          <p class="muted">
+            Se calcula con todos los niveles 1–4 sugeridos para la rúbrica. Es una referencia
+            preliminar: no publica ni reemplaza la calificación decidida por el docente.
+          </p>
         </section>
 
         <template v-if="selected.valuations.length > 0">

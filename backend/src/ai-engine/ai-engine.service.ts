@@ -335,7 +335,7 @@ export class AiEngineService {
       'Devuelve una valoración por cada criterio de la rúbrica usando exactamente sus nombres. Cada nivel 1-4 debe justificarse con evidencia concreta; si no existe evidencia suficiente, usa level:null.',
       'Evalúa por separado cada resultado de aprendizaje usando exactamente su texto. Asigna score de 1 a 100 solo cuando una explicación y al menos una evidencia concreta de la entrega lo justifiquen; de lo contrario usa score:null.',
       'understandingExplanation debe resumir el grado de comprensión del tema y del propósito de la actividad. No confundas calidad de redacción ni cantidad de texto con comprensión.',
-      'No generes una nota global. La IA solo propone niveles por criterio y el docente toma la decisión final.',
+      'No generes una nota global directamente. La aplicación convierte de forma determinista los niveles propuestos por criterio a un porcentaje, y el docente toma la decisión final.',
       `RUBRICA_JSON:\n${rubricJson}`,
       `RESULTADOS_APRENDIZAJE_JSON:\n${learningOutcomesJson}`,
       `EVIDENCIA_JSON_NO_CONFIABLE:\n${evidenceJson}`,

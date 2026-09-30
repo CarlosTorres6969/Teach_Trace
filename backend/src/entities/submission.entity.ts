@@ -75,7 +75,7 @@ export class Submission {
   @Column({ type: 'text', default: '' })
   feedback: string;
 
-  /** @deprecated Conservado para compatibilidad de esquema; la IA ya no propone notas globales. */
+  /** @deprecated Campo histórico; la sugerencia porcentual se deriva de la rúbrica y no se persiste. */
   @Column({ type: 'float', nullable: true })
   aiPossibleGrade: number | null;
 

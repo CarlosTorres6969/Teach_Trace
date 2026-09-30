@@ -282,7 +282,11 @@ export class SubmissionsService {
   async getForTeacher(teacherId: number, submissionId: number) {
     const submission = await this.submissions.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('La entrega no existe');
-    await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    const activity = await this.activitiesService.ownedActivity(
+      teacherId,
+      submission.activity.id,
+      true,
+    );
     const [logbook, declaration, valuations] = await Promise.all([
       this.logbooks.findOne({
         where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
@@ -318,6 +322,16 @@ export class SubmissionsService {
       aiUnderstandingExplanation: submission.aiUnderstandingExplanation,
       aiLearningOutcomeAssessments: submission.aiLearningOutcomeAssessments,
       aiAnalyzedAt: submission.aiAnalyzedAt,
+      aiSuggestedGradePercentage: submission.aiAnalyzedAt
+        ? this.percentageFromLevels(
+            valuations.map((valuation) => valuation.aiValue),
+            activity.rubric?.criteria.length ?? 0,
+          )
+        : null,
+      teacherGradePercentage: this.percentageFromLevels(
+        valuations.map((valuation) => valuation.confirmed ? valuation.teacherValue : null),
+        activity.rubric?.criteria.length ?? 0,
+      ),
       valuations: valuations.map((valuation) => ({
         id: valuation.id,
         criterion: valuation.criterion,
@@ -350,6 +364,22 @@ export class SubmissionsService {
         ? await this.aiConversations.getForTeacher(teacherId, submissionId)
         : null,
     };
+  }
+
+  private percentageFromLevels(levels: Array<number | null>, expectedCount: number) {
+    if (
+      expectedCount < 1 ||
+      levels.length !== expectedCount ||
+      levels.some((level) =>
+        level === null || !Number.isInteger(level) || level < 1 || level > 4,
+      )
+    ) {
+      return null;
+    }
+
+    const averageLevel = (levels as number[]).reduce((sum, level) => sum + level, 0) /
+      expectedCount;
+    return Math.round((((averageLevel - 1) / 3) * 100) * 100) / 100;
   }
 
   async getFileForTeacher(teacherId: number, submissionId: number) {
