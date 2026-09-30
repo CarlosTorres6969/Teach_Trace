@@ -74,6 +74,10 @@ y el rol docente; el contenedor no se publica. Si no se configura Azure, el prov
 `filesystem` utiliza `DOCUMENT_REPOSITORY_PATH`. Las referencias locales creadas anteriormente
 siguen siendo compatibles después de activar Azure.
 
+En PostgreSQL, TeachTrace mantiene `DATABASE_SYNCHRONIZE=false` y ejecuta las migraciones
+registradas al iniciar el backend. De esta forma, cada despliegue agrega unicamente los cambios de
+esquema pendientes sin recrear tablas ni eliminar informacion existente.
+
 ## Seguridad de la sesión
 
 - El navegador recibe la sesión en una cookie `HttpOnly` y `SameSite=Strict`; con

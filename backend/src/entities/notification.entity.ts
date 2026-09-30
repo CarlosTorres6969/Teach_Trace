@@ -37,16 +37,6 @@ export class Notification {
   @Column({ type: 'integer', nullable: true })
   activityId: number | null;
 
-  /** Referencias históricas: evitan perder datos al sincronizar bases de versiones anteriores. */
-  @Column({ type: 'integer', nullable: true })
-  conversationId: number | null;
-
-  @Column({ type: 'integer', nullable: true })
-  forumThreadId: number | null;
-
-  @Column({ type: 'integer', nullable: true })
-  classId: number | null;
-
   @CreateDateColumn()
   createdAt: Date;
 }
