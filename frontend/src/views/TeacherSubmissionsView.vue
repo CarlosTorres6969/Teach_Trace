@@ -349,8 +349,16 @@ onMounted(load);
 </script>
 
 <template>
-  <main class="page narrow">
-    <RouterLink to="/teacher" class="back-link">← Panel docente</RouterLink>
+  <main class="page teacher-submissions-page">
+    <nav class="teacher-submissions-nav" aria-label="Navegación de entregas">
+      <RouterLink to="/teacher" class="back-link">← Panel docente</RouterLink>
+      <RouterLink
+        :to="{ path: '/teacher', query: { section: 'activities' } }"
+        class="button secondary"
+      >
+        ← Regresar a actividades
+      </RouterLink>
+    </nav>
     <section class="page-heading compact">
       <div><span class="eyebrow">Evidencias</span><h1>Productos entregados</h1></div>
       <div class="page-heading-actions">
@@ -587,59 +595,61 @@ onMounted(load);
             >Publicada</span>
           </div>
 
-          <div
-            v-for="val in selected.valuations"
-            :key="val.id"
-            class="valuation-editor"
-            :class="{ 'valuation-editor--confirmed': val.confirmed }"
-          >
-            <div class="valuation-editor-header">
-              <div>
-                <span class="eyebrow">{{ val.dimension }}</span>
-                <strong>{{ val.criterion }}</strong>
-              </div>
-              <span v-if="val.confirmed" class="status" data-status="evaluated">Confirmado</span>
-              <span v-else class="status">Pendiente</span>
-            </div>
-
-            <div class="valuation-ai-hint" v-if="val.aiValue !== null">
-              Sugerencia IA: <strong>{{ LEVEL_LABELS[val.aiValue] }}</strong>
-            </div>
-            <p v-if="val.aiExplanation" class="valuation-ai-explanation">{{ val.aiExplanation }}</p>
-
-            <div class="valuation-editor-fields">
-              <label>
-                Nivel docente
-                <select
-                  v-model.number="editingValues[val.id].teacherValue"
-                  :disabled="selected.status === 'evaluated'"
-                >
-                  <option v-for="n in [1, 2, 3, 4]" :key="n" :value="n">
-                    {{ LEVEL_LABELS[n] }}
-                  </option>
-                </select>
-              </label>
-              <label>
-                Comentario
-                <textarea
-                  v-model="editingValues[val.id].teacherComment"
-                  rows="2"
-                  maxlength="1000"
-                  :disabled="selected.status === 'evaluated'"
-                  placeholder="Opcional — explica el nivel asignado"
-                />
-              </label>
-            </div>
-
-            <button
-              v-if="selected.status !== 'evaluated'"
-              class="button secondary"
-              type="button"
-              :disabled="savingValuation[val.id]"
-              @click="saveValuation(val.id)"
+          <div class="valuation-grid">
+            <div
+              v-for="val in selected.valuations"
+              :key="val.id"
+              class="valuation-editor"
+              :class="{ 'valuation-editor--confirmed': val.confirmed }"
             >
-              {{ savingValuation[val.id] ? 'Guardando…' : val.confirmed ? '✓ Actualizar' : 'Confirmar criterio' }}
-            </button>
+              <div class="valuation-editor-header">
+                <div>
+                  <span class="eyebrow">{{ val.dimension }}</span>
+                  <strong>{{ val.criterion }}</strong>
+                </div>
+                <span v-if="val.confirmed" class="status" data-status="evaluated">Confirmado</span>
+                <span v-else class="status">Pendiente</span>
+              </div>
+
+              <div class="valuation-ai-hint" v-if="val.aiValue !== null">
+                Sugerencia IA: <strong>{{ LEVEL_LABELS[val.aiValue] }}</strong>
+              </div>
+              <p v-if="val.aiExplanation" class="valuation-ai-explanation">{{ val.aiExplanation }}</p>
+
+              <div class="valuation-editor-fields">
+                <label>
+                  Nivel docente
+                  <select
+                    v-model.number="editingValues[val.id].teacherValue"
+                    :disabled="selected.status === 'evaluated'"
+                  >
+                    <option v-for="n in [1, 2, 3, 4]" :key="n" :value="n">
+                      {{ LEVEL_LABELS[n] }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  Comentario
+                  <textarea
+                    v-model="editingValues[val.id].teacherComment"
+                    rows="2"
+                    maxlength="1000"
+                    :disabled="selected.status === 'evaluated'"
+                    placeholder="Opcional — explica el nivel asignado"
+                  />
+                </label>
+              </div>
+
+              <button
+                v-if="selected.status !== 'evaluated'"
+                class="button secondary"
+                type="button"
+                :disabled="savingValuation[val.id]"
+                @click="saveValuation(val.id)"
+              >
+                {{ savingValuation[val.id] ? 'Guardando…' : val.confirmed ? '✓ Actualizar' : 'Confirmar criterio' }}
+              </button>
+            </div>
           </div>
 
           <!-- Cerrar evaluación -->

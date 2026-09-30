@@ -3,9 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import TeacherDashboard from './TeacherDashboard.vue';
 
+const { routeMock } = vi.hoisted(() => ({
+  routeMock: { query: {} as Record<string, string> },
+}));
+
 vi.mock('../api', () => ({ api: vi.fn() }));
 vi.mock('../auth', () => ({ auth: { user: { id: 1, name: 'Docente de prueba' } } }));
 vi.mock('read-excel-file', () => ({ default: vi.fn() }));
+vi.mock('vue-router', () => ({ useRoute: () => routeMock }));
 
 const apiMock = vi.mocked(api);
 
@@ -34,6 +39,7 @@ let currentActivities: Array<Record<string, unknown>>;
 
 describe('TeacherDashboard - organización y eliminación de actividades', () => {
   beforeEach(() => {
+    routeMock.query = {};
     currentActivities = [
       {
         id: 12,
@@ -81,6 +87,17 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     await wrapper.findAll('.teacher-tabs button')[1].trigger('click');
     return wrapper;
   }
+
+  it('abre directamente la sección de actividades cuando se solicita por la URL', async () => {
+    routeMock.query = { section: 'activities' };
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.teacher-tabs button')[1].classes()).toContain('active');
+    expect(wrapper.text()).toContain('Plan de pruebas');
+  });
 
   it('agrupa las actividades bajo la clase a la que pertenecen', async () => {
     const wrapper = await mountActivities();

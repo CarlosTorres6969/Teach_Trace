@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import readXlsxFile from 'read-excel-file';
+import { useRoute } from 'vue-router';
 import { api } from '../api';
 import { auth } from '../auth';
 import {
@@ -14,7 +15,14 @@ const activities = ref<Activity[]>([]);
 const rubrics = ref<Rubric[]>([]);
 const error = ref('');
 const message = ref('');
-const section = ref<'classes' | 'activities' | 'rubrics'>('classes');
+type TeacherSection = 'classes' | 'activities' | 'rubrics';
+const route = useRoute();
+
+function sectionFromQuery(value: unknown): TeacherSection {
+  return value === 'activities' || value === 'rubrics' ? value : 'classes';
+}
+
+const section = ref<TeacherSection>(sectionFromQuery(route.query.section));
 const classForm = reactive({ name: '', subject: '', code: '', period: '' });
 const enrollmentEmails = reactive<Record<number, string>>({});
 const enrollmentNames = reactive<Record<number, string>>({});
@@ -387,6 +395,13 @@ function handleEscape(event: KeyboardEvent) {
 watch(activeModal, (modal) => {
   document.body.classList.toggle('modal-open', Boolean(modal));
 });
+
+watch(
+  () => route.query.section,
+  (requestedSection) => {
+    section.value = sectionFromQuery(requestedSection);
+  },
+);
 
 onMounted(() => {
   window.addEventListener('keydown', handleEscape);

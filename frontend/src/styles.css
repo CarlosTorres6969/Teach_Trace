@@ -253,6 +253,13 @@ dl { display: grid; grid-template-columns: 150px 1fr; gap: .8rem 1rem; }
 dt { font-weight: 700; } dd { margin: 0; white-space: pre-wrap; }
 .empty-state { color: var(--muted); text-align: center; padding: 3rem 1rem; }
 
+.page.teacher-submissions-page { width: min(1540px, calc(100% - 2rem)); }
+.teacher-submissions-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.teacher-submissions-nav .back-link { margin-top: 0; }
+.teacher-submissions-page .split-view { grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 1.25rem; }
+.teacher-submissions-page .submission-list { position: sticky; top: 88px; max-height: calc(100vh - 112px); overflow-y: auto; align-content: start; }
+.teacher-submissions-page .evidence { min-width: 0; }
+
 .notification-form { display: grid; gap: 1.25rem; padding: 0; overflow: hidden; }
 .notification-table-wrap { overflow-x: auto; }
 .notification-table { width: 100%; border-collapse: collapse; }
@@ -664,14 +671,16 @@ html.high-contrast .activities-nav-badge {
 
 /* ─── Panel de valoraciones docente ─────────────────────────────────────── */
 .valuation-panel-header { display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 .75rem; }
-.valuation-panel-header h3 { margin: 0; }
-.valuation-editor { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; margin-bottom: .85rem; display: grid; gap: .75rem; }
+.valuation-panel-header h3 { margin: 0; padding-top: 0; border-top: 0; }
+.valuation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: .85rem; align-items: stretch; }
+.valuation-editor { min-width: 0; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; display: grid; align-content: start; gap: .75rem; }
 .valuation-editor--confirmed { border-color: #8ab5e0; background: #f5f9ff; }
 .valuation-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
 .valuation-editor-header strong { display: block; margin-top: .2rem; }
 .valuation-ai-hint { font-size: .82rem; color: var(--muted); background: #f4f7fc; padding: .4rem .7rem; border-radius: 6px; }
 .valuation-ai-explanation { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.5; white-space: pre-wrap; }
 .valuation-editor-fields { display: grid; gap: .6rem; }
+.valuation-editor > .button { justify-self: start; }
 .valuation-close-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; border-top: 1px solid var(--line); margin-top: .5rem; }
 .valuation-close-hint { flex: 1; margin: 0; font-size: .85rem; }
 .valuation-empty-hint { text-align: center; }
@@ -723,6 +732,12 @@ html.dark .valuation-ai-hint { background: #101b2b; }
 .suggested-grade-meter span { display: block; height: 100%; border-radius: inherit; background: var(--primary-solid); }
 @media (max-width: 560px) { .grade-comparison { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .prompt-assessment-heading, .ordered-prompt-heading { display: grid; } }
+@media (max-width: 780px) {
+  .teacher-submissions-nav { align-items: stretch; flex-direction: column; }
+  .teacher-submissions-nav .button { width: 100%; }
+  .teacher-submissions-page .submission-list { position: static; max-height: none; }
+  .valuation-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .evaluation-filters { align-items: end; margin-bottom: 1rem; }
 .evaluation-table-wrap { overflow-x: auto; }
 .evaluation-table { width: 100%; border-collapse: collapse; }
