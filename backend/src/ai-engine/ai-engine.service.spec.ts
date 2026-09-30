@@ -25,6 +25,27 @@ const providerResult = (overrides: Record<string, unknown> = {}) => ({
   feedback: 'Buen trabajo.',
   strengths: 'Argumentación clara.',
   improvements: 'Profundizar la validación.',
+  understandingExplanation: 'Comprende el resultado con evidencia suficiente.',
+  learningOutcomeAssessments: [{
+    learningOutcome: 'Analiza evidencia',
+    score: 82,
+    explanation: 'Relaciona la evidencia con sus conclusiones.',
+    evidence: ['Presenta una validación concreta.'],
+  }],
+  promptDimensionScores: {
+    relevance: 4,
+    clarity: 3,
+    refinement: 3,
+    verification: 2,
+    criticalThinking: 3,
+  },
+  promptAssessmentSummary: 'Los prompts son pertinentes y pueden mejorar su verificación.',
+  promptAssessments: [{
+    sequence: 0,
+    purpose: 'verification',
+    score: 3,
+    explanation: 'Solicita contraste, aunque no define todas las fuentes.',
+  }],
   ...overrides,
 });
 
@@ -49,6 +70,11 @@ function configuredService(overrides: Record<string, string> = {}) {
 
 function evidence() {
   return {
+    activity: {
+      title: 'Análisis de evidencia',
+      subject: 'Ingeniería de software',
+      activityType: 'Ensayo',
+    },
     logbook: null,
     declaration: {
       toolName: 'ChatGPT',
@@ -58,6 +84,11 @@ function evidence() {
     },
     product: { text: 'Producto académico', url: '' },
     rubric,
+    learningOutcomes: ['Analiza evidencia'],
+    conversation: [
+      { role: 'student', content: 'Contrasta esta conclusión', sequence: 0 },
+      { role: 'ai', content: 'Respuesta de contraste', sequence: 1 },
+    ],
   };
 }
 
@@ -90,12 +121,22 @@ describe('AiEngineService', () => {
       expect(result.valuations[0]).toMatchObject({ criterion: 'Argumentación', level: 3 });
       expect(result.requiresManualReview).toBe(true);
       expect(result.comparison).toContain('coincide');
+      expect(result.understandingScore).toBe(82);
+      expect(result.learningOutcomeAssessments[0]).toMatchObject({
+        learningOutcome: 'Analiza evidencia',
+        score: 82,
+      });
+      expect(result.promptAssessment).toMatchObject({
+        scorePercentage: 75,
+        prompts: [expect.objectContaining({ sequence: 0, purpose: 'verification', score: 3 })],
+      });
       expect(result).not.toHaveProperty('possibleGrade');
     }
     const request = JSON.parse(
       (global.fetch as jest.Mock).mock.calls[0][1].body as string,
     ) as { messages: Array<{ content: string }> };
     expect(request.messages[1].content).not.toContain('possibleGrade');
+    expect(request.messages[1].content).toContain('RESULTADOS_APRENDIZAJE_JSON');
   });
 
   it('no incluye el nivel declarado ni identificadores conocidos en la evidencia enviada', async () => {
@@ -163,6 +204,23 @@ describe('AiEngineService', () => {
         level: true,
         explanation: '   ',
       }],
+      learningOutcomeAssessments: [{
+        learningOutcome: 'Analiza evidencia',
+        score: '82',
+        explanation: 'Explicación sin puntuación válida.',
+        evidence: ['Evidencia'],
+      }],
+      promptDimensionScores: {
+        relevance: true,
+        clarity: 3,
+        refinement: 3,
+        verification: 2,
+        criticalThinking: 3,
+      },
+      promptAssessments: [
+        { sequence: 0, purpose: 'verification', score: 4, explanation: '   ' },
+        { sequence: 99, purpose: 'other', score: 4, explanation: 'No corresponde.' },
+      ],
     })));
 
     const result = await configuredService().analyzeEvidence(evidence());
@@ -171,6 +229,11 @@ describe('AiEngineService', () => {
     if (result.implemented) {
       expect(result.valuations[0].level).toBeNull();
       expect(result.valuations[0].explanation).toContain('No determinable');
+      expect(result.understandingScore).toBeNull();
+      expect(result.promptAssessment?.scorePercentage).toBeNull();
+      expect(result.promptAssessment?.prompts).toEqual([
+        expect.objectContaining({ sequence: 0, score: null }),
+      ]);
     }
   });
 });

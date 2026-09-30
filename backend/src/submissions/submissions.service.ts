@@ -173,6 +173,10 @@ export class SubmissionsService {
           aiStrengths: '',
           aiImprovements: '',
           aiComparison: '',
+          aiUnderstandingScore: null,
+          aiUnderstandingExplanation: '',
+          aiLearningOutcomeAssessments: [],
+          aiPromptAssessment: null,
           aiAnalyzedAt: null,
           evaluationStatus: EvaluationStatus.NOT_REQUESTED,
           manualReviewRequired: false,
@@ -187,6 +191,10 @@ export class SubmissionsService {
       submission.aiStrengths = '';
       submission.aiImprovements = '';
       submission.aiComparison = '';
+      submission.aiUnderstandingScore = null;
+      submission.aiUnderstandingExplanation = '';
+      submission.aiLearningOutcomeAssessments = [];
+      submission.aiPromptAssessment = null;
       submission.aiAnalyzedAt = null;
       submission.feedback = '';
       submission.notificationSentAt = null;
@@ -276,7 +284,11 @@ export class SubmissionsService {
   async getForTeacher(teacherId: number, submissionId: number) {
     const submission = await this.submissions.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('La entrega no existe');
-    await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    const activity = await this.activitiesService.ownedActivity(
+      teacherId,
+      submission.activity.id,
+      true,
+    );
     const [logbook, declaration, valuations] = await Promise.all([
       this.logbooks.findOne({
         where: { student: { id: submission.student.id }, activity: { id: submission.activity.id } },
@@ -291,7 +303,7 @@ export class SubmissionsService {
     ]);
     return {
       id: submission.id,
-      activity: { id: submission.activity.id, title: submission.activity.title },
+      activity: { id: activity.id, title: activity.title },
       student: {
         id: submission.student.id,
         name: submission.student.name,
@@ -308,7 +320,19 @@ export class SubmissionsService {
       aiStrengths: submission.aiStrengths,
       aiImprovements: submission.aiImprovements,
       aiComparison: submission.aiComparison,
+      aiUnderstandingScore: submission.aiUnderstandingScore,
+      aiUnderstandingExplanation: submission.aiUnderstandingExplanation,
+      aiLearningOutcomeAssessments: submission.aiLearningOutcomeAssessments ?? [],
+      aiPromptAssessment: submission.aiPromptAssessment,
       aiAnalyzedAt: submission.aiAnalyzedAt,
+      aiSuggestedGradePercentage: this.percentageFromLevels(
+        valuations.map((valuation) => valuation.aiValue),
+        activity.rubric?.criteria.length ?? 0,
+      ),
+      teacherGradePercentage: this.percentageFromLevels(
+        valuations.map((valuation) => valuation.confirmed ? valuation.teacherValue : null),
+        activity.rubric?.criteria.length ?? 0,
+      ),
       valuations: valuations.map((valuation) => ({
         id: valuation.id,
         criterion: valuation.criterion,
@@ -512,6 +536,11 @@ export class SubmissionsService {
       try {
         const document = await this.getDocumentForAnalysis(submission);
         result = await this.aiEngine.analyzeEvidence({
+          activity: {
+            title: activity.title,
+            subject: activity.subject,
+            activityType: activity.activityType,
+          },
           logbook: logbook
             ? {
                 initialIdeas: logbook.initialIdeas,
@@ -531,6 +560,7 @@ export class SubmissionsService {
           conversation: conversation?.messages.map((message) => ({
             role: message.role,
             content: message.content,
+            sequence: message.sequence,
           })),
           product: {
             text: submission.productText,
@@ -538,6 +568,7 @@ export class SubmissionsService {
             document,
           },
           rubric: activity.rubric?.criteria ?? [],
+          learningOutcomes: activity.learningOutcomes ?? [],
           identityTerms: [submission.student.name, submission.student.email],
         });
       } catch (error: unknown) {
@@ -597,6 +628,10 @@ export class SubmissionsService {
         submission.aiStrengths = result.strengths;
         submission.aiImprovements = result.improvements;
         submission.aiComparison = result.comparison;
+        submission.aiUnderstandingScore = result.understandingScore;
+        submission.aiUnderstandingExplanation = result.understandingExplanation;
+        submission.aiLearningOutcomeAssessments = result.learningOutcomeAssessments;
+        submission.aiPromptAssessment = result.promptAssessment;
         submission.aiAnalyzedAt = new Date();
         submission.evaluationStatus = EvaluationStatus.ANALYZED;
         // La IA solo propone; el docente debe revisar y confirmar cada criterio.
@@ -639,6 +674,18 @@ export class SubmissionsService {
       implemented: analyzed > 0,
       reason: failureReasons.size ? [...failureReasons].join('; ') : undefined,
     };
+  }
+
+  private percentageFromLevels(levels: Array<number | null>, expectedCount: number) {
+    if (
+      expectedCount === 0 ||
+      levels.length !== expectedCount ||
+      levels.some((level) => level === null)
+    ) {
+      return null;
+    }
+    const total = (levels as number[]).reduce((sum, level) => sum + level, 0);
+    return Math.round((total / (expectedCount * 4)) * 10_000) / 100;
   }
 
   private async getDocumentForAnalysis(submission: Submission) {

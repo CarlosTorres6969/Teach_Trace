@@ -685,12 +685,48 @@ html.dark .valuation-ai-hint { background: #101b2b; }
 .conversation-transcript { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
 .conversation-transcript li { padding: .75rem; border-left: 3px solid var(--green); background: var(--green-light); }
 .conversation-transcript p { margin: .35rem 0 0; white-space: pre-wrap; }
+.prompt-item-assessment { display: grid; grid-template-columns: 1fr auto; gap: .35rem .75rem; margin-top: .75rem; padding: .65rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font-size: .82rem; }
+.prompt-item-assessment > span { color: var(--green); font-weight: 700; }
+.prompt-item-assessment > p { grid-column: 1 / -1; color: var(--muted); }
+.prompt-assessment-summary { display: grid; gap: .9rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; }
+.analysis-score-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
+.analysis-score-heading > div { display: grid; gap: .25rem; }
+.analysis-score-heading > div > strong { color: var(--green); font: 650 2rem 'Fraunces', Georgia, serif; }
+.analysis-score-heading > p { max-width: 520px; color: var(--muted); }
+.prompt-dimension-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .55rem; }
+.prompt-dimension-grid > div { display: grid; gap: .2rem; padding: .7rem; background: var(--green-light); border-radius: 8px 3px 8px 3px; }
+.prompt-dimension-grid span { color: var(--muted); font-size: .72rem; }
+.prompt-dimension-grid strong { color: var(--green); }
 .feedback-editor textarea { width: 100%; }
 .ai-analysis-summary { display: grid; gap: .55rem; margin-top: 1.2rem; padding: 1rem; border: 1px solid var(--line); border-radius: .75rem; background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .ai-analysis-summary p { margin: 0; line-height: 1.55; }
+.analysis-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; margin-top: 1rem; }
+.analysis-metric-card { display: grid; align-content: start; gap: .7rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; background: var(--paper); }
+.analysis-metric-card p, .analysis-metric-card small { margin: 0; color: var(--muted); line-height: 1.5; }
+.analysis-metric-value { display: flex; align-items: baseline; gap: .25rem; }
+.analysis-metric-value strong { color: var(--green); font: 650 2.4rem 'Fraunces', Georgia, serif; }
+.analysis-meter { height: 7px; overflow: hidden; background: var(--line); border-radius: 99px; }
+.analysis-meter span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--green)); border-radius: inherit; }
+.grade-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.grade-comparison > div { display: grid; gap: .2rem; padding: .75rem; background: var(--green-light); border-radius: 8px 3px 8px 3px; }
+.grade-comparison span { color: var(--muted); font-size: .74rem; }
+.grade-comparison strong { color: var(--green); font-size: 1.45rem; }
+.learning-outcome-analysis { display: grid; gap: .75rem; margin-top: 1rem; }
+.learning-outcome-analysis h3, .learning-outcome-analysis p { margin-bottom: .25rem; }
+.learning-outcome-card { display: grid; gap: .55rem; padding: .9rem; border: 1px solid var(--line); border-radius: 10px 3px 10px 3px; }
+.learning-outcome-card > div { display: flex; justify-content: space-between; gap: 1rem; }
+.learning-outcome-card > div span { flex: 0 0 auto; color: var(--green); font-weight: 800; }
+.learning-outcome-card p { margin: 0; color: var(--muted); }
+.learning-outcome-card ul { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: .84rem; }
 .evaluation-filters { align-items: end; margin-bottom: 1rem; }
 .evaluation-table-wrap { overflow-x: auto; }
 .evaluation-table { width: 100%; border-collapse: collapse; }
 .evaluation-table th, .evaluation-table td { padding: .8rem .65rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
 .evaluation-table td small { display: block; color: var(--muted); margin-top: .2rem; }
 html.dark .conversation-message, html.dark .conversation-transcript li { background: #101b2b; }
+html.dark .prompt-item-assessment { background: #162235; }
+
+@media (max-width: 680px) {
+  .analysis-overview-grid { grid-template-columns: 1fr; }
+  .analysis-score-heading { display: grid; }
+}

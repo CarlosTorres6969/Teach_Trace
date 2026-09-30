@@ -102,8 +102,11 @@ contraseña de aplicación, no la contraseña normal de la cuenta.
 
 El endpoint `POST /api/entregas/actividad/:actividadId/evaluar` recorre las entregas, extrae de
 forma local el texto del PDF privado, anonimiza los identificadores conocidos y solicita a Gemini
-una valoración preliminar por cada criterio. La IA no genera una calificación global: el docente
-debe confirmar todos los criterios antes de publicar. Los fallos temporales se reintentan y, si el
+una valoración preliminar por cada criterio, una estimación de comprensión por resultado de
+aprendizaje y una valoración cronológica de los prompts. La IA no genera directamente una nota
+global: el backend calcula una sugerencia porcentual desde los niveles de la rúbrica. El docente
+debe confirmar todos los criterios; únicamente su porcentaje final se publica al estudiante. Los
+fallos temporales se reintentan y, si el
 proveedor continúa sin responder o el PDF no contiene texto extraíble, la entrega queda disponible
 para revisión manual y para un nuevo intento posterior.
 
