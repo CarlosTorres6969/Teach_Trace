@@ -55,9 +55,67 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
           }],
           aiSuggestedGradePercentage: 66.67,
           teacherGradePercentage: null,
+          aiPromptAssessment: {
+            scorePercentage: 66.67,
+            summary: 'Los prompts son pertinentes y deben mejorar la verificación.',
+            dimensions: {
+              relevance: 4,
+              clarity: 3,
+              refinement: 3,
+              verification: 2,
+              criticalThinking: 3,
+            },
+            prompts: [
+              {
+                sequence: 2,
+                content: 'Segundo prompt para refinar la conclusión.',
+                purpose: 'refinement',
+                score: 3,
+                explanation: 'Refina el resultado anterior.',
+              },
+              {
+                sequence: 0,
+                content: '',
+                purpose: 'verification',
+                score: 3,
+                explanation: 'Solicita una verificación concreta.',
+              },
+            ],
+          },
           aiAnalyzedAt: '2026-09-01T13:00:00.000Z',
           valuations: [],
-          aiConversation: null,
+          aiConversation: {
+            messages: [
+              {
+                id: 4,
+                role: 'ai',
+                content: 'Segunda respuesta.',
+                sequence: 3,
+                createdAt: '2026-09-01T12:03:00.000Z',
+              },
+              {
+                id: 3,
+                role: 'student',
+                content: 'Segundo prompt para refinar la conclusión.',
+                sequence: 2,
+                createdAt: '2026-09-01T12:02:00.000Z',
+              },
+              {
+                id: 2,
+                role: 'ai',
+                content: 'Primera respuesta.',
+                sequence: 1,
+                createdAt: '2026-09-01T12:01:00.000Z',
+              },
+              {
+                id: 1,
+                role: 'student',
+                content: 'Primer prompt para contrastar evidencia.',
+                sequence: 0,
+                createdAt: '2026-09-01T12:00:00.000Z',
+              },
+            ],
+          },
           logbook: null,
           aiDeclaration: {
             toolName: 'ChatGPT',
@@ -123,7 +181,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(wrapper.text()).toContain('HTTP 503');
   });
 
-  it('muestra comprensión y nota sugerida sin agregar la valoración de prompts', async () => {
+  it('muestra comprensión, nota sugerida y valoración cronológica de prompts', async () => {
     const wrapper = mount(TeacherSubmissionsView, {
       global: {
         stubs: { RouterLink: { template: '<a><slot /></a>' } },
@@ -143,7 +201,23 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(text).toContain('Sugerencia IA66.67%');
     expect(text).toContain('Decisión docente confirmadaPendiente');
     expect(text).toContain('no publica ni reemplaza la calificación');
-    expect(text).not.toContain('Valoración de prompts');
+    expect(text).toContain('Valoración de prompts');
+    expect(text).toContain('66.67%');
+    expect(text).toContain('Pertinencia4/4');
+    expect(text).toContain('Verificación2/4');
+
+    const transcript = wrapper.findAll('.conversation-transcript li').map((item) => item.text());
+    expect(transcript).toEqual([
+      'EstudiantePrimer prompt para contrastar evidencia.',
+      'IAPrimera respuesta.',
+      'EstudianteSegundo prompt para refinar la conclusión.',
+      'IASegunda respuesta.',
+    ]);
+    const orderedPrompts = wrapper.findAll('.ordered-prompt-list li');
+    expect(orderedPrompts).toHaveLength(2);
+    expect(orderedPrompts[0].text()).toContain('Prompt 1 · Verificación');
+    expect(orderedPrompts[0].text()).toContain('Primer prompt para contrastar evidencia.');
+    expect(orderedPrompts[1].text()).toContain('Prompt 2 · Refinamiento');
   });
 
   it('actualiza la decisión porcentual después de confirmar el criterio docente', async () => {

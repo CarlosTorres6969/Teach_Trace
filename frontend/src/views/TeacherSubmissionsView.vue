@@ -38,6 +38,30 @@ type LearningOutcomeAssessment = {
   evidence: string[];
 };
 
+type PromptPurpose =
+  | 'exploration'
+  | 'generation'
+  | 'drafting'
+  | 'correction'
+  | 'verification'
+  | 'refinement'
+  | 'other';
+
+type PromptDimension = 'relevance' | 'clarity' | 'refinement' | 'verification' | 'criticalThinking';
+
+type PromptAssessment = {
+  scorePercentage: number | null;
+  summary: string;
+  dimensions: Record<PromptDimension, number | null>;
+  prompts: Array<{
+    sequence: number;
+    content: string;
+    purpose: PromptPurpose;
+    score: number | null;
+    explanation: string;
+  }>;
+};
+
 type SubmissionDetail = SubmissionSummary & {
   activity: { id: number; title: string };
   productText: string;
@@ -50,6 +74,7 @@ type SubmissionDetail = SubmissionSummary & {
   aiUnderstandingScore: number | null;
   aiUnderstandingExplanation: string;
   aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
+  aiPromptAssessment: PromptAssessment | null;
   aiSuggestedGradePercentage: number | null;
   teacherGradePercentage: number | null;
   aiAnalyzedAt: string | null;
@@ -72,6 +97,24 @@ const LEVEL_LABELS: Record<number, string> = {
   3: 'Nivel 3 — Satisfactorio',
   4: 'Nivel 4 — Excelente',
 };
+
+const PROMPT_PURPOSE_LABELS: Record<PromptPurpose, string> = {
+  exploration: 'Exploración inicial',
+  generation: 'Generación de ideas',
+  drafting: 'Redacción',
+  correction: 'Corrección',
+  verification: 'Verificación',
+  refinement: 'Refinamiento',
+  other: 'Otro propósito',
+};
+
+const PROMPT_DIMENSION_LABELS: Array<{ key: PromptDimension; label: string }> = [
+  { key: 'relevance', label: 'Pertinencia' },
+  { key: 'clarity', label: 'Claridad' },
+  { key: 'refinement', label: 'Refinamiento' },
+  { key: 'verification', label: 'Verificación' },
+  { key: 'criticalThinking', label: 'Pensamiento crítico' },
+];
 
 const route = useRoute();
 const activityId = Number(route.params.id);
@@ -102,6 +145,31 @@ async function openSubmission(id: number, preserveMessage = false) {
   if (!preserveMessage) message.value = '';
   try {
     const detail = await api<SubmissionDetail>(`/teacher/submissions/${id}`);
+    const orderedConversationMessages = Array.isArray(detail.aiConversation?.messages)
+      ? [...detail.aiConversation.messages].sort((left, right) => left.sequence - right.sequence)
+      : [];
+    const normalizedPromptAssessment = detail.aiPromptAssessment
+      ? {
+          ...detail.aiPromptAssessment,
+          dimensions: {
+            relevance: detail.aiPromptAssessment.dimensions?.relevance ?? null,
+            clarity: detail.aiPromptAssessment.dimensions?.clarity ?? null,
+            refinement: detail.aiPromptAssessment.dimensions?.refinement ?? null,
+            verification: detail.aiPromptAssessment.dimensions?.verification ?? null,
+            criticalThinking: detail.aiPromptAssessment.dimensions?.criticalThinking ?? null,
+          },
+          prompts: Array.isArray(detail.aiPromptAssessment.prompts)
+            ? [...detail.aiPromptAssessment.prompts]
+                .sort((left, right) => left.sequence - right.sequence)
+                .map((prompt) => ({
+                  ...prompt,
+                  content: prompt.content || orderedConversationMessages.find(
+                    (message) => message.role === 'student' && message.sequence === prompt.sequence,
+                  )?.content || '',
+                }))
+            : [],
+        }
+      : null;
     selected.value = {
       ...detail,
       valuations: Array.isArray(detail.valuations) ? detail.valuations : [],
@@ -110,8 +178,15 @@ async function openSubmission(id: number, preserveMessage = false) {
       aiLearningOutcomeAssessments: Array.isArray(detail.aiLearningOutcomeAssessments)
         ? detail.aiLearningOutcomeAssessments
         : [],
+      aiPromptAssessment: normalizedPromptAssessment,
       aiSuggestedGradePercentage: detail.aiSuggestedGradePercentage ?? null,
       teacherGradePercentage: detail.teacherGradePercentage ?? null,
+      aiConversation: detail.aiConversation
+        ? {
+            ...detail.aiConversation,
+            messages: orderedConversationMessages,
+          }
+        : null,
     };
     feedbackDraft.value = detail.feedback ?? '';
     // Inicializar valores de edición con los ya confirmados (o vacíos)
@@ -328,7 +403,10 @@ onMounted(load);
 
         <section v-if="selected.aiConversation?.messages.length" class="conversation-review">
           <div class="valuation-panel-header">
-            <h3>Conversación con IA</h3>
+            <div>
+              <h3>Conversación registrada</h3>
+              <p class="muted">Mensajes ordenados cronológicamente según la evidencia guardada.</p>
+            </div>
             <button class="button secondary" type="button" @click="downloadConversation">Exportar TXT</button>
           </div>
           <ol class="conversation-transcript">
@@ -337,6 +415,48 @@ onMounted(load);
               <p>{{ item.content }}</p>
             </li>
           </ol>
+        </section>
+
+        <section v-if="selected.aiPromptAssessment" class="prompt-assessment-review">
+          <div class="prompt-assessment-heading">
+            <div>
+              <span class="eyebrow">Indicador auxiliar</span>
+              <h3>Valoración de prompts</h3>
+            </div>
+            <strong>
+              {{ selected.aiPromptAssessment.scorePercentage === null
+                ? 'No determinable'
+                : `${selected.aiPromptAssessment.scorePercentage}%` }}
+            </strong>
+          </div>
+          <p>{{ selected.aiPromptAssessment.summary }}</p>
+          <div class="prompt-dimension-grid">
+            <article v-for="dimension in PROMPT_DIMENSION_LABELS" :key="dimension.key">
+              <span>{{ dimension.label }}</span>
+              <strong>
+                {{ selected.aiPromptAssessment.dimensions[dimension.key] === null
+                  ? 'No determinable'
+                  : `${selected.aiPromptAssessment.dimensions[dimension.key]}/4` }}
+              </strong>
+            </article>
+          </div>
+          <ol class="ordered-prompt-list">
+            <li
+              v-for="(prompt, index) in selected.aiPromptAssessment.prompts"
+              :key="prompt.sequence"
+            >
+              <div class="ordered-prompt-heading">
+                <span>Prompt {{ index + 1 }} · {{ PROMPT_PURPOSE_LABELS[prompt.purpose] }}</span>
+                <strong>{{ prompt.score === null ? 'No determinable' : `${prompt.score}/4` }}</strong>
+              </div>
+              <blockquote>{{ prompt.content }}</blockquote>
+              <p>{{ prompt.explanation }}</p>
+            </li>
+          </ol>
+          <p class="muted">
+            Esta valoración examina la calidad del proceso de interacción con IA; es orientativa y
+            queda sujeta a la revisión del docente.
+          </p>
         </section>
 
         <!-- Bitácora -->

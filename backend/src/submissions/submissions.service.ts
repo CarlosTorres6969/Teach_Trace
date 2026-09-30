@@ -176,6 +176,7 @@ export class SubmissionsService {
           aiUnderstandingScore: null,
           aiUnderstandingExplanation: '',
           aiLearningOutcomeAssessments: [],
+          aiPromptAssessment: null,
           aiAnalyzedAt: null,
           evaluationStatus: EvaluationStatus.NOT_REQUESTED,
           manualReviewRequired: false,
@@ -193,6 +194,7 @@ export class SubmissionsService {
       submission.aiUnderstandingScore = null;
       submission.aiUnderstandingExplanation = '';
       submission.aiLearningOutcomeAssessments = [];
+      submission.aiPromptAssessment = null;
       submission.aiAnalyzedAt = null;
       submission.feedback = '';
       submission.notificationSentAt = null;
@@ -321,6 +323,7 @@ export class SubmissionsService {
       aiUnderstandingScore: submission.aiUnderstandingScore,
       aiUnderstandingExplanation: submission.aiUnderstandingExplanation,
       aiLearningOutcomeAssessments: submission.aiLearningOutcomeAssessments,
+      aiPromptAssessment: submission.aiPromptAssessment,
       aiAnalyzedAt: submission.aiAnalyzedAt,
       aiSuggestedGradePercentage: submission.aiAnalyzedAt
         ? this.percentageFromLevels(
@@ -575,6 +578,7 @@ export class SubmissionsService {
           conversation: conversation?.messages.map((message) => ({
             role: message.role,
             content: message.content,
+            sequence: message.sequence,
           })),
           product: {
             text: submission.productText,
@@ -645,6 +649,7 @@ export class SubmissionsService {
         submission.aiUnderstandingScore = result.understandingScore;
         submission.aiUnderstandingExplanation = result.understandingExplanation;
         submission.aiLearningOutcomeAssessments = result.learningOutcomeAssessments;
+        submission.aiPromptAssessment = result.promptAssessment;
         submission.aiAnalyzedAt = new Date();
         submission.evaluationStatus = EvaluationStatus.ANALYZED;
         // La IA solo propone; el docente debe revisar y confirmar cada criterio.

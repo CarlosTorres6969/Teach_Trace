@@ -59,8 +59,8 @@ describe('SubmissionsService', () => {
     const aiConversations = {
       getForStudent: jest.fn().mockResolvedValue({
         messages: [
-          { role: 'student', content: 'Prompt' },
-          { role: 'ai', content: 'Respuesta' },
+          { role: 'student', content: 'Prompt', sequence: 0 },
+          { role: 'ai', content: 'Respuesta', sequence: 1 },
         ],
       }),
       attachToSubmission: jest.fn(),
@@ -93,6 +93,9 @@ describe('SubmissionsService', () => {
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(submissionRepository.save).toHaveBeenCalledTimes(1);
+    expect(submissionRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ aiPromptAssessment: null }),
+    );
     expect(declarationRepository.save).toHaveBeenCalledTimes(1);
     expect(declarationRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ detectedUsageLevel: null, usageDiscrepancy: false }),
@@ -368,6 +371,32 @@ describe('SubmissionsService', () => {
           explanation: 'Argumenta con evidencia.',
           evidence: ['Evidencia concreta del producto.'],
         }],
+        promptAssessment: {
+          scorePercentage: 66.67,
+          summary: 'Los prompts son pertinentes y requieren mayor verificación.',
+          dimensions: {
+            relevance: 4,
+            clarity: 3,
+            refinement: 3,
+            verification: 2,
+            criticalThinking: 3,
+          },
+          prompts: [{
+            sequence: 0,
+            content: 'Prompt',
+            purpose: 'verification',
+            score: 3,
+            explanation: 'Solicita contraste.',
+          }],
+        },
+      }),
+    };
+    const aiConversations = {
+      getForTeacher: jest.fn().mockResolvedValue({
+        messages: [
+          { role: 'student', content: 'Prompt', sequence: 0 },
+          { role: 'ai', content: 'Respuesta', sequence: 1 },
+        ],
       }),
     };
     const notifications = { dispatchAiAnalysisReady: jest.fn().mockResolvedValue(undefined) };
@@ -380,7 +409,7 @@ describe('SubmissionsService', () => {
       activitiesService as never,
       aiEngine as never,
       undefined,
-      undefined,
+      aiConversations as never,
       notifications as never,
     );
 
@@ -396,6 +425,10 @@ describe('SubmissionsService', () => {
     expect(aiEngine.analyzeEvidence).toHaveBeenCalledWith(expect.objectContaining({
       identityTerms: ['Ana Pérez', 'ana.perez@unah.edu.hn'],
       product: expect.objectContaining({ document: null }),
+      conversation: [
+        { role: 'student', content: 'Prompt', sequence: 0 },
+        { role: 'ai', content: 'Respuesta', sequence: 1 },
+      ],
     }));
     expect(submissions.save).toHaveBeenCalledWith(expect.objectContaining({
       evaluationStatus: EvaluationStatus.ANALYZED,
@@ -405,6 +438,7 @@ describe('SubmissionsService', () => {
       aiLearningOutcomeAssessments: expect.arrayContaining([
         expect.objectContaining({ score: 84 }),
       ]),
+      aiPromptAssessment: expect.objectContaining({ scorePercentage: 66.67 }),
     }));
     expect(declarations.save).toHaveBeenCalledWith(expect.objectContaining({
       detectedUsageLevel: 3,
@@ -485,6 +519,7 @@ describe('SubmissionsService', () => {
         explanation: 'Existe evidencia suficiente.',
         evidence: ['Producto 2.'],
       }],
+      promptAssessment: null,
     };
     const aiEngine = {
       analyzeEvidence: jest.fn()

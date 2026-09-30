@@ -1374,7 +1374,7 @@ describe('TeachTrace API (integración)', () => {
     expect(asStudent.response.status).toBe(403);
   });
 
-  it('expone comprensión y sugerencia porcentual sin reemplazar la decisión docente', async () => {
+  it('expone comprensión, sugerencia porcentual y prompts ordenados solo al docente', async () => {
     const submissions = dataSource.getRepository(Submission);
     let submission = await submissions.findOne({
       where: {
@@ -1403,6 +1403,7 @@ describe('TeachTrace API (integración)', () => {
       score: submission.aiUnderstandingScore,
       explanation: submission.aiUnderstandingExplanation,
       outcomes: submission.aiLearningOutcomeAssessments,
+      prompts: submission.aiPromptAssessment,
       analyzedAt: submission.aiAnalyzedAt,
     };
     submission.aiUnderstandingScore = 82;
@@ -1414,6 +1415,26 @@ describe('TeachTrace API (integración)', () => {
       explanation: 'La conclusión está vinculada con evidencia concreta.',
       evidence: ['Contrasta dos casos en el producto final.'],
     }];
+    submission.aiPromptAssessment = {
+      scorePercentage: 66.67,
+      summary: 'Los prompts son pertinentes y requieren mayor verificación.',
+      dimensions: {
+        relevance: 4,
+        clarity: 3,
+        refinement: 3,
+        verification: 2,
+        criticalThinking: 3,
+      },
+      prompts: [
+        {
+          sequence: 0,
+          content: 'Prompt obligatorio de prueba',
+          purpose: 'verification',
+          score: 3,
+          explanation: 'Solicita una verificación concreta.',
+        },
+      ],
+    };
     submission.aiAnalyzedAt = new Date();
     await submissions.save(submission);
 
@@ -1481,8 +1502,17 @@ describe('TeachTrace API (integración)', () => {
         }],
         aiSuggestedGradePercentage: 66.67,
         teacherGradePercentage: null,
+        aiPromptAssessment: {
+          scorePercentage: 66.67,
+          dimensions: { relevance: 4, verification: 2 },
+          prompts: [{
+            sequence: 0,
+            content: 'Prompt obligatorio de prueba',
+            purpose: 'verification',
+            score: 3,
+          }],
+        },
       });
-      expect(detail.body).not.toHaveProperty('aiPromptAssessment');
 
       const studentResults = await request(`/api/student/activities/${activityId}/results`, {
         headers: sessionHeaders(student.sessionCookie),
@@ -1490,6 +1520,7 @@ describe('TeachTrace API (integración)', () => {
       expect(studentResults.response.status).toBe(200);
       expect(studentResults.body).not.toHaveProperty('aiSuggestedGradePercentage');
       expect(studentResults.body).not.toHaveProperty('teacherGradePercentage');
+      expect(studentResults.body).not.toHaveProperty('aiPromptAssessment');
 
       testValuations[0].aiValue = null;
       await valuationRepository.save(testValuations[0]);
@@ -1525,6 +1556,7 @@ describe('TeachTrace API (integración)', () => {
       submission.aiUnderstandingScore = previousAssessment.score;
       submission.aiUnderstandingExplanation = previousAssessment.explanation;
       submission.aiLearningOutcomeAssessments = previousAssessment.outcomes;
+      submission.aiPromptAssessment = previousAssessment.prompts;
       submission.aiAnalyzedAt = previousAssessment.analyzedAt;
       await submissions.save(submission);
     }

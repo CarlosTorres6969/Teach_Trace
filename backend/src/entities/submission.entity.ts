@@ -25,6 +25,34 @@ export type LearningOutcomeAssessment = {
   evidence: string[];
 };
 
+export type PromptPurpose =
+  | 'exploration'
+  | 'generation'
+  | 'drafting'
+  | 'correction'
+  | 'verification'
+  | 'refinement'
+  | 'other';
+
+export type PromptAssessment = {
+  scorePercentage: number | null;
+  summary: string;
+  dimensions: {
+    relevance: number | null;
+    clarity: number | null;
+    refinement: number | null;
+    verification: number | null;
+    criticalThinking: number | null;
+  };
+  prompts: Array<{
+    sequence: number;
+    content: string;
+    purpose: PromptPurpose;
+    score: number | null;
+    explanation: string;
+  }>;
+};
+
 @Entity('submissions')
 @Index(['student', 'activity'], { unique: true })
 export class Submission {
@@ -96,6 +124,9 @@ export class Submission {
 
   @Column({ type: 'simple-json', default: '[]' })
   aiLearningOutcomeAssessments: LearningOutcomeAssessment[];
+
+  @Column({ type: 'simple-json', nullable: true })
+  aiPromptAssessment: PromptAssessment | null;
 
   @Column({ type: dateColumnType, nullable: true })
   aiAnalyzedAt: Date | null;

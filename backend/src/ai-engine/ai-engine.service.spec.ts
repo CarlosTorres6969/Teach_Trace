@@ -32,6 +32,28 @@ const providerResult = (overrides: Record<string, unknown> = {}) => ({
     explanation: 'La conclusión se apoya en evidencia concreta.',
     evidence: ['Relaciona evidencia y conclusiones en el producto.'],
   }],
+  promptDimensionScores: {
+    relevance: 4,
+    clarity: 3,
+    refinement: 3,
+    verification: 2,
+    criticalThinking: 3,
+  },
+  promptAssessmentSummary: 'Los prompts son pertinentes y requieren mayor verificación.',
+  promptAssessments: [
+    {
+      sequence: 4,
+      purpose: 'refinement',
+      score: 3,
+      explanation: 'Refina la propuesta a partir de la respuesta anterior.',
+    },
+    {
+      sequence: 0,
+      purpose: 'verification',
+      score: 3,
+      explanation: 'Solicita contrastar la conclusión con evidencia.',
+    },
+  ],
   ...overrides,
 });
 
@@ -71,6 +93,12 @@ function evidence() {
     product: { text: 'Producto académico', url: '' },
     rubric,
     learningOutcomes: ['Argumenta una solución usando evidencia verificable.'],
+    conversation: [
+      { role: 'student', content: 'Mejora la conclusión después del contraste.', sequence: 4 },
+      { role: 'ai', content: 'Conclusión refinada.', sequence: 5 },
+      { role: 'student', content: 'Contrasta esta conclusión con la evidencia.', sequence: 0 },
+      { role: 'ai', content: 'Respuesta de contraste.', sequence: 1 },
+    ],
   };
 }
 
@@ -108,6 +136,25 @@ describe('AiEngineService', () => {
         learningOutcome: 'Argumenta una solución usando evidencia verificable.',
         score: 82,
       });
+      expect(result.promptAssessment).toMatchObject({
+        scorePercentage: 66.67,
+        prompts: [
+          {
+            sequence: 0,
+            content: 'Contrasta esta conclusión con la evidencia.',
+            purpose: 'verification',
+            score: 3,
+            explanation: 'Solicita contrastar la conclusión con evidencia.',
+          },
+          {
+            sequence: 4,
+            content: 'Mejora la conclusión después del contraste.',
+            purpose: 'refinement',
+            score: 3,
+            explanation: 'Refina la propuesta a partir de la respuesta anterior.',
+          },
+        ],
+      });
       expect(result).not.toHaveProperty('possibleGrade');
     }
     const request = JSON.parse(
@@ -115,6 +162,7 @@ describe('AiEngineService', () => {
     ) as { messages: Array<{ content: string }> };
     expect(request.messages[1].content).not.toContain('possibleGrade');
     expect(request.messages[1].content).toContain('RESULTADOS_APRENDIZAJE_JSON');
+    expect(request.messages[1].content).toContain('"sequence":0');
   });
 
   it('calcula la comprensión global como promedio de todos los resultados justificados', async () => {
@@ -216,6 +264,16 @@ describe('AiEngineService', () => {
     }
   });
 
+  it('omite la valoración de prompts cuando no existe conversación del estudiante', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
+    const input = evidence();
+    input.conversation = [];
+
+    const result = await configuredService().analyzeEvidence(input);
+
+    expect(result).toMatchObject({ implemented: true, promptAssessment: null });
+  });
+
   it('no incluye el nivel declarado ni identificadores conocidos en la evidencia enviada', async () => {
     global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
     const input = evidence();
@@ -281,6 +339,17 @@ describe('AiEngineService', () => {
         level: true,
         explanation: '   ',
       }],
+      promptDimensionScores: {
+        relevance: true,
+        clarity: 3,
+        refinement: 3,
+        verification: 2,
+        criticalThinking: 3,
+      },
+      promptAssessments: [
+        { sequence: 0, purpose: 'verification', score: 4, explanation: '   ' },
+        { sequence: 99, purpose: 'other', score: 4, explanation: 'No corresponde.' },
+      ],
     })));
 
     const result = await configuredService().analyzeEvidence(evidence());
@@ -289,6 +358,14 @@ describe('AiEngineService', () => {
     if (result.implemented) {
       expect(result.valuations[0].level).toBeNull();
       expect(result.valuations[0].explanation).toContain('No determinable');
+      expect(result.promptAssessment?.scorePercentage).toBeNull();
+      expect(result.promptAssessment?.prompts).toEqual([
+        expect.objectContaining({ sequence: 0, score: null }),
+        expect.objectContaining({ sequence: 4, score: null }),
+      ]);
+      expect(result.promptAssessment?.prompts).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ sequence: 99 }),
+      ]));
     }
   });
 });

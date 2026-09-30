@@ -54,8 +54,8 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 - `ai-engine`: motor de valoración preliminar conectado a Gemini, con salida estructurada,
   anonimización de identificadores conocidos, lectura del contenido PDF, estimación de comprensión
   de 1 a 100 por resultado de aprendizaje, sugerencia porcentual calculada desde todos los niveles
-  de la rúbrica y degradación segura a revisión manual. Ambos indicadores son preliminares: el
-  docente conserva la decisión final y debe confirmar cada criterio.
+  de la rúbrica, y valoración cronológica de los prompts del estudiante por dimensiones. Estos
+  indicadores son preliminares: el docente conserva la decisión final y debe confirmar cada criterio.
 - `evaluations` e `indicators`: módulos y entidades preparados para los requerimientos pendientes.
 - `student` y `teacher`: controladores de aplicación que orquestan los dominios según el rol.
 
