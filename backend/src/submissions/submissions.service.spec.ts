@@ -379,4 +379,37 @@ describe('SubmissionsService', () => {
       evaluationStatus: EvaluationStatus.MANUAL_REQUIRED,
     }));
   });
+
+  it('cuenta las entregas de varias actividades en una sola consulta agrupada', async () => {
+    const query = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        { activityId: '4', submissionCount: '2' },
+        { activityId: 7, submissionCount: 1 },
+      ]),
+    };
+    const submissions = { createQueryBuilder: jest.fn().mockReturnValue(query) };
+    const service = new SubmissionsService(
+      submissions as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const counts = await service.countByActivityIds([4, 7, 9]);
+
+    expect(counts).toEqual(new Map([[4, 2], [7, 1]]));
+    expect(query.where).toHaveBeenCalledWith(
+      'activity.id IN (:...activityIds)',
+      { activityIds: [4, 7, 9] },
+    );
+    expect(query.getRawMany).toHaveBeenCalledTimes(1);
+  });
 });

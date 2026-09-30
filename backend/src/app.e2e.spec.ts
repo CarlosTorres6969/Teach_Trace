@@ -2132,6 +2132,15 @@ describe('TeachTrace API (integración)', () => {
     expect(studentSubmissions).toHaveLength(1);
     expect(studentSubmissions[0].id).toBe(persistedAfterFirstSubmission.id);
 
+    const teacherActivities = await request('/api/teacher/activities', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const countedActivity = (teacherActivities.body as Array<{
+      id: number;
+      submissionCount: number;
+    }>).find((activity) => activity.id === activityId);
+    expect(countedActivity?.submissionCount).toBe(1);
+
     const detail = await request(`/api/teacher/submissions/${studentSubmissions[0].id}`, {
       headers: sessionHeaders(teacher.sessionCookie),
     });

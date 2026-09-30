@@ -256,6 +256,23 @@ export class SubmissionsService {
     }));
   }
 
+  async countByActivityIds(activityIds: number[]) {
+    if (!activityIds.length) return new Map<number, number>();
+
+    const rows = await this.submissions
+      .createQueryBuilder('submission')
+      .innerJoin('submission.activity', 'activity')
+      .select('activity.id', 'activityId')
+      .addSelect('COUNT(submission.id)', 'submissionCount')
+      .where('activity.id IN (:...activityIds)', { activityIds })
+      .groupBy('activity.id')
+      .getRawMany<{ activityId: string | number; submissionCount: string | number }>();
+
+    return new Map(
+      rows.map((row) => [Number(row.activityId), Number(row.submissionCount)]),
+    );
+  }
+
   async getForTeacher(teacherId: number, submissionId: number) {
     const submission = await this.submissions.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('La entrega no existe');

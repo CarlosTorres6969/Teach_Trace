@@ -62,6 +62,7 @@ export type Activity = {
   manualEvaluationRequired?: boolean;
   published?: boolean;
   learningOutcomes?: string[];
+  submissionCount?: number;
   submissionStatus?: string;
   rubric?: Rubric | null;
   createdAt?: string;

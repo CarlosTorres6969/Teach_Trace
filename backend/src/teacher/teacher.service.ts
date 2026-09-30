@@ -41,7 +41,12 @@ export class TeacherService {
 
   async listActivities(teacherId: number) {
     const activities = await this.activitiesService.listForTeacher(teacherId);
-    return activities.map((activity) => this.activityResponse(activity));
+    const submissionCounts = await this.submissionsService.countByActivityIds(
+      activities.map((activity) => activity.id),
+    );
+    return activities.map((activity) =>
+      this.activityResponse(activity, submissionCounts.get(activity.id) ?? 0),
+    );
   }
 
   async createActivity(teacher: User, input: CreateActivityDto) {
@@ -96,7 +101,7 @@ export class TeacherService {
     };
   }
 
-  private activityResponse(activity: Activity) {
+  private activityResponse(activity: Activity, submissionCount = 0) {
     return {
       id: activity.id,
       title: activity.title,
@@ -107,6 +112,7 @@ export class TeacherService {
       manualEvaluationRequired: activity.manualEvaluationRequired,
       published: activity.published,
       learningOutcomes: activity.learningOutcomes,
+      submissionCount,
       academicClass: activity.academicClass
         ? {
             id: activity.academicClass.id,

@@ -498,6 +498,10 @@ onBeforeUnmount(() => {
               <p class="muted">Entrega: {{ activity.dueDate }}</p>
             </div>
             <div class="catalog-badges">
+              <span class="submission-count">
+                {{ activity.submissionCount ?? 0 }}
+                {{ (activity.submissionCount ?? 0) === 1 ? 'entrega' : 'entregas' }}
+              </span>
               <span>{{ activity.learningOutcomes?.length ?? 0 }} resultado(s)</span>
               <span :class="{ pending: !activity.rubric }">{{ activity.rubric?.name ?? 'Sin rúbrica' }}</span>
             </div>

@@ -43,6 +43,7 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
         activityType: 'Proyecto',
         evaluationPhase: 'pilot',
         published: false,
+        submissionCount: 2,
         learningOutcomes: [],
         rubric: null,
       },
@@ -54,6 +55,7 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
         activityType: 'Proyecto',
         evaluationPhase: 'pilot',
         published: false,
+        submissionCount: 1,
         learningOutcomes: [],
         rubric: null,
       },
@@ -86,9 +88,11 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
 
     expect(groups).toHaveLength(2);
     expect(groups[0].text()).toContain('IS-202');
+    expect(groups[0].text()).toContain('2 entregas');
     expect(groups[0].text()).toContain('Plan de pruebas');
     expect(groups[0].text()).not.toContain('Aplicación con Vue');
     expect(groups[1].text()).toContain('PW-101');
+    expect(groups[1].text()).toContain('1 entrega');
     expect(groups[1].text()).toContain('Aplicación con Vue');
   });
 
