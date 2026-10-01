@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import {
+  ArrowLeftIcon,
+  CircleCheckIcon,
+  ClipboardCheckIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  FileDownIcon,
+  LoaderCircleIcon,
+  MegaphoneIcon,
+  SaveIcon,
+  SparklesIcon,
+} from '@lucide/vue';
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
@@ -351,21 +363,29 @@ onMounted(load);
 <template>
   <main class="page teacher-submissions-page">
     <nav class="teacher-submissions-nav" aria-label="Navegación de entregas">
-      <RouterLink to="/teacher" class="back-link">← Panel docente</RouterLink>
+      <RouterLink to="/teacher" class="back-link">
+        <ArrowLeftIcon class="ui-icon" aria-hidden="true" />
+        Panel docente
+      </RouterLink>
       <RouterLink
         :to="{ path: '/teacher', query: { section: 'activities' } }"
         class="button secondary"
       >
-        ← Regresar a actividades
+        <ArrowLeftIcon class="ui-icon" aria-hidden="true" />
+        Regresar a actividades
       </RouterLink>
     </nav>
     <section class="page-heading compact">
       <div><span class="eyebrow">Evidencias</span><h1>Productos entregados</h1></div>
       <div class="page-heading-actions">
         <button class="button secondary" type="button" :disabled="startingAiEvaluation || startingEvaluation" @click="runAiEvaluation">
+          <LoaderCircleIcon v-if="startingAiEvaluation" class="ui-icon icon-spin" aria-hidden="true" />
+          <SparklesIcon v-else class="ui-icon" aria-hidden="true" />
           {{ startingAiEvaluation ? 'Analizando…' : 'Analizar con IA' }}
         </button>
         <button class="button primary" type="button" :disabled="startingEvaluation || startingAiEvaluation" @click="startManualEvaluation">
+          <LoaderCircleIcon v-if="startingEvaluation" class="ui-icon icon-spin" aria-hidden="true" />
+          <ClipboardCheckIcon v-else class="ui-icon" aria-hidden="true" />
           {{ startingEvaluation ? 'Iniciando…' : 'Iniciar evaluación manual' }}
         </button>
       </div>
@@ -402,10 +422,12 @@ onMounted(load);
         <!-- Producto final -->
         <h3>Producto final</h3>
         <p class="evidence-text">{{ selected.productText || 'Sin contenido de texto.' }}</p>
-        <a v-if="selected.productUrl" :href="selected.productUrl" target="_blank" rel="noopener">
-          Abrir enlace ↗
+        <a v-if="selected.productUrl" class="inline-icon-link" :href="selected.productUrl" target="_blank" rel="noopener">
+          Abrir enlace
+          <ExternalLinkIcon class="ui-icon" aria-hidden="true" />
         </a>
         <button v-if="selected.fileName" class="button secondary" type="button" @click="downloadFile">
+          <DownloadIcon class="ui-icon" aria-hidden="true" />
           Descargar {{ selected.fileName }}
         </button>
 
@@ -415,7 +437,10 @@ onMounted(load);
               <h3>Conversación registrada</h3>
               <p class="muted">Mensajes ordenados cronológicamente según la evidencia guardada.</p>
             </div>
-            <button class="button secondary" type="button" @click="downloadConversation">Exportar TXT</button>
+            <button class="button secondary" type="button" @click="downloadConversation">
+              <FileDownIcon class="ui-icon" aria-hidden="true" />
+              Exportar TXT
+            </button>
           </div>
           <ol class="conversation-transcript">
             <li v-for="item in selected.aiConversation.messages" :key="item.id">
@@ -647,7 +672,9 @@ onMounted(load);
                 :disabled="savingValuation[val.id]"
                 @click="saveValuation(val.id)"
               >
-                {{ savingValuation[val.id] ? 'Guardando…' : val.confirmed ? '✓ Actualizar' : 'Confirmar criterio' }}
+                <LoaderCircleIcon v-if="savingValuation[val.id]" class="ui-icon icon-spin" aria-hidden="true" />
+                <CircleCheckIcon v-else class="ui-icon" aria-hidden="true" />
+                {{ savingValuation[val.id] ? 'Guardando…' : val.confirmed ? 'Actualizar criterio' : 'Confirmar criterio' }}
               </button>
             </div>
           </div>
@@ -666,7 +693,9 @@ onMounted(load);
               :disabled="closingEvaluation"
               @click="closeEvaluation"
             >
-              {{ closingEvaluation ? 'Publicando…' : '📢 Publicar evaluación' }}
+              <LoaderCircleIcon v-if="closingEvaluation" class="ui-icon icon-spin" aria-hidden="true" />
+              <MegaphoneIcon v-else class="ui-icon" aria-hidden="true" />
+              {{ closingEvaluation ? 'Publicando…' : 'Publicar evaluación' }}
             </button>
           </div>
         </template>
@@ -676,6 +705,8 @@ onMounted(load);
           <h3>Retroalimentación general</h3>
           <textarea v-model="feedbackDraft" rows="5" maxlength="5000" placeholder="Escribe una retroalimentación general para el estudiante." />
           <button class="button secondary" type="button" :disabled="savingFeedback" @click="saveFeedback">
+            <LoaderCircleIcon v-if="savingFeedback" class="ui-icon icon-spin" aria-hidden="true" />
+            <SaveIcon v-else class="ui-icon" aria-hidden="true" />
             {{ savingFeedback ? 'Guardando…' : 'Guardar retroalimentación' }}
           </button>
         </section>

@@ -75,7 +75,11 @@ a { color: var(--green); }
 .page-heading.compact { margin: 1.5rem 0 2rem; }
 .eyebrow { color: #a06e12; font-size: .75rem; text-transform: uppercase; letter-spacing: .13em; font-weight: 700; }
 .muted { color: var(--muted); }
-.back-link { display: inline-block; margin-top: .5rem; text-decoration: none; font-weight: 600; }
+.back-link { display: inline-flex; align-items: center; gap: .4rem; margin-top: .5rem; text-decoration: none; font-weight: 600; }
+.ui-icon { width: 1.05rem; height: 1.05rem; flex: 0 0 auto; stroke-width: 2; }
+.inline-icon-link { display: inline-flex; align-items: center; gap: .35rem; }
+.icon-spin { animation: icon-spin .8s linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
 
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
 .activity-card, .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 16px 4px 16px 4px; padding: 1.5rem; box-shadow: 0 8px 30px rgba(15,35,66,.06); }
@@ -87,7 +91,7 @@ a { color: var(--green); }
 .status[data-status='under_review'] { background: #fff0c8; color: #8a5c0e; }
 .status[data-status='evaluated'] { background: #dce7f6; color: #234f8f; }
 
-.button { border: 0; border-radius: 9px 3px 9px 3px; padding: .72rem 1rem; cursor: pointer; font-weight: 700; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; width: fit-content; }
+.button { border: 0; border-radius: 9px 3px 9px 3px; padding: .72rem 1rem; cursor: pointer; font-weight: 700; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; gap: .45rem; width: fit-content; }
 .button.primary { color: white; background: var(--primary-solid); }
 .button.secondary { color: var(--green); background: var(--green-light); }
 .button.danger { color: white; background: var(--danger); }
@@ -673,14 +677,14 @@ html.high-contrast .activities-nav-badge {
 .valuation-panel-header { display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 .75rem; }
 .valuation-panel-header h3 { margin: 0; padding-top: 0; border-top: 0; }
 .valuation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: .85rem; align-items: stretch; }
-.valuation-editor { min-width: 0; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; display: grid; align-content: start; gap: .75rem; }
+.valuation-editor { min-width: 0; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
 .valuation-editor--confirmed { border-color: #8ab5e0; background: #f5f9ff; }
 .valuation-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
 .valuation-editor-header strong { display: block; margin-top: .2rem; }
 .valuation-ai-hint { font-size: .82rem; color: var(--muted); background: #f4f7fc; padding: .4rem .7rem; border-radius: 6px; }
 .valuation-ai-explanation { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.5; white-space: pre-wrap; }
 .valuation-editor-fields { display: grid; gap: .6rem; }
-.valuation-editor > .button { justify-self: start; }
+.valuation-editor > .button { align-self: flex-start; margin-top: auto; }
 .valuation-close-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; border-top: 1px solid var(--line); margin-top: .5rem; }
 .valuation-close-hint { flex: 1; margin: 0; font-size: .85rem; }
 .valuation-empty-hint { text-align: center; }

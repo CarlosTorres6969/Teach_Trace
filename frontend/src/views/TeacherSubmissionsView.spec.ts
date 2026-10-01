@@ -191,6 +191,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
 
     expect(wrapper.get('.teacher-submissions-nav').text()).toContain('Regresar a actividades');
     expect(wrapper.classes()).toContain('teacher-submissions-page');
+    expect(wrapper.findAll('.teacher-submissions-nav .ui-icon')).toHaveLength(2);
   });
 
   it('muestra comprensión, nota sugerida y valoración cronológica de prompts', async () => {
@@ -278,6 +279,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
 
     expect(wrapper.text()).toContain('Decisión docente confirmadaPendiente');
     expect(wrapper.find('.valuation-grid').exists()).toBe(true);
+    expect(wrapper.get('.valuation-editor button .ui-icon').element.tagName.toLowerCase()).toBe('svg');
     await wrapper.get('.valuation-editor select').setValue('4');
     await wrapper.get('.valuation-editor button').trigger('click');
     await flushPromises();
