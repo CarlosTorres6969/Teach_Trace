@@ -344,7 +344,7 @@ describe('TeachTrace API (integración)', () => {
     expect(Number(blocked.response.headers.get('retry-after'))).toBeGreaterThan(0);
   });
 
-  it('matricula estudiantes en lote con deduplicación, reporte y control de acceso', async () => {
+  it('matricula estudiantes en lote con nombre, crea cuentas nuevas y controla el acceso', async () => {
     const users = dataSource.getRepository(User);
     await users.save(
       users.create({
@@ -363,11 +363,11 @@ describe('TeachTrace API (integración)', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        emails: [
-          ' ESTUDIANTE.LOTE@UNAH.EDU.HN ',
-          'estudiante.lote@unah.edu.hn',
-          'estudiante@unah.edu.hn',
-          'cuenta.inexistente@unah.edu.hn',
+        students: [
+          { name: 'Estudiante de lote', email: ' ESTUDIANTE.LOTE@UNAH.EDU.HN ' },
+          { name: 'Estudiante de lote', email: 'estudiante.lote@unah.edu.hn' },
+          { name: 'Estudiante Demo', email: 'estudiante@unah.edu.hn' },
+          { name: 'Cuenta importada', email: 'cuenta.inexistente@unah.edu.hn' },
         ],
       }),
     });
@@ -375,9 +375,23 @@ describe('TeachTrace API (integración)', () => {
     expect(imported.response.status).toBe(201);
     expect(imported.body).toEqual({
       processedCount: 3,
-      enrolledCount: 1,
+      enrolledCount: 2,
       alreadyEnrolledCount: 1,
-      notFoundEmails: ['cuenta.inexistente@unah.edu.hn'],
+      createdAccountCount: 1,
+      notificationFailedEmails: [
+        'cuenta.inexistente@unah.edu.hn',
+        'estudiante.lote@unah.edu.hn',
+      ],
+    });
+
+    const importedAccount = await users.findOneByOrFail({
+      email: 'cuenta.inexistente@unah.edu.hn',
+    });
+    expect(importedAccount).toMatchObject({
+      name: 'Cuenta importada',
+      role: UserRole.STUDENT,
+      active: true,
+      mustChangePassword: true,
     });
 
     const listed = await request('/api/teacher/classes', {
@@ -390,17 +404,28 @@ describe('TeachTrace API (integración)', () => {
     expect(updatedClass?.students).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ email: 'estudiante.lote@unah.edu.hn' }),
+        expect.objectContaining({
+          email: 'cuenta.inexistente@unah.edu.hn',
+          name: 'Cuenta importada',
+        }),
       ]),
     );
 
-    for (const emails of [[], Array.from({ length: 501 }, (_, index) => `lote${index}@unah.edu.hn`)]) {
+    for (const students of [
+      [],
+      Array.from({ length: 501 }, (_, index) => ({
+        name: `Estudiante ${index}`,
+        email: `lote${index}@unah.edu.hn`,
+      })),
+      [{ email: 'sin.nombre@unah.edu.hn' }],
+    ]) {
       const invalid = await request(endpoint, {
         method: 'POST',
         headers: {
           ...sessionHeaders(teacher.sessionCookie),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ emails }),
+        body: JSON.stringify({ students }),
       });
       expect(invalid.response.status).toBe(400);
     }
@@ -411,14 +436,18 @@ describe('TeachTrace API (integración)', () => {
         ...sessionHeaders(student.sessionCookie),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ emails: ['estudiante.lote@unah.edu.hn'] }),
+      body: JSON.stringify({
+        students: [{ name: 'Estudiante de lote', email: 'estudiante.lote@unah.edu.hn' }],
+      }),
     });
     expect(studentAttempt.response.status).toBe(403);
 
     const anonymousAttempt = await request(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emails: ['estudiante.lote@unah.edu.hn'] }),
+      body: JSON.stringify({
+        students: [{ name: 'Estudiante de lote', email: 'estudiante.lote@unah.edu.hn' }],
+      }),
     });
     expect(anonymousAttempt.response.status).toBe(401);
   });

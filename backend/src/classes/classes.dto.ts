@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -8,6 +8,7 @@ import {
   IsString,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 export class CreateClassDto {
@@ -43,15 +44,27 @@ export class EnrollStudentDto {
   name?: string;
 }
 
-export class EnrollStudentsDto {
+export class EnrollmentStudentDto {
   @Transform(({ value }: { value: unknown }) =>
-    Array.isArray(value)
-      ? value.map((email) => (typeof email === 'string' ? email.trim().toLowerCase() : email))
-      : value,
+    typeof value === 'string' ? value.trim() : value,
   )
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  email: string;
+}
+
+export class EnrollStudentsDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(500)
-  @IsEmail({}, { each: true })
-  emails: string[];
+  @ValidateNested({ each: true })
+  @Type(() => EnrollmentStudentDto)
+  students: EnrollmentStudentDto[];
 }

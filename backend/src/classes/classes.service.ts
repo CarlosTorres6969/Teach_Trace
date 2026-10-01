@@ -7,7 +7,7 @@ import { AcademicClass } from '../entities/class.entity';
 import { Enrollment } from '../entities/enrollment.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { MailService } from '../mail/mail.service';
-import { CreateClassDto } from './classes.dto';
+import { CreateClassDto, EnrollmentStudentDto } from './classes.dto';
 
 @Injectable()
 export class ClassesService {
@@ -119,19 +119,72 @@ export class ClassesService {
     };
   }
 
-  async enrollStudents(teacherId: number, classId: number, emails: string[]) {
+  async enrollStudents(
+    teacherId: number,
+    classId: number,
+    requestedStudents: EnrollmentStudentDto[],
+  ) {
     const academicClass = await this.ownedClass(teacherId, classId);
-    const normalizedEmails = [
-      ...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
-    ];
-    const students = await this.users.find({
-      where: {
-        email: In(normalizedEmails),
-        role: UserRole.STUDENT,
-        active: true,
-      },
-    });
-    const studentsByEmail = new Map(students.map((student) => [student.email, student]));
+    const importsByEmail = new Map<string, { name: string; email: string }>();
+    for (const requestedStudent of requestedStudents) {
+      const email = requestedStudent.email.trim().toLowerCase();
+      const name = requestedStudent.name.trim();
+      const duplicate = importsByEmail.get(email);
+      if (duplicate && duplicate.name.toLocaleLowerCase() !== name.toLocaleLowerCase()) {
+        throw new BadRequestException(`El correo ${email} aparece con nombres diferentes`);
+      }
+      importsByEmail.set(email, { name, email });
+    }
+
+    const imports = [...importsByEmail.values()];
+    const normalizedEmails = imports.map((student) => student.email);
+    const existingUsers = await this.users.find({ where: { email: In(normalizedEmails) } });
+    const unavailableUsers = existingUsers.filter(
+      (user) => user.role !== UserRole.STUDENT || !user.active,
+    );
+    if (unavailableUsers.length) {
+      throw new ConflictException(
+        `No se pueden matricular estas cuentas: ${unavailableUsers
+          .slice(0, 5)
+          .map((user) => user.email)
+          .join(', ')}${unavailableUsers.length > 5 ? '…' : ''}`,
+      );
+    }
+
+    const studentsByEmail = new Map(existingUsers.map((student) => [student.email, student]));
+    const createdAccounts: Array<{ student: User; temporaryPassword: string }> = [];
+    const missingImports = imports.filter((student) => !studentsByEmail.has(student.email));
+    for (let index = 0; index < missingImports.length; index += 5) {
+      const batch = missingImports.slice(index, index + 5);
+      const prepared = await Promise.all(
+        batch.map(async (student) => ({
+          temporaryPassword: this.generateTemporaryPassword(),
+          input: student,
+        })),
+      );
+      const userEntities = await Promise.all(
+        prepared.map(async ({ input, temporaryPassword }) =>
+          this.users.create({
+            email: input.email,
+            name: input.name,
+            role: UserRole.STUDENT,
+            active: true,
+            mustChangePassword: true,
+            passwordHash: await this.authService.hashPassword(temporaryPassword),
+          }),
+        ),
+      );
+      const savedUsers = await this.users.save(userEntities);
+      savedUsers.forEach((student, savedIndex) => {
+        studentsByEmail.set(student.email, student);
+        createdAccounts.push({
+          student,
+          temporaryPassword: prepared[savedIndex].temporaryPassword,
+        });
+      });
+    }
+
+    const students = imports.map((student) => studentsByEmail.get(student.email)!);
     const existingEnrollments = students.length
       ? await this.enrollments.find({
           where: {
@@ -161,20 +214,41 @@ export class ClassesService {
 
     if (enrollmentsToSave.length) await this.enrollments.save(enrollmentsToSave);
 
-    for (let index = 0; index < enrollmentsToSave.length; index += 5) {
-      const batch = enrollmentsToSave.slice(index, index + 5);
-      await Promise.all(
+    const notificationFailedEmails: string[] = [];
+    for (let index = 0; index < createdAccounts.length; index += 5) {
+      const batch = createdAccounts.slice(index, index + 5);
+      const results = await Promise.all(
+        batch.map(({ student, temporaryPassword }) =>
+          this.sendTemporaryPasswordNotification(student, temporaryPassword, academicClass),
+        ),
+      );
+      results.forEach((sent, resultIndex) => {
+        if (!sent) notificationFailedEmails.push(batch[resultIndex].student.email);
+      });
+    }
+
+    const createdEmails = new Set(createdAccounts.map(({ student }) => student.email));
+    const existingStudentsToNotify = enrollmentsToSave.filter(
+      (enrollment) => !createdEmails.has(enrollment.student.email),
+    );
+    for (let index = 0; index < existingStudentsToNotify.length; index += 5) {
+      const batch = existingStudentsToNotify.slice(index, index + 5);
+      const results = await Promise.all(
         batch.map((enrollment) =>
           this.sendEnrollmentNotification(enrollment.student, academicClass),
         ),
       );
+      results.forEach((sent, resultIndex) => {
+        if (!sent) notificationFailedEmails.push(batch[resultIndex].student.email);
+      });
     }
 
     return {
       processedCount: normalizedEmails.length,
       enrolledCount,
       alreadyEnrolledCount,
-      notFoundEmails: normalizedEmails.filter((email) => !studentsByEmail.has(email)),
+      createdAccountCount: createdAccounts.length,
+      notificationFailedEmails,
     };
   }
 
@@ -269,6 +343,32 @@ export class ClassesService {
     } catch (error) {
       this.logger.error(
         `No fue posible enviar la notificación de matrícula a ${student.email}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return false;
+    }
+  }
+
+  private async sendTemporaryPasswordNotification(
+    student: User,
+    temporaryPassword: string,
+    academicClass: AcademicClass,
+  ): Promise<boolean> {
+    try {
+      return await this.mailService.sendTemporaryPasswordEmail(
+        student.email,
+        student.name,
+        temporaryPassword,
+        {
+          name: academicClass.name,
+          subject: academicClass.subject,
+          code: academicClass.code,
+          period: academicClass.period,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `No fue posible enviar la contraseña temporal a ${student.email}`,
         error instanceof Error ? error.stack : undefined,
       );
       return false;

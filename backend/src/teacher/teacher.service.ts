@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ActivitiesService } from '../activities/activities.service';
 import { CreateActivityDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
 import { ClassesService } from '../classes/classes.service';
-import { CreateClassDto } from '../classes/classes.dto';
+import { CreateClassDto, EnrollmentStudentDto } from '../classes/classes.dto';
 import { Activity } from '../entities/activity.entity';
 import { Rubric } from '../entities/rubric.entity';
 import { User } from '../entities/user.entity';
@@ -31,8 +31,8 @@ export class TeacherService {
     return this.classesService.enrollStudent(teacherId, classId, email, name);
   }
 
-  enrollStudents(teacherId: number, classId: number, emails: string[]) {
-    return this.classesService.enrollStudents(teacherId, classId, emails);
+  enrollStudents(teacherId: number, classId: number, students: EnrollmentStudentDto[]) {
+    return this.classesService.enrollStudents(teacherId, classId, students);
   }
 
   listEnrollments(teacherId: number, classId: number) {

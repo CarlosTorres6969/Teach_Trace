@@ -5,7 +5,7 @@ import { useRoute } from 'vue-router';
 import { api } from '../api';
 import { auth } from '../auth';
 import {
-  extractEnrollmentEmails,
+  extractEnrollmentStudents,
   MAX_ENROLLMENT_FILE_SIZE,
 } from '../excel-enrollments';
 import type { AcademicClass, Activity, Criterion, Rubric } from '../types';
@@ -53,7 +53,8 @@ type BulkEnrollmentResult = {
   processedCount: number;
   enrolledCount: number;
   alreadyEnrolledCount: number;
-  notFoundEmails: string[];
+  createdAccountCount: number;
+  notificationFailedEmails: string[];
 };
 const activeModal = ref<TeacherModal>(null);
 const selectedClassId = ref<number | null>(null);
@@ -205,10 +206,10 @@ async function importEnrollments(classId: number) {
   bulkEnrollmentBusy.value = true;
   try {
     const rows = await readXlsxFile(selectedEnrollmentFile.value);
-    const emails = extractEnrollmentEmails(rows);
+    const students = extractEnrollmentStudents(rows);
     bulkEnrollmentResult.value = await api<BulkEnrollmentResult>(
       `/teacher/classes/${classId}/enrollments/bulk`,
-      { method: 'POST', body: JSON.stringify({ emails }) },
+      { method: 'POST', body: JSON.stringify({ students }) },
     );
     message.value = 'Importación de matrícula completada';
     await load();
@@ -678,8 +679,14 @@ onBeforeUnmount(() => {
             <div v-if="enrollmentMode === 'excel'" class="excel-enrollment">
               <div class="excel-format-note">
                 <strong>Formato del archivo</strong>
-                <span>Archivo <code>.xlsx</code>, primera hoja y una columna llamada <code>correo</code>.</span>
-                <small>También se aceptan los encabezados “email” y “correo institucional”. Máximo 500 estudiantes.</small>
+                <span>
+                  Archivo <code>.xlsx</code>, primera hoja y dos columnas:
+                  <code>nombre</code> y <code>correo</code>.
+                </span>
+                <small>
+                  También se aceptan “nombre completo”, “email” y “correo institucional”.
+                  Máximo 500 estudiantes.
+                </small>
               </div>
               <label class="excel-file-picker">
                 <input
@@ -711,15 +718,16 @@ onBeforeUnmount(() => {
                 <strong>Importación completada</strong>
                 <div class="bulk-result-stats">
                   <span><b>{{ bulkEnrollmentResult.enrolledCount }}</b> matriculados</span>
+                  <span><b>{{ bulkEnrollmentResult.createdAccountCount }}</b> cuentas nuevas</span>
                   <span><b>{{ bulkEnrollmentResult.alreadyEnrolledCount }}</b> ya estaban</span>
-                  <span :class="{ warning: bulkEnrollmentResult.notFoundEmails.length }">
-                    <b>{{ bulkEnrollmentResult.notFoundEmails.length }}</b> no encontrados
+                  <span :class="{ warning: bulkEnrollmentResult.notificationFailedEmails.length }">
+                    <b>{{ bulkEnrollmentResult.notificationFailedEmails.length }}</b> correos no enviados
                   </span>
                 </div>
-                <details v-if="bulkEnrollmentResult.notFoundEmails.length">
-                  <summary>Ver correos no matriculados</summary>
+                <details v-if="bulkEnrollmentResult.notificationFailedEmails.length">
+                  <summary>Ver notificaciones que no pudieron enviarse</summary>
                   <ul>
-                    <li v-for="email in bulkEnrollmentResult.notFoundEmails" :key="email">{{ email }}</li>
+                    <li v-for="email in bulkEnrollmentResult.notificationFailedEmails" :key="email">{{ email }}</li>
                   </ul>
                 </details>
               </div>

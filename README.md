@@ -96,9 +96,9 @@ iniciar el backend para agregar cambios pendientes sin recrear las tablas ni bor
 - Después de cinco credenciales incorrectas para una cuenta, el login responde `429` durante la
   ventana configurada. Los valores se ajustan con `LOGIN_MAX_ATTEMPTS` y `LOGIN_WINDOW_MS`.
 - Las sesiones revocadas o vencidas y las cuentas desactivadas son rechazadas en cada endpoint.
-- Al matricular individualmente un correo nuevo, se crea la cuenta estudiantil con una contraseña
-  temporal aleatoria. La contraseña solo se envía por SMTP y debe reemplazarse antes de acceder a
-  las funciones académicas.
+- Al matricular individualmente un correo nuevo, o al importarlo desde un Excel con las columnas
+  `nombre` y `correo`, se crea la cuenta estudiantil con una contraseña temporal aleatoria. La
+  contraseña solo se envía por SMTP y debe reemplazarse antes de acceder a las funciones académicas.
 - El limitador se conserva en memoria, apropiado para el monolito del piloto. Si se despliegan
   varias instancias deberá moverse a un almacén compartido.
 

@@ -70,7 +70,7 @@ export class TeacherController {
     @Param('classId', ParseIntPipe) classId: number,
     @Body() input: EnrollStudentsDto,
   ) {
-    return this.teacherService.enrollStudents(user.id, classId, input.emails);
+    return this.teacherService.enrollStudents(user.id, classId, input.students);
   }
 
   @Get('activities')

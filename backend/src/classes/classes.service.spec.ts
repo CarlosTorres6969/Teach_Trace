@@ -163,7 +163,7 @@ describe('ClassesService', () => {
     expect(mailService.sendEnrollmentEmail).not.toHaveBeenCalled();
   });
 
-  it('matricula estudiantes en lote, elimina duplicados y reporta cuentas no encontradas', async () => {
+  it('matricula estudiantes en lote y crea las cuentas que no existen con su nombre', async () => {
     const academicClass = {
       id: 10,
       name: 'Ingeniería del Software',
@@ -199,10 +199,14 @@ describe('ClassesService', () => {
       create: jest.fn((value) => ({ id: 22, enrolledAt: new Date(), active: true, ...value })),
       save: jest.fn(async (value) => value),
     };
-    const users = { find: jest.fn().mockResolvedValue([newStudent, enrolledStudent]) };
-    const authService = { hashPassword: jest.fn() };
+    const users = {
+      find: jest.fn().mockResolvedValue([newStudent, enrolledStudent]),
+      create: jest.fn((value) => ({ id: 9, ...value })),
+      save: jest.fn(async (value) => value),
+    };
+    const authService = { hashPassword: jest.fn().mockResolvedValue('hash-temporal') };
     const mailService = {
-      sendTemporaryPasswordEmail: jest.fn(),
+      sendTemporaryPasswordEmail: jest.fn().mockResolvedValue(true),
       sendEnrollmentEmail: jest.fn().mockResolvedValue(true),
     };
     const service = new ClassesService(
@@ -214,26 +218,45 @@ describe('ClassesService', () => {
     );
 
     const result = await service.enrollStudents(3, 10, [
-      ' NUEVO@UNAH.EDU.HN ',
-      'nuevo@unah.edu.hn',
-      'matriculado@unah.edu.hn',
-      'no-existe@unah.edu.hn',
+      { name: 'Estudiante nuevo', email: ' NUEVO@UNAH.EDU.HN ' },
+      { name: 'Estudiante nuevo', email: 'nuevo@unah.edu.hn' },
+      { name: 'Estudiante matriculado', email: 'matriculado@unah.edu.hn' },
+      { name: 'Cuenta creada', email: 'no-existe@unah.edu.hn' },
     ]);
 
     expect(result).toEqual({
       processedCount: 3,
-      enrolledCount: 1,
+      enrolledCount: 2,
       alreadyEnrolledCount: 1,
-      notFoundEmails: ['no-existe@unah.edu.hn'],
+      createdAccountCount: 1,
+      notificationFailedEmails: [],
     });
-    expect(enrollments.create).toHaveBeenCalledTimes(1);
+    expect(users.create).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'no-existe@unah.edu.hn',
+      name: 'Cuenta creada',
+      passwordHash: 'hash-temporal',
+      role: UserRole.STUDENT,
+      mustChangePassword: true,
+    }));
+    expect(enrollments.create).toHaveBeenCalledTimes(2);
     expect(enrollments.save).toHaveBeenCalledWith([
       expect.objectContaining({ student: newStudent, academicClass, active: true }),
+      expect.objectContaining({
+        student: expect.objectContaining({ email: 'no-existe@unah.edu.hn', name: 'Cuenta creada' }),
+        academicClass,
+        active: true,
+      }),
     ]);
     expect(mailService.sendEnrollmentEmail).toHaveBeenCalledTimes(1);
     expect(mailService.sendEnrollmentEmail).toHaveBeenCalledWith(
       newStudent.email,
       newStudent.name,
+      expect.objectContaining({ code: 'IS-911' }),
+    );
+    expect(mailService.sendTemporaryPasswordEmail).toHaveBeenCalledWith(
+      'no-existe@unah.edu.hn',
+      'Cuenta creada',
+      expect.stringMatching(/^Tt!/),
       expect.objectContaining({ code: 'IS-911' }),
     );
   });
@@ -281,7 +304,9 @@ describe('ClassesService', () => {
       mailService as never,
     );
 
-    const result = await service.enrollStudents(3, 10, ['reactivado@unah.edu.hn']);
+    const result = await service.enrollStudents(3, 10, [
+      { name: 'Estudiante reactivado', email: 'reactivado@unah.edu.hn' },
+    ]);
 
     expect(result.enrolledCount).toBe(1);
     expect(result.alreadyEnrolledCount).toBe(0);

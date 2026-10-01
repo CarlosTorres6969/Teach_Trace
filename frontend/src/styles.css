@@ -228,7 +228,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .excel-file-picker small { color: var(--muted); font-weight: 500; }
 .excel-file-icon { flex: 0 0 54px; height: 54px; display: grid; place-items: center; color: white; background: var(--primary-solid); border-radius: 11px 3px 11px 3px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; }
 .bulk-enrollment-result { display: grid; gap: .75rem; padding: 1rem; color: #1d4e89; background: #dfecfa; border: 1px solid #bcd4f0; border-radius: 11px 3px 11px 3px; }
-.bulk-result-stats { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; background: rgba(255,255,255,.7); border-radius: 8px; }
+.bulk-result-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); overflow: hidden; background: rgba(255,255,255,.7); border-radius: 8px; }
 .bulk-result-stats span { display: grid; gap: .1rem; padding: .65rem; color: var(--muted); font-size: .7rem; text-align: center; }
 .bulk-result-stats span + span { border-left: 1px solid #ccdaee; }
 .bulk-result-stats b { color: var(--green); font-size: 1.15rem; }
