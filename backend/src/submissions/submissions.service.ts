@@ -24,6 +24,7 @@ import { Valuation } from '../entities/valuation.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 import { DocumentRepositoryService } from './document-repository.service';
+import { ensureSubmissionCanBeEdited } from './submission-edit-policy';
 
 export type UploadedAcademicFile = {
   originalname: string;
@@ -82,6 +83,7 @@ export class SubmissionsService {
     const existingSubmission = await this.submissions.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
     });
+    ensureSubmissionCanBeEdited(existingSubmission);
     const logbook = await this.logbooks.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
     });
@@ -159,6 +161,7 @@ export class SubmissionsService {
       let submission = await submissionRepository.findOne({
         where: { student: { id: student.id }, activity: { id: activityId } },
       });
+      ensureSubmissionCanBeEdited(submission);
       if (!submission) {
         submission = submissionRepository.create({
           student,

@@ -95,6 +95,7 @@ let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let draftPersistenceEnabled = true;
 const isSubmissionStep = computed(() => currentStep.value === logbookSteps.length);
 const activeStep = computed(() => logbookSteps[currentStep.value]);
+const isEvaluationLocked = computed(() => submission.status === 'evaluated');
 
 const stepCompletion = computed<boolean[]>(() => [
   ...logbookSteps.map((step) =>
@@ -112,6 +113,12 @@ const missingSteps = computed(() => [
 ].filter((step) => !step.complete));
 const isLastStep = computed(() => currentStep.value === totalSteps - 1);
 const currentStepNotice = computed(() => {
+  if (isEvaluationLocked.value) {
+    return {
+      state: 'saved',
+      message: 'La evaluación ya fue publicada. La evidencia se muestra en modo de solo lectura.',
+    };
+  }
   if (isSubmissionStep.value) {
     if (submission.status !== 'not_submitted') {
       return { state: 'saved', message: 'La entrega final ya fue guardada. Puedes actualizarla si lo necesitas.' };
@@ -216,7 +223,12 @@ function stepStatus(index: number) {
 }
 
 function persistLocalDraft() {
-  if (!hydrated.value || !draftPersistenceEnabled || typeof window === 'undefined') return;
+  if (
+    !hydrated.value ||
+    !draftPersistenceEnabled ||
+    isEvaluationLocked.value ||
+    typeof window === 'undefined'
+  ) return;
   const draft: ActivityDraft = {
     version: 1,
     updatedAt: new Date().toISOString(),
@@ -322,6 +334,13 @@ async function load() {
     Object.assign(submission, submissionData);
     conversation.value = conversationData?.messages ?? [];
     savedConversationSignature.value = conversationSignature(conversation.value);
+    if (isEvaluationLocked.value) {
+      draftPersistenceEnabled = false;
+      window.localStorage.removeItem(draftStorageKey);
+      hydrated.value = true;
+      autosaveStatus.value = 'Evaluación publicada. La evidencia ya no admite modificaciones.';
+      return;
+    }
     const restoredDraft = restoreLocalDraft();
     hydrated.value = true;
     if (restoredDraft || promptNeedsMigration) {
@@ -347,14 +366,17 @@ async function markActivityViewed() {
 }
 
 function openStep(index: number) {
-  persistLocalDraft();
-  void flushProgress(true);
+  if (!isEvaluationLocked.value) {
+    persistLocalDraft();
+    void flushProgress(true);
+  }
   currentStep.value = index;
   message.value = '';
   error.value = '';
 }
 
 async function saveLogbookProgress(success = '', silent = false) {
+  if (isEvaluationLocked.value) return false;
   if (autosaveTimer) {
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
@@ -404,7 +426,7 @@ async function saveLogbookProgress(success = '', silent = false) {
 }
 
 function scheduleLogbookAutosave() {
-  if (!hydrated.value || !logbookDirty) return;
+  if (!hydrated.value || !logbookDirty || isEvaluationLocked.value) return;
   if (autosaveTimer) clearTimeout(autosaveTimer);
   autosaveStatus.value = 'Guardando avance…';
   autosaveTimer = setTimeout(() => {
@@ -414,6 +436,7 @@ function scheduleLogbookAutosave() {
 }
 
 async function flushProgress(silent = true) {
+  if (isEvaluationLocked.value) return;
   persistLocalDraft();
   const tasks: Promise<boolean>[] = [];
   if (logbookDirty) tasks.push(saveLogbookProgress('', silent));
@@ -445,6 +468,7 @@ async function saveCurrentLogbookStep(success: string) {
 }
 
 function selectFile(event: Event) {
+  if (isEvaluationLocked.value) return;
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0] ?? null;
   if (file && (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf'))) {
@@ -464,10 +488,12 @@ function selectFile(event: Event) {
 }
 
 function addConversationMessage(role: ConversationRole) {
+  if (isEvaluationLocked.value) return;
   conversation.value.push({ role, content: '' });
 }
 
 function removeConversationMessage(index: number) {
+  if (isEvaluationLocked.value) return;
   conversation.value.splice(index, 1);
 }
 
@@ -495,6 +521,7 @@ async function saveAiInteraction(success = 'Interacción con IA guardada.') {
 }
 
 async function saveConversation(silent = false) {
+  if (isEvaluationLocked.value) return false;
   if (!conversation.value.length) return false;
   if (conversation.value.some((item) => !item.content.trim())) {
     if (!silent) error.value = 'Completa todos los mensajes de la conversación con IA.';
@@ -531,6 +558,10 @@ async function saveConversation(silent = false) {
 }
 
 async function submitEvidence() {
+  if (isEvaluationLocked.value) {
+    error.value = 'La entrega ya fue evaluada y no puede modificarse.';
+    return;
+  }
   const incompleteLogbook = logbookSteps
     .filter((step) => !logbook[step.key].trim())
     .map((step) => step.title);
@@ -601,6 +632,7 @@ async function submitEvidence() {
 }
 
 async function onWizardSubmit() {
+  if (isEvaluationLocked.value) return;
   if (isSubmissionStep.value) {
     await submitEvidence();
     return;
@@ -611,7 +643,7 @@ async function onWizardSubmit() {
 watch(
   logbook,
   () => {
-    if (!hydrated.value) return;
+    if (!hydrated.value || isEvaluationLocked.value) return;
     draftPersistenceEnabled = true;
     logbookDirty = true;
     logbookRevision += 1;
@@ -631,7 +663,7 @@ watch(
     () => submission.productUrl,
   ],
   () => {
-    if (!hydrated.value) return;
+    if (!hydrated.value || isEvaluationLocked.value) return;
     draftPersistenceEnabled = true;
     persistLocalDraft();
   },
@@ -641,7 +673,7 @@ watch(
 watch(
   conversation,
   () => {
-    if (!hydrated.value) return;
+    if (!hydrated.value || isEvaluationLocked.value) return;
     draftPersistenceEnabled = true;
     conversationDirty = true;
     persistLocalDraft();
@@ -650,12 +682,14 @@ watch(
 );
 
 onBeforeRouteLeave(async () => {
+  if (isEvaluationLocked.value) return;
   persistLocalDraft();
   await flushProgress(true);
 });
 
 onBeforeUnmount(() => {
   if (autosaveTimer) clearTimeout(autosaveTimer);
+  if (isEvaluationLocked.value) return;
   persistLocalDraft();
 });
 
@@ -697,6 +731,9 @@ onMounted(() => {
           <span :style="{ width: `${progressPercentage}%` }" />
         </div>
         <p class="autosave-status muted" aria-live="polite">{{ autosaveStatus }}</p>
+        <p v-if="isEvaluationLocked" class="alert evaluation-lock-notice" role="status">
+          La evaluación fue publicada por el docente. Puedes consultar la evidencia, pero ya no editarla.
+        </p>
 
         <section class="progress-checklist" aria-live="polite">
           <template v-if="missingSteps.length">
@@ -757,6 +794,7 @@ onMounted(() => {
               rows="9"
               :maxlength="activeStep.maxLength"
               :placeholder="activeStep.placeholder"
+              :disabled="isEvaluationLocked"
               autofocus
             />
             <small class="character-count">
@@ -778,21 +816,21 @@ onMounted(() => {
               <article v-for="(item, index) in conversation" :key="index" class="conversation-message">
                 <label>
                   Participante
-                  <select v-model="item.role">
+                  <select v-model="item.role" :disabled="isEvaluationLocked">
                     <option value="student">Estudiante</option>
                     <option value="ai">IA</option>
                   </select>
                 </label>
                 <label>
                   Mensaje
-                  <textarea v-model="item.content" rows="3" maxlength="20000" required />
+                  <textarea v-model="item.content" rows="3" maxlength="20000" :disabled="isEvaluationLocked" required />
                 </label>
-                <button class="button secondary" type="button" @click="removeConversationMessage(index)">Quitar mensaje</button>
+                <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="removeConversationMessage(index)">Quitar mensaje</button>
               </article>
             </div>
             <div class="conversation-actions">
-              <button class="button secondary" type="button" @click="addConversationMessage('student')">Agregar mensaje del estudiante</button>
-              <button class="button secondary" type="button" @click="addConversationMessage('ai')">Agregar respuesta de IA</button>
+              <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="addConversationMessage('student')">Agregar mensaje del estudiante</button>
+              <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="addConversationMessage('ai')">Agregar respuesta de IA</button>
             </div>
           </section>
         </section>
@@ -807,25 +845,25 @@ onMounted(() => {
           </div>
           <p class="muted">Cierra tu proceso entregando el producto académico junto a tu declaración de uso de IA.</p>
           <div class="form-stack submission-fields">
-            <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" /></label>
-            <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" /></label>
+            <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" :disabled="isEvaluationLocked" /></label>
+            <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" :disabled="isEvaluationLocked" /></label>
             <label>Archivo PDF obligatorio
-              <input type="file" accept="application/pdf,.pdf" :required="!submission.fileName" @change="selectFile" />
+              <input type="file" accept="application/pdf,.pdf" :required="!submission.fileName" :disabled="isEvaluationLocked" @change="selectFile" />
               <small class="muted">Debes adjuntar la tarea en PDF. Tamaño máximo: 10 MB. Si sales antes de entregar, deberás seleccionar el archivo nuevamente.</small>
             </label>
             <p v-if="submission.fileName" class="muted">Archivo guardado: {{ submission.fileName }}</p>
             <p v-if="submission.manualReviewRequired" class="alert error">La entrega quedó marcada para revisión manual.</p>
             <h3>Declaración de uso de IA</h3>
-            <label>Herramienta utilizada<input v-model.trim="declaration.toolName" maxlength="120" placeholder="Ej. ChatGPT, Gemini o Copilot" required /></label>
+            <label>Herramienta utilizada<input v-model.trim="declaration.toolName" maxlength="120" placeholder="Ej. ChatGPT, Gemini o Copilot" :disabled="isEvaluationLocked" required /></label>
             <label>Nivel declarado
-              <select v-model.number="declaration.usageLevel" required>
+              <select v-model.number="declaration.usageLevel" :disabled="isEvaluationLocked" required>
                 <option value="" disabled>Selecciona un nivel</option>
                 <option :value="1">Nivel 1 - Autor propio</option>
                 <option :value="2">Nivel 2 - Uso mínimo</option>
                 <option :value="3">Nivel 3 - Hecho por IA</option>
               </select>
             </label>
-            <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" required /></label>
+            <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" :disabled="isEvaluationLocked" required /></label>
             <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
           </div>
         </section>
@@ -850,7 +888,7 @@ onMounted(() => {
             ← Anterior
           </button>
           <span v-else />
-          <div>
+          <div v-if="!isEvaluationLocked">
             <button
               v-if="!isSubmissionStep"
               class="button secondary"

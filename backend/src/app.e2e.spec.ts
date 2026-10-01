@@ -2683,6 +2683,102 @@ describe('TeachTrace API (integración)', () => {
     return { newActivityId, submId, activityTitle: `Actividad HU-34 ${Date.now()}` };
   }
 
+  it('bloquea toda modificacion del estudiante despues de publicar la evaluacion', async () => {
+    const { newActivityId, submId } = await createEvaluatedSubmission();
+    const feedback = 'Retroalimentacion publicada e inmutable';
+    const feedbackResponse = await request(`/api/teacher/submissions/${submId}/feedback`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedback }),
+    });
+    expect(feedbackResponse.response.status).toBe(200);
+
+    const closeResponse = await request(`/api/teacher/submissions/${submId}/close`, {
+      method: 'PUT',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(closeResponse.response.status).toBe(200);
+
+    const submissionRepository = dataSource.getRepository(Submission);
+    const before = await submissionRepository.findOneByOrFail({ id: submId });
+    expect(before.status).toBe(SubmissionStatus.EVALUATED);
+
+    const attempts = await Promise.all([
+      request(`/api/student/activities/${newActivityId}/submission`, {
+        method: 'PUT',
+        headers: sessionHeaders(student.sessionCookie),
+        body: buildSubmitForm({ productText: 'Intento de reemplazar el producto evaluado' }),
+      }),
+      request(`/api/student/activities/${newActivityId}/logbook`, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          initialIdeas: 'Ideas modificadas',
+          prompts: 'Prompts modificados',
+          validationsAndDecisions: 'Decisiones modificadas',
+          finalReflection: 'Reflexion modificada',
+        }),
+      }),
+      request(`/api/student/activities/${newActivityId}/ai-conversation`, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'student', content: 'Prompt modificado' },
+            { role: 'ai', content: 'Respuesta modificada' },
+          ],
+        }),
+      }),
+      request(`/api/student/activities/${newActivityId}/ai-declaration`, {
+        method: 'PUT',
+        headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolName: 'Otra herramienta',
+          usageLevel: 3,
+          purpose: 'Cambiar la declaracion evaluada',
+          promptSummary: 'Cambiar los prompts evaluados',
+        }),
+      }),
+    ]);
+
+    for (const attempt of attempts) {
+      expect(attempt.response.status).toBe(409);
+      expect(attempt.body).toMatchObject({
+        message: 'La entrega ya fue evaluada y su evidencia no puede modificarse',
+      });
+    }
+
+    const after = await submissionRepository.findOneByOrFail({ id: submId });
+    expect(after).toMatchObject({
+      status: SubmissionStatus.EVALUATED,
+      evaluationStatus: EvaluationStatus.VALIDATED,
+      productText: before.productText,
+      feedback,
+    });
+    expect(after.submittedAt?.getTime()).toBe(before.submittedAt?.getTime());
+
+    const persistedLogbook = await request(`/api/student/activities/${newActivityId}/logbook`, {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(persistedLogbook.body).toMatchObject({
+      initialIdeas: 'Ideas iniciales de prueba',
+      prompts: 'Prompt registrado para la entrega',
+      validationsAndDecisions: 'Validaciones y decisiones documentadas',
+      finalReflection: 'Reflexión final documentada',
+    });
+
+    const persistedConversation = await request(
+      `/api/student/activities/${newActivityId}/ai-conversation`,
+      { headers: sessionHeaders(student.sessionCookie) },
+    );
+    expect(persistedConversation.body).toMatchObject({
+      messages: [
+        expect.objectContaining({ role: 'student', content: 'Prompt obligatorio de prueba' }),
+        expect.objectContaining({ role: 'ai', content: 'Respuesta obligatoria de prueba' }),
+      ],
+    });
+  });
+
   it('HU-34: crea una notificación al publicar la calificación', async () => {
     const { submId } = await createEvaluatedSubmission();
 

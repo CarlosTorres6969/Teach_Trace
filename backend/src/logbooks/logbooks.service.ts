@@ -3,13 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
 import { Logbook } from '../entities/logbook.entity';
+import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
+import { ensureSubmissionCanBeEdited } from '../submissions/submission-edit-policy';
 import { UpdateLogbookDto } from './update-logbook.dto';
 
 @Injectable()
 export class LogbooksService {
   constructor(
     @InjectRepository(Logbook) private readonly logbooks: Repository<Logbook>,
+    @InjectRepository(Submission) private readonly submissions: Repository<Submission>,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
@@ -34,6 +37,10 @@ export class LogbooksService {
 
   async update(student: User, activityId: number, input: UpdateLogbookDto) {
     const activity = await this.activitiesService.getForStudent(student.id, activityId);
+    const submission = await this.submissions.findOne({
+      where: { student: { id: student.id }, activity: { id: activityId } },
+    });
+    ensureSubmissionCanBeEdited(submission);
     let logbook = await this.logbooks.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
     });

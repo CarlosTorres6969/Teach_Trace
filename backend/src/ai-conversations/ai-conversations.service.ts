@@ -9,6 +9,7 @@ import {
 } from '../entities/ai-conversation.entity';
 import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
+import { ensureSubmissionCanBeEdited } from '../submissions/submission-edit-policy';
 import { UpdateAiConversationDto } from './ai-conversations.dto';
 
 @Injectable()
@@ -39,6 +40,10 @@ export class AiConversationsService {
     input: UpdateAiConversationDto,
   ) {
     const activity = await this.activitiesService.getForStudent(student.id, activityId);
+    const existingSubmission = await this.submissions.findOne({
+      where: { student: { id: student.id }, activity: { id: activityId } },
+    });
+    ensureSubmissionCanBeEdited(existingSubmission);
     const normalized = input.messages.map((message, index) => ({
       role: message.role,
       content: message.content.trim(),
@@ -62,6 +67,7 @@ export class AiConversationsService {
       current.submission = await submissionRepository.findOne({
         where: { student: { id: student.id }, activity: { id: activityId } },
       });
+      ensureSubmissionCanBeEdited(current.submission);
       await messageRepository.delete({ conversation: { id: current.id } });
       const savedMessages = await messageRepository.save(
         normalized.map((message) =>

@@ -5,6 +5,7 @@ import { ActivitiesService } from '../activities/activities.service';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
+import { ensureSubmissionCanBeEdited } from '../submissions/submission-edit-policy';
 import {
   normalizeAiDeclarationText,
   UpdateAiDeclarationDto,
@@ -52,6 +53,7 @@ export class AiDeclarationsService {
     const submission = await this.submissions.findOne({
       where: { student: { id: student.id }, activity: { id: activityId } },
     });
+    ensureSubmissionCanBeEdited(submission);
     if (submission?.submittedAt) {
       throw new ConflictException(
         'La declaración forma parte de una entrega. Actualiza la entrega completa para modificarla',

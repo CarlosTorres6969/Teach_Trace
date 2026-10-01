@@ -8,6 +8,7 @@ const { apiMock, routeLeaveGuards } = vi.hoisted(() => ({
   apiMock: vi.fn(),
   routeLeaveGuards: [] as Array<() => Promise<void>>,
 }));
+let submissionStatus = 'not_submitted';
 
 vi.mock('../api', () => ({ api: apiMock }));
 vi.mock('vue-router', () => ({
@@ -17,6 +18,7 @@ vi.mock('vue-router', () => ({
 
 describe('StudentActivityView - nivel declarado de IA', () => {
   beforeEach(() => {
+    submissionStatus = 'not_submitted';
     window.localStorage.clear();
     routeLeaveGuards.length = 0;
     apiMock.mockReset();
@@ -43,12 +45,12 @@ describe('StudentActivityView - nivel declarado de IA', () => {
       }
       if (path.endsWith('/submission-status')) {
         return Promise.resolve({
-          status: 'not_submitted',
-          submittedAt: null,
-          productText: '',
+          status: submissionStatus,
+          submittedAt: submissionStatus === 'not_submitted' ? null : '2026-09-30T12:00:00.000Z',
+          productText: submissionStatus === 'not_submitted' ? '' : 'Producto evaluado',
           productUrl: '',
-          fileName: null,
-          evaluationStatus: 'not_requested',
+          fileName: submissionStatus === 'not_submitted' ? null : 'evidencia.pdf',
+          evaluationStatus: submissionStatus === 'evaluated' ? 'validated' : 'not_requested',
           manualReviewRequired: false,
         });
       }
@@ -77,6 +79,49 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     });
     await input.trigger('change');
   }
+
+  it('muestra una entrega evaluada en solo lectura y no intenta guardar cambios', async () => {
+    submissionStatus = 'evaluated';
+    window.localStorage.setItem(
+      'teachtrace:activity-draft:12',
+      JSON.stringify({
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        currentStep: 0,
+        logbook: { initialIdeas: 'Borrador local diferente' },
+      }),
+    );
+    const wrapper = mount(StudentActivityView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('La evaluación fue publicada por el docente');
+    expect(wrapper.get('.logbook-step-content textarea').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.logbook-step-content textarea').element).toHaveProperty(
+      'value',
+      'Ideas iniciales',
+    );
+    expect(wrapper.find('.logbook-actions .button.primary').exists()).toBe(false);
+    expect(window.localStorage.getItem('teachtrace:activity-draft:12')).toBeNull();
+
+    await wrapper.findAll('.logbook-step-button')[1].trigger('click');
+    expect(wrapper.get('.conversation-message select').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.conversation-message textarea').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.conversation-actions button').attributes('disabled')).toBeDefined();
+
+    await wrapper.get('.submission-step-button').trigger('click');
+    expect(wrapper.get('textarea[maxlength="50000"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('input[type="file"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('select').attributes('disabled')).toBeDefined();
+
+    apiMock.mockClear();
+    await routeLeaveGuards[0]();
+    await flushPromises();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
 
   it('calcula el progreso con pasos guardados y no con el paso actualmente visible', async () => {
     const wrapper = mount(StudentActivityView, {

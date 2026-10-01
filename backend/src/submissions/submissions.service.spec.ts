@@ -3,6 +3,38 @@ import { UserRole } from '../entities/user.entity';
 import { SubmissionsService } from './submissions.service';
 
 describe('SubmissionsService', () => {
+  it('rechaza el reenvio de una entrega evaluada sin borrar su evaluacion', async () => {
+    const submissions = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 8,
+        status: SubmissionStatus.EVALUATED,
+        productText: 'Producto evaluado',
+      }),
+    };
+    const dataSource = { transaction: jest.fn() };
+    const service = new SubmissionsService(
+      submissions as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      dataSource as never,
+      { getForStudent: jest.fn().mockResolvedValue({ id: 4 }) } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.submit({ id: 2 } as never, 4, {
+        productText: 'Producto modificado',
+        productUrl: '',
+        toolName: 'ChatGPT',
+        usageLevel: 2,
+        purpose: 'Modificar evidencia',
+        promptSummary: 'Prompt modificado',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
   it('guarda producto y declaración de IA dentro de la misma transacción', async () => {
     const student = { id: 2, role: UserRole.STUDENT };
     const activity = { id: 4, title: 'Actividad', academicClass: { id: 1 } };
