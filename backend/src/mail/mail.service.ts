@@ -8,6 +8,37 @@ export class MailService {
 
   constructor(private readonly config: ConfigService) {}
 
+  async sendTeacherInvitationEmail(
+    email: string,
+    teacherName: string,
+    temporaryPassword: string,
+  ): Promise<boolean> {
+    const loginUrl = `${this.publicAppUrl()}/login`;
+    const result = await this.sendEmail({
+      to: email,
+      subject: 'Cuenta docente creada · TeachTrace',
+      text: [
+        `Hola ${teacherName},`,
+        'El administrador creó tu cuenta docente en TeachTrace.',
+        `Correo: ${email}`,
+        `Contraseña temporal: ${temporaryPassword}`,
+        `Inicia sesión en: ${loginUrl}`,
+        'Por seguridad, deberás cambiar esta contraseña antes de crear tus clases.',
+      ].join('\n\n'),
+      html: [
+        `<p>Hola ${this.escapeHtml(teacherName)},</p>`,
+        '<p>El administrador creó tu cuenta docente en TeachTrace.</p>',
+        `<p><strong>Correo:</strong> ${this.escapeHtml(email)}<br>`,
+        `<strong>Contraseña temporal:</strong> <code>${this.escapeHtml(temporaryPassword)}</code></p>`,
+        `<p><a href="${this.escapeHtml(loginUrl)}">Iniciar sesión</a></p>`,
+        '<p>Por seguridad, deberás cambiar esta contraseña antes de crear tus clases.</p>',
+      ].join(''),
+    });
+    if (!result) return false;
+    this.logger.log('SMTP aceptó el correo de nueva cuenta docente para su entrega');
+    return true;
+  }
+
   async sendTemporaryPasswordEmail(
     email: string,
     studentName: string,

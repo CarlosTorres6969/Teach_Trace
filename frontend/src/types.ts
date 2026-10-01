@@ -1,4 +1,4 @@
-export type Role = 'student' | 'teacher';
+export type Role = 'admin' | 'student' | 'teacher';
 export type ThemePreference = 'light' | 'dark' | 'system';
 
 export type AccessibilitySettings = {

@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1790726400000-add-understanding-assessment';
 import { AddPromptAssessment1790812800000 } from './database/migrations/1790812800000-add-prompt-assessment';
+import { AddAdminRole1790899200000 } from './database/migrations/1790899200000-add-admin-role';
+import { AdminModule } from './admin/admin.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
 import { AiConversationsModule } from './ai-conversations/ai-conversations.module';
@@ -105,6 +107,7 @@ const entities = [
             migrations: [
               AddUnderstandingAssessment1790726400000,
               AddPromptAssessment1790812800000,
+              AddAdminRole1790899200000,
             ],
             migrationsRun: true,
             synchronize,
@@ -136,6 +139,7 @@ const entities = [
       Notification,
     ]),
     AuthModule,
+    AdminModule,
     ClassesModule,
     ActivitiesModule,
     RubricsModule,

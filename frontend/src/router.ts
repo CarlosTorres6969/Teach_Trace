@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { auth, restoreSession, clearSession } from './auth';
+import { homeForRole } from './role-home';
+import AdminDashboard from './views/AdminDashboard.vue';
 import AccessibilitySettingsView from './views/AccessibilitySettingsView.vue';
 import LoginView from './views/LoginView.vue';
 import ForgotPasswordView from './views/ForgotPasswordView.vue';
@@ -22,6 +24,7 @@ export const router = createRouter({
     { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
     { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
     { path: '/change-password', component: ChangeTemporaryPasswordView },
+    { path: '/admin', component: AdminDashboard, meta: { role: 'admin' } },
     { path: '/student', component: StudentDashboard, meta: { role: 'student' } },
     { path: '/student/profile', component: StudentProfileView, meta: { role: 'student' } },
     { path: '/student/activities/:id', component: StudentActivityView, meta: { role: 'student' } },
@@ -46,11 +49,11 @@ router.beforeEach(async (to) => {
     return '/change-password';
   }
   if (auth.user && !auth.user.mustChangePassword && to.path === '/change-password') {
-    return auth.user.role === 'student' ? '/student' : '/teacher';
+    return homeForRole(auth.user.role);
   }
   
   if (to.meta.public) {
-    if (auth.user) return auth.user.role === 'student' ? '/student' : '/teacher';
+    if (auth.user) return homeForRole(auth.user.role);
     return true;
   }
   
@@ -60,7 +63,7 @@ router.beforeEach(async (to) => {
   }
   
   if (to.meta.role && to.meta.role !== auth.user.role) {
-    return auth.user.role === 'student' ? '/student' : '/teacher';
+    return homeForRole(auth.user.role);
   }
   
   return true;

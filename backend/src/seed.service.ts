@@ -69,6 +69,13 @@ export class SeedService implements OnApplicationBootstrap {
     // por los flujos reales de la aplicación.
     if (process.env.NODE_ENV !== 'test' || process.env.DEMO_SEED !== 'true') return;
 
+    await this.ensureUser(
+      'administrador@unah.edu.hn',
+      'Administrador TeachTrace',
+      'Administrador123!',
+      UserRole.ADMIN,
+    );
+
     const teacher = await this.ensureUser(
       'docente@unah.edu.hn',
       'Carlos Torres',

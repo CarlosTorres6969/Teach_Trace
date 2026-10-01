@@ -2,6 +2,7 @@ import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { AuthSession } from './auth-session.entity';
 
 export enum UserRole {
+  ADMIN = 'admin',
   STUDENT = 'student',
   TEACHER = 'teacher',
 }

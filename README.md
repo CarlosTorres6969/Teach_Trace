@@ -6,7 +6,8 @@ en el docente.
 
 El flujo base implementa:
 
-- Autenticación y autorización para estudiantes y docentes.
+- Autenticación y autorización para administradores, estudiantes y docentes.
+- Alta de cuentas docentes por un administrador, con contraseña temporal enviada por correo.
 - Gestión docente de clases y matrícula con cuentas autorizadas.
 - Creación automática de estudiantes con contraseña temporal enviada por correo y cambio obligatorio en el primer acceso.
 - Actividades asociadas a una clase y resultados de aprendizaje, creadas primero como borrador y publicadas explícitamente por el docente después de asociar una rúbrica.
@@ -33,16 +34,23 @@ npm run dev
 Frontend: http://localhost:5173  
 API: http://localhost:3000/api
 
-La aplicación no crea usuarios ni contenido de demostración al iniciar. Cada pantalla obtiene la
-identidad desde la sesión y consulta únicamente la información persistida para esa cuenta. El
-conjunto de datos fijo se habilita solamente dentro de las pruebas automatizadas con
-`NODE_ENV=test` y `DEMO_SEED=true`.
+La aplicación no crea usuarios académicos ni contenido de demostración al iniciar. Cada pantalla
+obtiene la identidad desde la sesión y consulta únicamente la información persistida para esa
+cuenta. El conjunto de datos fijo se habilita solamente dentro de las pruebas automatizadas con
+`NODE_ENV=test` y `DEMO_SEED=true`; la única excepción es la cuenta administradora inicial cuando
+sus tres variables están configuradas explícitamente.
+
+Para crear la primera cuenta administradora configure `ADMIN_EMAIL`, `ADMIN_NAME` y
+`ADMIN_TEMPORARY_PASSWORD` en `.env`. La cuenta se crea una sola vez y deberá cambiar esa
+contraseña en su primer inicio de sesión. Después, el administrador registra a los docentes desde
+`/admin`; cada docente recibe por SMTP su propia contraseña temporal y administra sus clases.
 
 ## Estructura del backend
 
 El backend es un solo proceso NestJS, separado internamente por dominios:
 
 - `auth`: autenticación transversal, sesiones y roles.
+- `admin`: listado y creación de cuentas docentes; no administra clases ni evaluaciones.
 - `classes`: clases y matrícula.
 - `activities`: actividades y resultados de aprendizaje.
 - `rubrics`: rúbricas y asociación con actividades.

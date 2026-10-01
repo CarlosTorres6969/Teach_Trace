@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../api';
 import { auth, clearSession, setSession } from '../auth';
+import { homeForRole } from '../role-home';
 import type { User } from '../types';
 
 const router = useRouter();
@@ -31,7 +32,7 @@ async function changePassword() {
       }),
     });
     setSession(result.user);
-    await router.push(result.user.role === 'student' ? '/student' : '/teacher');
+    await router.push(homeForRole(result.user.role));
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No fue posible cambiar la contraseña';
   } finally {

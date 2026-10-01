@@ -5,7 +5,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 
 ## Entidades y relaciones
 
-- `User`: cuenta autorizada con rol `student` o `teacher`, tema `light`, `dark` o `system` y
+- `User`: cuenta autorizada con rol `admin`, `student` o `teacher`, tema `light`, `dark` o `system` y
   configuración de accesibilidad (`fontSize`, `highContrast`, `reducedMotion`).
 - `AuthSession`: sesión JWT revocable y con vencimiento.
 - `AcademicClass`: clase impartida por un docente.

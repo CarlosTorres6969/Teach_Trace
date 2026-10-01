@@ -41,6 +41,7 @@ describe('TeachTrace API (integración)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let baseUrl: string;
+  let admin: LoginResponse;
   let teacher: LoginResponse;
   let student: LoginResponse;
   let classId: number;
@@ -168,6 +169,18 @@ describe('TeachTrace API (integración)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'estudiante@unah.edu.hn', password: 'Estudiante123!' }),
     });
+    const adminLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'administrador@unah.edu.hn',
+        password: 'Administrador123!',
+      }),
+    });
+    admin = {
+      ...(adminLogin.body as Omit<LoginResponse, 'sessionCookie'>),
+      sessionCookie: readSessionCookie(adminLogin.response),
+    };
     teacher = {
       ...(teacherLogin.body as Omit<LoginResponse, 'sessionCookie'>),
       sessionCookie: readSessionCookie(teacherLogin.response),
@@ -1372,6 +1385,87 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(student.sessionCookie),
     });
     expect(asStudent.response.status).toBe(403);
+  });
+
+  it('permite únicamente al administrador listar y crear cuentas docentes', async () => {
+    const anonymous = await request('/api/admin/teachers');
+    expect(anonymous.response.status).toBe(401);
+
+    const teacherAttempt = await request('/api/admin/teachers', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(teacherAttempt.response.status).toBe(403);
+
+    const studentAttempt = await request('/api/admin/teachers', {
+      headers: sessionHeaders(student.sessionCookie),
+    });
+    expect(studentAttempt.response.status).toBe(403);
+
+    const listed = await request('/api/admin/teachers', {
+      headers: sessionHeaders(admin.sessionCookie),
+    });
+    expect(listed.response.status).toBe(200);
+    expect(listed.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        email: 'docente@unah.edu.hn',
+        active: true,
+      }),
+    ]));
+    expect(JSON.stringify(listed.body)).not.toContain('passwordHash');
+
+    const invalid = await request('/api/admin/teachers', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(admin.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: '   ', email: 'correo-invalido' }),
+    });
+    expect(invalid.response.status).toBe(400);
+
+    const created = await request('/api/admin/teachers', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(admin.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: '  Docente Administrado  ',
+        email: ' DOCENTE.ADMINISTRADO@UNAH.EDU.HN ',
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.body).toMatchObject({
+      name: 'Docente Administrado',
+      email: 'docente.administrado@unah.edu.hn',
+      active: true,
+      mustChangePassword: true,
+      invitationEmailSent: false,
+    });
+    expect(created.body).not.toHaveProperty('temporaryPassword');
+    expect(created.body).not.toHaveProperty('passwordHash');
+
+    const savedTeacher = await dataSource.getRepository(User).findOne({
+      where: { email: 'docente.administrado@unah.edu.hn' },
+    });
+    expect(savedTeacher).toMatchObject({
+      role: UserRole.TEACHER,
+      active: true,
+      mustChangePassword: true,
+    });
+
+    const duplicate = await request('/api/admin/teachers', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(admin.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Docente repetido',
+        email: 'docente.administrado@unah.edu.hn',
+      }),
+    });
+    expect(duplicate.response.status).toBe(409);
   });
 
   it('expone comprensión, sugerencia porcentual y prompts ordenados solo al docente', async () => {

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { api } from './api';
 import { API_URL } from './api-url';
 import { auth, clearSession } from './auth';
+import { homeForRole } from './role-home';
 import { applyTheme, oppositeResolvedTheme, resolvedTheme } from './theme';
 import type { AppNotification, ThemePreference } from './types';
 import { registerPushNotifications } from './usePush';
@@ -20,7 +21,7 @@ let pollInterval: ReturnType<typeof setInterval> | null = null;
 let sseSource: EventSource | null = null;
 
 function startNotificationServices() {
-  if (!auth.user) return;
+  if (!auth.user || auth.user.role === 'admin') return;
 
   // Contar no leídas de inmediato
   void fetchUnreadCount();
@@ -144,6 +145,11 @@ function formatDate(iso: string): string {
   return `Hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
 }
 
+function roleLabel() {
+  if (auth.user?.role === 'admin') return 'Administrador';
+  return auth.user?.role === 'student' ? 'Estudiante' : 'Docente';
+}
+
 function closeBellOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape') bellOpen.value = false;
 }
@@ -226,7 +232,7 @@ onBeforeUnmount(() => {
 
 <template>
   <header v-if="auth.user && !auth.user.mustChangePassword" class="topbar">
-    <RouterLink :to="auth.user.role === 'student' ? '/student' : '/teacher'" class="brand">
+    <RouterLink :to="homeForRole(auth.user.role)" class="brand">
       <span class="brand-mark">T</span>
       <span>TeachTrace <small>UNAH</small></span>
     </RouterLink>
@@ -234,7 +240,7 @@ onBeforeUnmount(() => {
     <div class="user-menu">
       <div>
         <strong>{{ auth.user.name }}</strong>
-        <span>{{ auth.user.role === 'student' ? 'Estudiante' : 'Docente' }}</span>
+        <span>{{ roleLabel() }}</span>
       </div>
 
       <RouterLink
@@ -263,7 +269,7 @@ onBeforeUnmount(() => {
         <span class="topbar-settings-label">Accesibilidad</span>
       </RouterLink>
       <!-- Campana de notificaciones — solo estudiantes -->
-      <div class="bell-wrapper">
+      <div v-if="auth.user.role !== 'admin'" class="bell-wrapper">
         <button
           class="button ghost bell-button"
           type="button"

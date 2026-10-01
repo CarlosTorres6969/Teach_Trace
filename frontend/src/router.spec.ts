@@ -2,11 +2,13 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { auth, setSession, clearSession, restoreSession } from './auth';
 import { handleUnauthorized } from './router';
+import { homeForRole } from './role-home';
 import type { User } from './types';
 
 const testRoutes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: { template: '<div>Login</div>' }, meta: { public: true } },
+  { path: '/admin', name: 'admin', component: { template: '<div>Admin</div>' }, meta: { role: 'admin' } },
   { path: '/student', name: 'student', component: { template: '<div>Student</div>' }, meta: { role: 'student' } },
   { path: '/student/activities/:id', name: 'student-activity', component: { template: '<div>Activity</div>' }, meta: { role: 'student' } },
   { path: '/teacher', name: 'teacher', component: { template: '<div>Teacher</div>' }, meta: { role: 'teacher' } },
@@ -28,7 +30,7 @@ function createTestRouter() {
     await restoreSession();
     
     if (to.meta.public) {
-      if (auth.user) return auth.user.role === 'student' ? '/student' : '/teacher';
+      if (auth.user) return homeForRole(auth.user.role);
       return true;
     }
     
@@ -38,7 +40,7 @@ function createTestRouter() {
     }
     
     if (to.meta.role && to.meta.role !== auth.user.role) {
-      return auth.user.role === 'student' ? '/student' : '/teacher';
+      return homeForRole(auth.user.role);
     }
     
     return true;
@@ -66,6 +68,19 @@ function createTeacherUser(overrides: Partial<User> = {}): User {
     email: 'docente@unah.edu.hn',
     name: 'Docente',
     role: 'teacher',
+    mustChangePassword: false,
+    theme: 'system',
+    accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
+    ...overrides,
+  };
+}
+
+function createAdminUser(overrides: Partial<User> = {}): User {
+  return {
+    id: 3,
+    email: 'administrador@unah.edu.hn',
+    name: 'Administrador',
+    role: 'admin',
     mustChangePassword: false,
     theme: 'system',
     accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
@@ -136,14 +151,14 @@ describe('Router - Role-based access control (logic)', () => {
   const checkAccess = (user: User | null, toPath: string, toMeta: Record<string, any>): string | true => {
     // Simulate the router guard logic
     if (toMeta.public) {
-      if (user) return user.role === 'student' ? '/student' : '/teacher';
+      if (user) return homeForRole(user.role);
       return true;
     }
     
     if (!user) return '/login';
     
     if (toMeta.role && toMeta.role !== user.role) {
-      return user.role === 'student' ? '/student' : '/teacher';
+      return homeForRole(user.role);
     }
     
     return true;
@@ -211,6 +226,19 @@ describe('Router - Role-based access control (logic)', () => {
     const user = createTeacherUser();
     const result = checkAccess(user, '/student/activities/1', { role: 'student' });
     expect(result).toBe('/teacher');
+  });
+
+  it('permite al administrador acceder únicamente a su panel', () => {
+    const user = createAdminUser();
+
+    expect(checkAccess(user, '/admin', { role: 'admin' })).toBe(true);
+    expect(checkAccess(user, '/teacher', { role: 'teacher' })).toBe('/admin');
+    expect(checkAccess(user, '/student', { role: 'student' })).toBe('/admin');
+  });
+
+  it('impide que docentes y estudiantes accedan al panel administrador', () => {
+    expect(checkAccess(createTeacherUser(), '/admin', { role: 'admin' })).toBe('/teacher');
+    expect(checkAccess(createStudentUser(), '/admin', { role: 'admin' })).toBe('/student');
   });
 });
 
