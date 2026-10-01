@@ -613,9 +613,21 @@ html.high-contrast .login-card .button.primary:hover:not(:disabled) {
 .dashboard-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; }
 .dashboard-toolbar > div:first-child { display: grid; gap: .3rem; }
 .dashboard-counter { font: 650 clamp(1.15rem, 2.4vw, 1.55rem) 'Fraunces', Georgia, serif; }
+.dashboard-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; flex-wrap: wrap; }
 .activity-filters { display: inline-flex; padding: .25rem; background: var(--canvas); border: 1px solid var(--line); border-radius: 11px; }
 .filter-button { padding: .6rem .85rem; border: 0; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; font-weight: 700; }
 .filter-button.active { color: white; background: var(--primary-solid); box-shadow: 0 3px 10px rgba(12,35,64,.18); }
+.dashboard-results-link { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem .8rem; color: var(--green); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; font-weight: 800; text-decoration: none; }
+.dashboard-results-link:hover { border-color: var(--green); }
+.dashboard-activity-section { display: grid; gap: 1rem; margin: 1rem 0 2rem; scroll-margin-top: 7rem; }
+.dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.dashboard-section-heading h2 { margin-bottom: .25rem; font-size: clamp(1.35rem, 2.7vw, 1.8rem); }
+.dashboard-section-heading p { margin: 0; }
+.graded-activity-card { min-height: 270px !important; border-top: 4px solid var(--green); }
+.graded-activity-grid { margin-bottom: 0; }
+.graded-empty-state { margin: 0; }
+.dashboard-analytics-section { margin-top: 2.5rem; }
+.dashboard-analytics-section .dashboard-section-heading { margin-bottom: 1rem; }
 .activity-dashboard-grid { margin-bottom: 1.5rem; }
 .activity-dashboard-grid .activity-card { min-height: 350px; }
 .activity-card--urgent { border-color: #d8685f; box-shadow: 0 8px 30px rgba(163,61,53,.12); }
@@ -644,8 +656,10 @@ html.dark .activity-progress-track { background: #35445a; }
 
 @media (max-width: 800px) {
   .dashboard-toolbar { align-items: stretch; flex-direction: column; }
+  .dashboard-toolbar-actions { align-items: stretch; flex-direction: column; }
   .activity-filters { width: 100%; }
   .filter-button { flex: 1; }
+  .dashboard-results-link { justify-content: space-between; }
 }
 
 @media (max-width: 520px) {
@@ -653,6 +667,7 @@ html.dark .activity-progress-track { background: #35445a; }
 }
 
 html.high-contrast .filter-button,
+html.high-contrast .dashboard-results-link,
 html.high-contrast .completed-toggle,
 html.high-contrast .activity-progress-track {
   color: #ffffff !important;

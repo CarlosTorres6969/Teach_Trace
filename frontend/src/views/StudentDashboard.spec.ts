@@ -30,7 +30,7 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
       accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
     }, false);
     apiMock.mockReset();
-    apiMock.mockResolvedValue([
+    const dashboardActivities = [
       {
         id: 1,
         title: 'Proyecto urgente',
@@ -59,7 +59,26 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
         logbookStatus: 'complete',
         isNew: false,
       },
-    ]);
+      {
+        id: 3,
+        title: 'Proyecto calificado',
+        subject: 'Programación',
+        dueDate: dateAfter(-2),
+        weight: 1,
+        finalScore: 3.5,
+        academicClass: { id: 3, name: 'Programación II', code: 'IS-210' },
+        submissionStatus: 'evaluated',
+        completionPercentage: 100,
+        missingSections: [],
+        logbookStatus: 'complete',
+        isNew: false,
+      },
+    ];
+    apiMock.mockImplementation((path: string) => Promise.resolve(
+      path.endsWith('filter=all')
+        ? dashboardActivities
+        : dashboardActivities.filter((activity) => activity.id !== 3),
+    ));
   });
 
   afterEach(() => clearSession(false));
@@ -69,7 +88,7 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
       global: {
         stubs: {
           RouterLink: { template: '<a><slot /></a>' },
-          ProjectionWidget: { template: '<div />' },
+          ProjectionWidget: { template: '<div class="projection-stub">Proyección</div>' },
           EvolutionChart: { template: '<div />' },
         },
       },
@@ -77,6 +96,7 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
     await flushPromises();
 
     expect(apiMock).toHaveBeenCalledWith('/student/activities?filter=week');
+    expect(apiMock).toHaveBeenCalledWith('/student/activities?filter=all');
     expect(wrapper.text()).toContain('1 entrega pendiente esta semana');
     expect(wrapper.text()).toContain('Proyecto urgente');
     expect(wrapper.text()).toContain('Menos de 48 h');
@@ -84,6 +104,15 @@ describe('StudentDashboard - HU-22, HU-23 y HU-24', () => {
     expect(wrapper.text()).toContain('60%');
     expect(wrapper.text()).toContain('Faltan: reflexión final, entrega final');
     expect(wrapper.text()).not.toContain('Ensayo completado');
+    expect(wrapper.text()).toContain('Actividades calificadas');
+    expect(wrapper.text()).toContain('Proyecto calificado');
+    expect(wrapper.text()).toContain('3.50 / 4.00');
+    expect(wrapper.text()).toContain('Ver calificación');
+    expect(wrapper.get('.dashboard-results-link').attributes('href')).toBe('#graded-activities');
+
+    const content = wrapper.text();
+    expect(content.indexOf('Proyecto urgente')).toBeLessThan(content.indexOf('Proyecto calificado'));
+    expect(content.indexOf('Proyecto calificado')).toBeLessThan(content.indexOf('Proyección'));
 
     await wrapper.get('.completed-toggle').trigger('click');
     expect(wrapper.text()).toContain('Ensayo completado');
