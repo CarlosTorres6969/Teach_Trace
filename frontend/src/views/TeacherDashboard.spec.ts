@@ -19,7 +19,7 @@ const classes = [
     id: 2,
     code: 'IS-202',
     name: 'Ingeniería del Software',
-    subject: 'Ingeniería del Software',
+    section: '1200',
     period: '2026-III',
     studentCount: 12,
     students: [],
@@ -28,7 +28,7 @@ const classes = [
     id: 1,
     code: 'PW-101',
     name: 'Programación Web',
-    subject: 'Programación Web',
+    section: '1300',
     period: '2026-III',
     studentCount: 20,
     students: [],
@@ -68,6 +68,7 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     ];
     apiMock.mockReset();
     apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes' && options.method === 'POST') return { id: 3 } as never;
       if (path === '/teacher/classes') return classes as never;
       if (path === '/teacher/activities' && !options.method) return currentActivities as never;
       if (path === '/teacher/rubrics') return [] as never;
@@ -87,6 +88,47 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     await wrapper.findAll('.teacher-tabs button')[1].trigger('click');
     return wrapper;
   }
+
+  it('crea una clase solicitando solamente nombre, sección, código y periodo', async () => {
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.get('.management-toolbar .button.primary').trigger('click');
+
+    const inputs = wrapper.findAll('[aria-labelledby="create-class-title"] input');
+    expect(inputs).toHaveLength(4);
+    await inputs[0].setValue('Tópicos Especiales y Avanzados');
+    await inputs[1].setValue('1200');
+    await inputs[2].setValue('IS-901');
+    await inputs[3].setValue('III PAC 2026');
+    await wrapper.get('[aria-labelledby="create-class-title"] form').trigger('submit');
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/classes', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Tópicos Especiales y Avanzados',
+        section: '1200',
+        code: 'IS-901',
+        period: 'III PAC 2026',
+      }),
+    });
+  });
+
+  it('presenta el nombre de la clase como dato principal y la sección como secundaria', async () => {
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+
+    const cards = wrapper.findAll('.teacher-catalog-card');
+    expect(cards[0].get('.class-name').text()).toBe('Ingeniería del Software');
+    expect(cards[0].get('.class-section').text()).toBe('Sección 1200');
+    expect(cards[0].get('.class-name').element.compareDocumentPosition(
+      cards[0].get('.class-section').element,
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
   it('abre directamente la sección de actividades cuando se solicita por la URL', async () => {
     routeMock.query = { section: 'activities' };

@@ -44,7 +44,7 @@ export type AppNotification = {
 export type AcademicClass = {
   id: number;
   name: string;
-  subject: string;
+  section: string;
   code: string;
   period: string;
   studentCount: number;

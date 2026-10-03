@@ -114,22 +114,22 @@ export class SeedService implements OnApplicationBootstrap {
     );
 
     const softwareClass = await this.ensureClass({
-      name: 'Ingeniería del Software — Piloto',
-      subject: 'Ingeniería del Software',
+      name: 'Ingeniería del Software',
+      section: '1200',
       code: 'IS-2026-03',
       period: 'III PAC 2026',
       teacher,
     });
     const databaseClass = await this.ensureClass({
-      name: 'Bases de Datos — Laboratorio',
-      subject: 'Bases de Datos',
+      name: 'Bases de Datos',
+      section: '1300',
       code: 'BD-2026-03',
       period: 'III PAC 2026',
       teacher,
     });
     const webClass = await this.ensureClass({
-      name: 'Programación Web — Proyecto',
-      subject: 'Programación Web',
+      name: 'Programación Web',
+      section: '1400',
       code: 'PW-2026-03',
       period: 'III PAC 2026',
       teacher,
@@ -461,7 +461,7 @@ export class SeedService implements OnApplicationBootstrap {
         rubric: null,
       });
     }
-    activity.subject = definition.academicClass.subject;
+    activity.subject = definition.academicClass.name;
     activity.dueDate = this.dateOnly(definition.dueInDays);
     activity.activityType = definition.activityType;
     activity.evaluationPhase = definition.phase;
@@ -732,7 +732,7 @@ export class SeedService implements OnApplicationBootstrap {
 
   private async ensureClass(seed: {
     name: string;
-    subject: string;
+    section: string;
     code: string;
     period: string;
     teacher: User;
@@ -740,7 +740,8 @@ export class SeedService implements OnApplicationBootstrap {
     let academicClass = await this.classes.findOne({ where: { code: seed.code } });
     if (!academicClass) academicClass = this.classes.create(seed);
     academicClass.name = seed.name;
-    academicClass.subject = seed.subject;
+    academicClass.legacySubject = seed.name;
+    academicClass.section = seed.section;
     academicClass.period = seed.period;
     academicClass.teacher = seed.teacher;
     return this.classes.save(academicClass);

@@ -31,12 +31,20 @@ describe('ActivitiesService', () => {
   });
 
   it('crea la actividad dentro de una clase propia y conserva su fase', async () => {
-    const academicClass = { id: 5, subject: 'Ingeniería del Software' };
+    const academicClass = { id: 5, name: 'Ingeniería del Software', section: '1200' };
     const activities = {
       create: jest.fn((value) => value),
       save: jest.fn(async (value) => ({ id: 8, ...value })),
     };
-    const classesService = { ownedClass: jest.fn().mockResolvedValue(academicClass) };
+    const classesService = {
+      ownedClass: jest.fn().mockResolvedValue(academicClass),
+      classDetails: jest.fn().mockReturnValue({
+        name: academicClass.name,
+        section: academicClass.section,
+        code: '',
+        period: '',
+      }),
+    };
     const service = new ActivitiesService(activities as never, {} as never, classesService as never);
 
     const result = await service.create({ id: 2 } as never, {
@@ -48,6 +56,7 @@ describe('ActivitiesService', () => {
     });
 
     expect(result.evaluationPhase).toBe(ActivityPhase.PILOT);
+    expect(result.subject).toBe('Ingeniería del Software');
     expect(result.academicClass).toBe(academicClass);
     expect(result.manualEvaluationRequired).toBe(false);
   });

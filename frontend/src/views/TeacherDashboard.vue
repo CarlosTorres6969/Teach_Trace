@@ -23,7 +23,7 @@ function sectionFromQuery(value: unknown): TeacherSection {
 }
 
 const section = ref<TeacherSection>(sectionFromQuery(route.query.section));
-const classForm = reactive({ name: '', subject: '', code: '', period: '' });
+const classForm = reactive({ name: '', section: '', code: '', period: '' });
 const enrollmentEmails = reactive<Record<number, string>>({});
 const enrollmentNames = reactive<Record<number, string>>({});
 const activityForm = reactive({
@@ -138,7 +138,7 @@ async function load() {
 async function createClass() {
   const created = await act('Clase creada', async () => {
     await api('/teacher/classes', { method: 'POST', body: JSON.stringify(classForm) });
-    Object.assign(classForm, { name: '', subject: '', code: '', period: '' });
+    Object.assign(classForm, { name: '', section: '', code: '', period: '' });
     await load();
   });
   if (created) closeModal();
@@ -436,7 +436,7 @@ onBeforeUnmount(() => {
           <div>
             <span class="eyebrow">Organización académica</span>
             <div class="section-title"><h2>Mis clases</h2><span>{{ classes.length }}</span></div>
-            <p class="muted">Consulta cada grupo, su matrícula y las actividades asignadas.</p>
+            <p class="muted">Consulta cada clase, su matrícula y las actividades asignadas.</p>
           </div>
           <button class="button primary" type="button" @click="openCreateClass">Nueva clase</button>
         </div>
@@ -447,9 +447,9 @@ onBeforeUnmount(() => {
               <span class="catalog-code">{{ academicClass.code }}</span>
               <span class="status">{{ academicClass.period }}</span>
             </div>
-            <div class="catalog-card-content">
-              <p class="eyebrow">{{ academicClass.subject }}</p>
-              <h3>{{ academicClass.name }}</h3>
+            <div class="catalog-card-content class-identity">
+              <h3 class="class-name">{{ academicClass.name }}</h3>
+              <p class="class-section">Sección {{ academicClass.section }}</p>
             </div>
             <div class="catalog-stats" aria-label="Resumen de la clase">
               <div><strong>{{ academicClass.studentCount }}</strong><span>Estudiantes</span></div>
@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-else class="panel empty-state">
           <h3>Aún no tienes clases</h3>
-          <p>Crea tu primer grupo para comenzar a matricular estudiantes y preparar actividades.</p>
+          <p>Crea tu primera clase para comenzar a matricular estudiantes y preparar actividades.</p>
           <button class="button primary" type="button" @click="openCreateClass">Crear primera clase</button>
         </div>
       </section>
@@ -492,8 +492,10 @@ onBeforeUnmount(() => {
               <div>
                 <span class="catalog-code">{{ group.academicClass.code }}</span>
                 <div>
-                  <h3>{{ group.academicClass.name }}</h3>
-                  <p class="muted">{{ group.academicClass.subject }} · {{ group.academicClass.period }}</p>
+                  <h3 class="class-name">{{ group.academicClass.name }}</h3>
+                  <p class="class-section">
+                    Sección {{ group.academicClass.section }} · {{ group.academicClass.period }}
+                  </p>
                 </div>
               </div>
               <span class="status">
@@ -606,17 +608,25 @@ onBeforeUnmount(() => {
         <header class="modal-header">
           <div>
             <span class="eyebrow">Nueva clase</span>
-            <h2 id="create-class-title">Configura el grupo</h2>
+            <h2 id="create-class-title">Configura la clase</h2>
           </div>
           <button class="modal-close" type="button" aria-label="Cerrar modal" @click="closeModal">×</button>
         </header>
         <form class="modal-body form-grid" @submit.prevent="createClass">
-          <p class="muted span-2">Define el grupo académico antes de crear actividades o matricular estudiantes.</p>
+          <p class="muted span-2">Define la clase antes de crear actividades o matricular estudiantes.</p>
           <p v-if="error" class="alert error span-2">{{ error }}</p>
-          <label>Nombre del grupo<input v-model="classForm.name" required maxlength="120" autofocus /></label>
-          <label>Asignatura<input v-model="classForm.subject" required maxlength="120" /></label>
-          <label>Código<input v-model="classForm.code" required maxlength="30" /></label>
-          <label>Periodo académico<input v-model="classForm.period" required maxlength="40" /></label>
+          <label>Nombre de la clase
+            <input v-model.trim="classForm.name" required maxlength="120" placeholder="Ej. Tópicos Especiales y Avanzados" autofocus />
+          </label>
+          <label>Sección
+            <input v-model.trim="classForm.section" required maxlength="30" placeholder="Ej. 1200" />
+          </label>
+          <label>Código de la clase
+            <input v-model.trim="classForm.code" required maxlength="30" placeholder="Ej. IS-901" />
+          </label>
+          <label>Periodo académico
+            <input v-model.trim="classForm.period" required maxlength="40" placeholder="Ej. III PAC 2026" />
+          </label>
           <div class="modal-actions span-2">
             <button class="button secondary" type="button" @click="closeModal">Cancelar</button>
             <button class="button primary">Crear clase</button>
@@ -630,8 +640,8 @@ onBeforeUnmount(() => {
         <header class="modal-header">
           <div>
             <span class="eyebrow">{{ selectedClass.code }} · {{ selectedClass.period }}</span>
-            <h2 id="class-detail-title">{{ selectedClass.name }}</h2>
-            <p class="muted">{{ selectedClass.subject }}</p>
+            <h2 id="class-detail-title" class="class-name">{{ selectedClass.name }}</h2>
+            <p class="class-section">Sección {{ selectedClass.section }}</p>
           </div>
           <button class="modal-close" type="button" aria-label="Cerrar modal" @click="closeModal">×</button>
         </header>
@@ -780,7 +790,7 @@ onBeforeUnmount(() => {
             <select v-model.number="activityForm.classId" required>
               <option :value="0" disabled>Selecciona una clase</option>
               <option v-for="academicClass in classes" :key="academicClass.id" :value="academicClass.id">
-                {{ academicClass.code }} — {{ academicClass.name }}
+                {{ academicClass.code }} — {{ academicClass.name }} · Sección {{ academicClass.section }}
               </option>
             </select>
           </label>

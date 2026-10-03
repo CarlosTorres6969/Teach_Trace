@@ -88,7 +88,7 @@ export class ActivitiesService {
     return this.activities.save(
       this.activities.create({
         title: input.title.trim(),
-        subject: academicClass.subject,
+        subject: this.classesService.classDetails(academicClass).name,
         dueDate: input.dueDate,
         activityType: input.activityType.trim(),
         evaluationPhase: input.evaluationPhase,

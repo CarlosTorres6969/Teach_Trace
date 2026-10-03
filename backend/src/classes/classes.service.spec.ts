@@ -2,11 +2,72 @@ import { UserRole } from '../entities/user.entity';
 import { ClassesService } from './classes.service';
 
 describe('ClassesService', () => {
+  it('crea una clase con nombre, sección, código y periodo académico', async () => {
+    const classes = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((value) => ({ id: 10, ...value })),
+      save: jest.fn(async (value) => value),
+    };
+    const enrollments = { find: jest.fn().mockResolvedValue([]) };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.create({ id: 3 } as never, {
+      name: ' Tópicos Especiales y Avanzados ',
+      section: ' 1200 ',
+      code: ' is-901 ',
+      period: ' III PAC 2026 ',
+    });
+
+    expect(classes.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Tópicos Especiales y Avanzados',
+      legacySubject: 'Tópicos Especiales y Avanzados',
+      section: '1200',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    }));
+    expect(result).toMatchObject({
+      name: 'Tópicos Especiales y Avanzados',
+      section: '1200',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    });
+    expect(result).not.toHaveProperty('subject');
+  });
+
+  it('presenta correctamente una clase creada antes de existir el campo sección', () => {
+    const service = new ClassesService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    expect(service.classDetails({
+      name: 'Sección 1200',
+      legacySubject: 'Tópicos Especiales y Avanzados',
+      section: '',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    } as never)).toEqual({
+      name: 'Tópicos Especiales y Avanzados',
+      section: '1200',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    });
+  });
+
   it('crea una cuenta estudiantil con contraseña temporal y envía la invitación', async () => {
     const academicClass = {
       id: 10,
       name: 'Ingeniería del Software',
-      subject: 'IS',
+      section: '1200',
       code: 'IS-911',
       period: 'III PAC 2026',
       teacher: { id: 3 },
@@ -53,7 +114,7 @@ describe('ClassesService', () => {
       expect.stringMatching(/^Tt!/),
       {
         name: 'Ingeniería del Software',
-        subject: 'IS',
+        section: '1200',
         code: 'IS-911',
         period: 'III PAC 2026',
       },
@@ -70,7 +131,7 @@ describe('ClassesService', () => {
     const academicClass = {
       id: 10,
       name: 'Ingeniería del Software',
-      subject: 'IS',
+      section: '1200',
       code: 'IS-911',
       period: 'III PAC 2026',
       teacher: { id: 3 },
@@ -115,7 +176,7 @@ describe('ClassesService', () => {
       'Estudiante',
       {
         name: 'Ingeniería del Software',
-        subject: 'IS',
+        section: '1200',
         code: 'IS-911',
         period: 'III PAC 2026',
       },
@@ -167,7 +228,7 @@ describe('ClassesService', () => {
     const academicClass = {
       id: 10,
       name: 'Ingeniería del Software',
-      subject: 'IS',
+      section: '1200',
       code: 'IS-911',
       period: 'III PAC 2026',
       teacher: { id: 3 },
@@ -265,7 +326,7 @@ describe('ClassesService', () => {
     const academicClass = {
       id: 10,
       name: 'Ingeniería del Software',
-      subject: 'IS',
+      section: '1200',
       code: 'IS-911',
       period: 'III PAC 2026',
       teacher: { id: 3 },

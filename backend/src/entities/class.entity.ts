@@ -11,8 +11,12 @@ export class AcademicClass {
   @Column()
   name: string;
 
-  @Column()
-  subject: string;
+  // Retained internally so pre-section records can still be interpreted safely.
+  @Column({ name: 'subject' })
+  legacySubject: string;
+
+  @Column({ default: '' })
+  section: string;
 
   @Index({ unique: true })
   @Column()

@@ -248,6 +248,46 @@ describe('TeachTrace API (integración)', () => {
     expect(invalidPhase.response.status).toBe(400);
   });
 
+  it('crea una clase con nombre, sección, código y periodo académico', async () => {
+    const created = await request('/api/teacher/classes', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Tópicos Especiales y Avanzados',
+        section: '1200',
+        code: 'IS-901-QA',
+        period: 'III PAC 2026',
+      }),
+    });
+
+    expect(created.response.status).toBe(201);
+    expect(created.body).toMatchObject({
+      name: 'Tópicos Especiales y Avanzados',
+      section: '1200',
+      code: 'IS-901-QA',
+      period: 'III PAC 2026',
+    });
+    expect(created.body).not.toHaveProperty('subject');
+
+    const legacyPayload = await request('/api/teacher/classes', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Clase con contrato anterior',
+        subject: 'Asignatura anterior',
+        code: 'OLD-CLASS-QA',
+        period: 'III PAC 2026',
+      }),
+    });
+    expect(legacyPayload.response.status).toBe(400);
+  });
+
   it('entrega la sesión web en una cookie HttpOnly sin exponer el JWT en el cuerpo', async () => {
     const login = await request('/api/auth/login', {
       method: 'POST',
@@ -801,7 +841,7 @@ describe('TeachTrace API (integración)', () => {
       headers: { ...sessionHeaders(otherCookie), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'Clase de otro docente',
-        subject: 'Asignatura ajena',
+        section: '1500',
         code: 'AJ-01',
         period: '2026-III',
       }),
@@ -3328,7 +3368,8 @@ describe('TeachTrace API (integración)', () => {
       }));
       const academicClass = await classes.save(classes.create({
         name: 'Clase exclusiva HU-33',
-        subject: 'Analítica académica',
+        legacySubject: 'Clase exclusiva HU-33',
+        section: '1600',
         code: `HU33-${suffix}`,
         period: 'III PAC 2026',
         teacher: teacherEntity,
@@ -3410,7 +3451,7 @@ describe('TeachTrace API (integración)', () => {
       for (const definition of activityDefinitions) {
         const activity = await activities.save(activities.create({
           title: definition.title,
-          subject: academicClass.subject,
+          subject: academicClass.name,
           dueDate: definition.dueDate,
           activityType: 'Proyecto',
           evaluationPhase: ActivityPhase.PILOT,

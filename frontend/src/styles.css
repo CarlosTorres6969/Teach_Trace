@@ -171,6 +171,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .catalog-card-content .eyebrow { display: block; margin-bottom: .4rem; }
 .catalog-card-content h3 { margin-bottom: .5rem; font-size: 1.35rem; line-height: 1.25; }
 .catalog-card-content p:last-child { margin-bottom: 0; }
+.class-identity .class-name { margin: 0 0 .35rem; font-size: 1.4rem; line-height: 1.25; }
+.class-section { margin: 0; color: var(--muted); font-size: .86rem; font-weight: 700; letter-spacing: .015em; line-height: 1.4; }
+.activity-class-header .class-name { margin: 0 0 .2rem; font-size: 1.2rem; }
+.activity-class-header .class-section { font-size: .82rem; font-weight: 600; }
+.modal-header .class-name + .class-section { margin-top: .35rem; font-size: .9rem; }
 .catalog-stats { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid var(--line); border-radius: 10px 3px 10px 3px; background: #f6f8fc; }
 .catalog-stats div { display: grid; gap: .1rem; padding: .75rem; }
 .catalog-stats div + div { border-left: 1px solid var(--line); }

@@ -37,7 +37,8 @@ export class ClassesService {
     const academicClass = await this.classes.save(
       this.classes.create({
         name: input.name.trim(),
-        subject: input.subject.trim(),
+        legacySubject: input.name.trim(),
+        section: input.section.trim(),
         code,
         period: input.period.trim(),
         teacher,
@@ -94,12 +95,7 @@ export class ClassesService {
           student.email,
           student.name,
           temporaryPassword,
-          {
-            name: academicClass.name,
-            subject: academicClass.subject,
-            code: academicClass.code,
-            period: academicClass.period,
-          },
+          this.classDetails(academicClass),
         );
       } catch (error) {
         invitationEmailSent = false;
@@ -300,16 +296,34 @@ export class ClassesService {
     });
     return {
       id: academicClass.id,
-      name: academicClass.name,
-      subject: academicClass.subject,
-      code: academicClass.code,
-      period: academicClass.period,
+      ...this.classDetails(academicClass),
       studentCount: enrollments.length,
       students: enrollments.map((enrollment) => ({
         id: enrollment.student.id,
         name: enrollment.student.name,
         email: enrollment.student.email,
       })),
+    };
+  }
+
+  classDetails(academicClass: AcademicClass) {
+    const section = academicClass.section?.trim();
+    if (section) {
+      return {
+        name: academicClass.name,
+        section,
+        code: academicClass.code,
+        period: academicClass.period,
+      };
+    }
+
+    const legacyGroup = academicClass.name?.trim() ?? '';
+    const inferredSection = legacyGroup.replace(/^secci[oó]n\s*/i, '').trim();
+    return {
+      name: academicClass.legacySubject?.trim() || legacyGroup,
+      section: inferredSection || legacyGroup,
+      code: academicClass.code,
+      period: academicClass.period,
     };
   }
 
@@ -333,12 +347,7 @@ export class ClassesService {
       return await this.mailService.sendEnrollmentEmail(
         student.email,
         student.name,
-        {
-          name: academicClass.name,
-          subject: academicClass.subject,
-          code: academicClass.code,
-          period: academicClass.period,
-        },
+        this.classDetails(academicClass),
       );
     } catch (error) {
       this.logger.error(
@@ -359,12 +368,7 @@ export class ClassesService {
         student.email,
         student.name,
         temporaryPassword,
-        {
-          name: academicClass.name,
-          subject: academicClass.subject,
-          code: academicClass.code,
-          period: academicClass.period,
-        },
+        this.classDetails(academicClass),
       );
     } catch (error) {
       this.logger.error(

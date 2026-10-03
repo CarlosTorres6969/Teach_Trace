@@ -1,6 +1,47 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { EnrollStudentsDto } from './classes.dto';
+import { CreateClassDto, EnrollStudentsDto } from './classes.dto';
+
+describe('CreateClassDto', () => {
+  it('acepta y normaliza nombre, sección, código y periodo académico', async () => {
+    const dto = plainToInstance(CreateClassDto, {
+      name: ' Tópicos Especiales y Avanzados ',
+      section: ' 1200 ',
+      code: ' IS-901 ',
+      period: ' III PAC 2026 ',
+    });
+
+    expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).toHaveLength(0);
+    expect(dto).toMatchObject({
+      name: 'Tópicos Especiales y Avanzados',
+      section: '1200',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    });
+  });
+
+  it.each([
+    { name: '', section: '1200', code: 'IS-901', period: 'III PAC 2026' },
+    { name: 'Tópicos Especiales', section: ' ', code: 'IS-901', period: 'III PAC 2026' },
+    { name: 'Tópicos Especiales', section: '1200', code: ' ', period: 'III PAC 2026' },
+    { name: 'Tópicos Especiales', section: '1200', code: 'IS-901', period: ' ' },
+  ])('rechaza campos vacíos o formados por espacios: %p', async (input) => {
+    const dto = plainToInstance(CreateClassDto, input);
+
+    expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(0);
+  });
+
+  it('rechaza el contrato anterior con asignatura', async () => {
+    const dto = plainToInstance(CreateClassDto, {
+      name: 'Tópicos Especiales',
+      subject: 'Asignatura anterior',
+      code: 'IS-901',
+      period: 'III PAC 2026',
+    });
+
+    expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(0);
+  });
+});
 
 describe('EnrollStudentsDto', () => {
   it('normaliza el nombre y correo de cada estudiante', async () => {

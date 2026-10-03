@@ -45,7 +45,7 @@ export class MailService {
     temporaryPassword: string,
     academicClass: {
       name: string;
-      subject: string;
+      section: string;
       code: string;
       period: string;
     },
@@ -58,7 +58,7 @@ export class MailService {
         `Hola ${studentName},`,
         'Se creó tu cuenta de estudiante en TeachTrace.',
         `Fuiste matriculado en: ${academicClass.name}`,
-        `Asignatura: ${academicClass.subject}`,
+        `Sección: ${academicClass.section}`,
         `Código: ${academicClass.code}`,
         `Período: ${academicClass.period}`,
         `Correo: ${email}`,
@@ -71,7 +71,7 @@ export class MailService {
         '<p>Se creó tu cuenta de estudiante en TeachTrace.</p>',
         '<p>Fuiste matriculado en la siguiente clase:</p>',
         `<p><strong>Clase:</strong> ${this.escapeHtml(academicClass.name)}<br>`,
-        `<strong>Asignatura:</strong> ${this.escapeHtml(academicClass.subject)}<br>`,
+        `<strong>Sección:</strong> ${this.escapeHtml(academicClass.section)}<br>`,
         `<strong>Código:</strong> ${this.escapeHtml(academicClass.code)}<br>`,
         `<strong>Período:</strong> ${this.escapeHtml(academicClass.period)}</p>`,
         `<p><strong>Correo:</strong> ${this.escapeHtml(email)}<br>`,
@@ -90,7 +90,7 @@ export class MailService {
     studentName: string,
     academicClass: {
       name: string;
-      subject: string;
+      section: string;
       code: string;
       period: string;
     },
@@ -103,7 +103,7 @@ export class MailService {
         `Hola ${studentName},`,
         'Tu cuenta de TeachTrace fue matriculada en una clase.',
         `Clase: ${academicClass.name}`,
-        `Asignatura: ${academicClass.subject}`,
+        `Sección: ${academicClass.section}`,
         `Código: ${academicClass.code}`,
         `Período: ${academicClass.period}`,
         `Consulta tus actividades en: ${loginUrl}`,
@@ -113,7 +113,7 @@ export class MailService {
         `<p>Hola ${this.escapeHtml(studentName)},</p>`,
         '<p>Tu cuenta de TeachTrace fue matriculada en la siguiente clase:</p>',
         `<p><strong>Clase:</strong> ${this.escapeHtml(academicClass.name)}<br>`,
-        `<strong>Asignatura:</strong> ${this.escapeHtml(academicClass.subject)}<br>`,
+        `<strong>Sección:</strong> ${this.escapeHtml(academicClass.section)}<br>`,
         `<strong>Código:</strong> ${this.escapeHtml(academicClass.code)}<br>`,
         `<strong>Período:</strong> ${this.escapeHtml(academicClass.period)}</p>`,
         `<p><a href="${this.escapeHtml(loginUrl)}">Consultar mis actividades</a></p>`,

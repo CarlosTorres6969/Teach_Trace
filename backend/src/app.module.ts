@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1790726400000-add-understanding-assessment';
 import { AddPromptAssessment1790812800000 } from './database/migrations/1790812800000-add-prompt-assessment';
 import { AddAdminRole1790899200000 } from './database/migrations/1790899200000-add-admin-role';
+import { AddClassSection1790985600000 } from './database/migrations/1790985600000-add-class-section';
 import { AdminModule } from './admin/admin.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
@@ -108,6 +109,7 @@ const entities = [
               AddUnderstandingAssessment1790726400000,
               AddPromptAssessment1790812800000,
               AddAdminRole1790899200000,
+              AddClassSection1790985600000,
             ],
             migrationsRun: true,
             synchronize,
