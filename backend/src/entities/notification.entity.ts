@@ -6,6 +6,14 @@ export enum NotificationType {
   AI_ANALYSIS_READY = 'AI_ANALYSIS_READY',
 }
 
+// Compatibilidad de almacenamiento con funciones históricas ya retiradas.
+// Estos valores no se exponen como tipos activos en la API actual.
+const NOTIFICATION_STORAGE_TYPES = [
+  ...Object.values(NotificationType),
+  'MESSAGE_RECEIVED',
+  'FORUM_REPLY',
+];
+
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn()
@@ -14,7 +22,7 @@ export class Notification {
   @ManyToOne(() => User, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column({ type: 'simple-enum', enum: NotificationType })
+  @Column({ type: 'simple-enum', enum: NOTIFICATION_STORAGE_TYPES })
   type: NotificationType;
 
   @Column()
@@ -28,6 +36,16 @@ export class Notification {
 
   @Column({ type: 'integer', nullable: true })
   activityId: number | null;
+
+  /** Referencias históricas conservadas para no perder datos al sincronizar SQLite. */
+  @Column({ type: 'integer', nullable: true })
+  conversationId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  forumThreadId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  classId: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

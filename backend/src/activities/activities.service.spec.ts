@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ActivityPhase } from '../entities/activity.entity';
+import { Rubric } from '../entities/rubric.entity';
 import { ActivitiesService } from './activities.service';
 
 describe('ActivitiesService', () => {
@@ -59,6 +60,85 @@ describe('ActivitiesService', () => {
     expect(result.subject).toBe('Ingeniería del Software');
     expect(result.academicClass).toBe(academicClass);
     expect(result.manualEvaluationRequired).toBe(false);
+  });
+
+  it('crea la actividad y asocia una rúbrica libre en la misma transacción', async () => {
+    const academicClass = { id: 5, name: 'Ingeniería del Software', section: '1200' };
+    const rubric = { id: 9, name: 'Rúbrica de proyecto', activity: null };
+    const savedActivity = { id: 8 } as Record<string, unknown>;
+    const activityRepository = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => Object.assign(savedActivity, value)),
+    };
+    const rubricRepository = {
+      findOne: jest.fn().mockResolvedValue(rubric),
+      save: jest.fn(async (value) => value),
+    };
+    const transactionManager = {
+      getRepository: jest.fn((entity) =>
+        entity === Rubric ? rubricRepository : activityRepository,
+      ),
+    };
+    const activities = {
+      manager: { transaction: jest.fn(async (work) => work(transactionManager)) },
+    };
+    const classesService = {
+      ownedClass: jest.fn().mockResolvedValue(academicClass),
+      classDetails: jest.fn().mockReturnValue({ name: academicClass.name }),
+    };
+    const service = new ActivitiesService(activities as never, {} as never, classesService as never);
+
+    const result = await service.create({ id: 2 } as never, {
+      title: '  Actividad con rúbrica  ',
+      classId: 5,
+      dueDate: '2026-10-30',
+      activityType: '  Proyecto  ',
+      rubricId: 9,
+      agentInstructions: '  Prioriza las decisiones justificadas.  ',
+    });
+
+    expect(rubricRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 9, teacher: { id: 2 } },
+      relations: { activity: true },
+    });
+    expect(activityRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Actividad con rúbrica',
+      activityType: 'Proyecto',
+      evaluationPhase: ActivityPhase.PILOT,
+      agentInstructions: 'Prioriza las decisiones justificadas.',
+    }));
+    expect(rubric.activity).toBe(result);
+    expect(rubricRepository.save).toHaveBeenCalledWith(rubric);
+    expect(result.rubric).toBe(rubric);
+  });
+
+  it('no crea la actividad cuando la rúbrica ya está asociada', async () => {
+    const activityRepository = { create: jest.fn(), save: jest.fn() };
+    const rubricRepository = {
+      findOne: jest.fn().mockResolvedValue({ id: 9, activity: { id: 44 } }),
+    };
+    const activities = {
+      manager: {
+        transaction: jest.fn(async (work) => work({
+          getRepository: (entity: unknown) =>
+            entity === Rubric ? rubricRepository : activityRepository,
+        })),
+      },
+    };
+    const classesService = {
+      ownedClass: jest.fn().mockResolvedValue({ id: 5, name: 'Clase' }),
+      classDetails: jest.fn().mockReturnValue({ name: 'Clase' }),
+    };
+    const service = new ActivitiesService(activities as never, {} as never, classesService as never);
+
+    await expect(service.create({ id: 2 } as never, {
+      title: 'Actividad',
+      classId: 5,
+      dueDate: '2026-10-30',
+      activityType: 'Proyecto',
+      rubricId: 9,
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(activityRepository.save).not.toHaveBeenCalled();
   });
 
   it('asocia, normaliza y persiste resultados de aprendizaje en una actividad propia', async () => {

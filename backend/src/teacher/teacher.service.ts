@@ -41,11 +41,17 @@ export class TeacherService {
 
   async listActivities(teacherId: number) {
     const activities = await this.activitiesService.listForTeacher(teacherId);
-    const submissionCounts = await this.submissionsService.countByActivityIds(
-      activities.map((activity) => activity.id),
-    );
+    const activityIds = activities.map((activity) => activity.id);
+    const [submissionCounts, pendingEvaluationCounts] = await Promise.all([
+      this.submissionsService.countByActivityIds(activityIds),
+      this.submissionsService.countPendingEvaluationByActivityIds(activityIds),
+    ]);
     return activities.map((activity) =>
-      this.activityResponse(activity, submissionCounts.get(activity.id) ?? 0),
+      this.activityResponse(
+        activity,
+        submissionCounts.get(activity.id) ?? 0,
+        pendingEvaluationCounts.get(activity.id) ?? 0,
+      ),
     );
   }
 
@@ -101,18 +107,23 @@ export class TeacherService {
     };
   }
 
-  private activityResponse(activity: Activity, submissionCount = 0) {
+  private activityResponse(
+    activity: Activity,
+    submissionCount = 0,
+    pendingEvaluationCount = 0,
+  ) {
     return {
       id: activity.id,
       title: activity.title,
       subject: activity.subject,
       dueDate: activity.dueDate,
       activityType: activity.activityType,
-      evaluationPhase: activity.evaluationPhase,
+      agentInstructions: activity.agentInstructions,
       manualEvaluationRequired: activity.manualEvaluationRequired,
       published: activity.published,
       learningOutcomes: activity.learningOutcomes,
       submissionCount,
+      pendingEvaluationCount,
       academicClass: activity.academicClass
         ? {
             id: activity.academicClass.id,

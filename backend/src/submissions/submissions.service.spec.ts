@@ -627,4 +627,35 @@ describe('SubmissionsService', () => {
     );
     expect(query.getRawMany).toHaveBeenCalledTimes(1);
   });
+
+  it('cuenta únicamente las entregas todavía pendientes de evaluación', async () => {
+    const query = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        { activityId: '4', pendingEvaluationCount: '2' },
+      ]),
+    };
+    const service = new SubmissionsService(
+      { createQueryBuilder: jest.fn().mockReturnValue(query) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const counts = await service.countPendingEvaluationByActivityIds([4, 7]);
+
+    expect(counts).toEqual(new Map([[4, 2]]));
+    expect(query.andWhere).toHaveBeenCalledWith(
+      'submission.status != :evaluatedStatus',
+      { evaluatedStatus: SubmissionStatus.EVALUATED },
+    );
+  });
 });

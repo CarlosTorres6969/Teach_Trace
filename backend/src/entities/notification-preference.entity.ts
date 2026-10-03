@@ -16,6 +16,13 @@ export enum NotificationEventType {
   AI_ANALYSIS_READY = 'AI_ANALYSIS_READY',
 }
 
+// Valores históricos admitidos solo para mantener bases locales anteriores.
+const NOTIFICATION_EVENT_STORAGE_TYPES = [
+  ...Object.values(NotificationEventType),
+  'MESSAGE_RECEIVED',
+  'FORUM_REPLY',
+];
+
 export enum NotificationChannel {
   EMAIL = 'EMAIL',
   PUSH = 'PUSH',
@@ -31,7 +38,7 @@ export class NotificationPreference {
   @ManyToOne(() => User, { eager: true, onDelete: 'CASCADE' })
   user: User;
 
-  @Column({ type: 'simple-enum', enum: NotificationEventType })
+  @Column({ type: 'simple-enum', enum: NOTIFICATION_EVENT_STORAGE_TYPES })
   eventType: NotificationEventType;
 
   @Column({ type: 'simple-json' })

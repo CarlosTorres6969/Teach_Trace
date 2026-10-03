@@ -743,10 +743,37 @@ describe('TeachTrace API (integración)', () => {
     );
     const firstRubric = await createRubric(teacher.sessionCookie, 'Rúbrica asociable A');
     const replacementRubric = await createRubric(teacher.sessionCookie, 'Rúbrica asociable B');
+    const creationRubric = await createRubric(
+      teacher.sessionCookie,
+      'Rúbrica asociada durante la creación',
+    );
     const firstActivityId = (firstActivity.body as { id: number }).id;
     const secondActivityId = (secondActivity.body as { id: number }).id;
     const firstRubricId = (firstRubric.body as { id: number }).id;
     const replacementRubricId = (replacementRubric.body as { id: number }).id;
+    const creationRubricId = (creationRubric.body as { id: number }).id;
+
+    const createdWithRubric = await request('/api/teacher/activities', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Actividad configurada en un solo paso',
+        classId,
+        dueDate: '2026-12-20',
+        activityType: 'Proyecto',
+        rubricId: creationRubricId,
+        agentInstructions: '  Prioriza la justificación y el contraste de fuentes.  ',
+      }),
+    });
+    expect(createdWithRubric.response.status).toBe(201);
+    expect(createdWithRubric.body).toMatchObject({
+      rubric: { id: creationRubricId },
+      agentInstructions: 'Prioriza la justificación y el contraste de fuentes.',
+    });
+    expect(createdWithRubric.body).not.toHaveProperty('evaluationPhase');
 
     const validAssociation = await associate(
       teacher.sessionCookie,
@@ -1342,11 +1369,9 @@ describe('TeachTrace API (integración)', () => {
     });
     const configuredActivity = (teacherActivities.body as Array<{
       id: number;
-      evaluationPhase: ActivityPhase;
       rubric: { criteria: unknown[] };
     }>).find((activity) => activity.id === activityId)!;
     expect(configuredActivity).toBeDefined();
-    expect(configuredActivity.evaluationPhase).toBe(ActivityPhase.PILOT);
     expect(configuredActivity.rubric.criteria).toHaveLength(7);
 
     const studentActivities = await request('/api/student/activities', {

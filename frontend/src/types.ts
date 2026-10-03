@@ -58,11 +58,12 @@ export type Activity = {
   academicClass?: Pick<AcademicClass, 'id' | 'name' | 'code'> | null;
   dueDate?: string;
   activityType?: string;
-  evaluationPhase?: 'baseline' | 'pilot';
+  agentInstructions?: string;
   manualEvaluationRequired?: boolean;
   published?: boolean;
   learningOutcomes?: string[];
   submissionCount?: number;
+  pendingEvaluationCount?: number;
   submissionStatus?: string;
   rubric?: Rubric | null;
   createdAt?: string;

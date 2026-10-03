@@ -84,12 +84,12 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     });
   });
 
-  async function mountActivities() {
+  async function mountClassDashboard(classIndex = 0) {
     const wrapper = mount(TeacherDashboard, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
-    await wrapper.findAll('.teacher-tabs button')[1].trigger('click');
+    await wrapper.findAll('.teacher-catalog-card')[classIndex].findAll('button')[0].trigger('click');
     return wrapper;
   }
 
@@ -232,35 +232,76 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(wrapper.text()).toContain('Importación de matrícula completada');
   });
 
-  it('abre directamente la sección de actividades cuando se solicita por la URL', async () => {
+  it('redirige la URL anterior de actividades al catálogo de clases', async () => {
     routeMock.query = { section: 'activities' };
     const wrapper = mount(TeacherDashboard, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     });
     await flushPromises();
 
-    expect(wrapper.findAll('.teacher-tabs button')[1].classes()).toContain('active');
-    expect(wrapper.text()).toContain('Plan de pruebas');
+    expect(wrapper.findAll('.teacher-tabs button')).toHaveLength(2);
+    expect(wrapper.findAll('.teacher-tabs button')[0].classes()).toContain('active');
+    expect(wrapper.findAll('.teacher-catalog-card')[0].text()).toContain('Crear actividad');
   });
 
-  it('agrupa las actividades bajo la clase a la que pertenecen', async () => {
-    const wrapper = await mountActivities();
-    const groups = wrapper.findAll('.activity-class-group');
+  it('muestra dentro de la clase únicamente sus actividades', async () => {
+    const wrapper = await mountClassDashboard();
+    const dashboard = wrapper.get('.class-activities-dashboard');
 
-    expect(groups).toHaveLength(2);
-    expect(groups[0].text()).toContain('IS-202');
-    expect(groups[0].text()).toContain('2 entregas');
-    expect(groups[0].text()).toContain('Plan de pruebas');
-    expect(groups[0].text()).not.toContain('Aplicación con Vue');
-    expect(groups[1].text()).toContain('PW-101');
-    expect(groups[1].text()).toContain('1 entrega');
-    expect(groups[1].text()).toContain('Aplicación con Vue');
+    expect(dashboard.text()).toContain('Plan de pruebas');
+    expect(dashboard.text()).toContain('2 entregas');
+    expect(dashboard.text()).not.toContain('Aplicación con Vue');
   });
 
-  it('confirma la eliminación, llama la API y retira la actividad del grupo', async () => {
-    const wrapper = await mountActivities();
-    const webGroup = wrapper.findAll('.activity-class-group')[1];
-    const configureButton = webGroup
+  it('crea la actividad desde su clase con rúbrica e instrucciones, sin fase', async () => {
+    const availableRubric = {
+      id: 7,
+      name: 'Rúbrica de proyecto',
+      criteria: [],
+      activityId: null,
+    };
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes') return classes as never;
+      if (path === '/teacher/activities' && options.method === 'POST') return { id: 13 } as never;
+      if (path === '/teacher/activities') return currentActivities as never;
+      if (path === '/teacher/rubrics') return [availableRubric] as never;
+      throw new Error(`Solicitud inesperada: ${path}`);
+    });
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.findAll('.teacher-catalog-card')[0].findAll('button')[1].trigger('click');
+
+    const form = wrapper.get('[aria-labelledby="create-activity-title"] form');
+    const inputs = form.findAll('input');
+    await inputs[0].setValue('Diseño de pruebas');
+    await inputs[1].setValue('2026-10-30');
+    await inputs[2].setValue('Proyecto');
+    await form.get('select').setValue('7');
+    await form.get('textarea').setValue('Prioriza la justificación de decisiones.');
+
+    expect(form.text()).not.toContain('Fase de evaluación');
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/activities', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Diseño de pruebas',
+        classId: 2,
+        dueDate: '2026-10-30',
+        activityType: 'Proyecto',
+        rubricId: 7,
+        agentInstructions: 'Prioriza la justificación de decisiones.',
+      }),
+    });
+    expect(wrapper.find('.class-activities-dashboard').exists()).toBe(true);
+  });
+
+  it('confirma la eliminación, llama la API y retira la actividad de la clase', async () => {
+    const wrapper = await mountClassDashboard(1);
+    const configureButton = wrapper.get('.class-activities-dashboard')
       .findAll('button')
       .find((button) => button.text() === 'Configurar');
     await configureButton?.trigger('click');
@@ -279,7 +320,6 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
 
     expect(apiMock).toHaveBeenCalledWith('/teacher/activities/11', { method: 'DELETE' });
     expect(wrapper.text()).toContain('Actividad "Aplicación con Vue" eliminada');
-    expect(wrapper.findAll('.activity-class-group')).toHaveLength(1);
-    expect(wrapper.find('.activity-class-group').text()).not.toContain('Aplicación con Vue');
+    expect(wrapper.get('.class-activities-dashboard').text()).not.toContain('Aplicación con Vue');
   });
 });

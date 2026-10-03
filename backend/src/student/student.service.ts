@@ -77,7 +77,6 @@ export class StudentService {
           subject: activity.subject,
           dueDate: activity.dueDate,
           weight: activity.weight,
-          evaluationPhase: activity.evaluationPhase,
           academicClass: activity.academicClass
             ? {
                 id: activity.academicClass.id,

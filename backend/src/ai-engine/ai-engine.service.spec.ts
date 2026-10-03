@@ -82,6 +82,7 @@ function evidence() {
       title: 'Ensayo de verificación',
       subject: 'Ingeniería de software',
       activityType: 'Ensayo',
+      agentInstructions: 'Prioriza decisiones justificadas con evidencia.',
     },
     logbook: null,
     declaration: {
@@ -292,6 +293,19 @@ describe('AiEngineService', () => {
     expect(prompt).not.toContain('ana.perez@unah.edu.hn');
     expect(prompt).not.toContain('"usageLevel":2');
     expect(prompt).toContain('[DATO_PERSONAL]');
+  });
+
+  it('incluye por separado las instrucciones autorizadas del docente', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
+
+    await configuredService().analyzeEvidence(evidence());
+
+    const request = JSON.parse(
+      (global.fetch as jest.Mock).mock.calls[0][1].body as string,
+    ) as { messages: Array<{ content: string }> };
+    expect(request.messages[0].content).toContain('instrucciones del docente');
+    expect(request.messages[1].content).toContain('INSTRUCCIONES_DOCENTE_AUTORIZADAS');
+    expect(request.messages[1].content).toContain('Prioriza decisiones justificadas con evidencia.');
   });
 
   it('extrae el texto del PDF y lo incorpora al análisis sin enviar el nombre del archivo', async () => {

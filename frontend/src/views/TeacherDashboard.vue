@@ -16,11 +16,11 @@ const activities = ref<Activity[]>([]);
 const rubrics = ref<Rubric[]>([]);
 const error = ref('');
 const message = ref('');
-type TeacherSection = 'classes' | 'activities' | 'rubrics';
+type TeacherSection = 'classes' | 'rubrics';
 const route = useRoute();
 
 function sectionFromQuery(value: unknown): TeacherSection {
-  return value === 'activities' || value === 'rubrics' ? value : 'classes';
+  return value === 'rubrics' ? value : 'classes';
 }
 
 const section = ref<TeacherSection>(sectionFromQuery(route.query.section));
@@ -32,7 +32,8 @@ const activityForm = reactive({
   classId: 0,
   dueDate: '',
   activityType: '',
-  evaluationPhase: 'pilot' as 'baseline' | 'pilot',
+  rubricId: 0,
+  agentInstructions: '',
 });
 const outcomes = reactive<Record<number, string>>({});
 const selectedRubrics = reactive<Record<number, number | undefined>>({});
@@ -75,21 +76,18 @@ const selectedClass = computed(
 const selectedActivity = computed(
   () => activities.value.find((activity) => activity.id === selectedActivityId.value) ?? null,
 );
-const activityGroups = computed(() =>
-  classes.value
-    .map((academicClass) => ({
-      academicClass,
-      activities: activities.value
-        .filter((activity) => activity.academicClass?.id === academicClass.id)
+const availableRubrics = computed(() =>
+  rubrics.value.filter((rubric) => rubric.activityId == null),
+);
+const selectedClassActivities = computed(() =>
+  selectedClassId.value == null
+    ? []
+    : activities.value
+        .filter((activity) => activity.academicClass?.id === selectedClassId.value)
         .sort((first, second) =>
-          (first.dueDate ?? '').localeCompare(second.dueDate ?? '') || first.title.localeCompare(second.title),
+          (first.dueDate ?? '').localeCompare(second.dueDate ?? '') ||
+          first.title.localeCompare(second.title),
         ),
-    }))
-    .filter((group) => group.activities.length > 0)
-    .sort((first, second) =>
-      first.academicClass.code.localeCompare(second.academicClass.code) ||
-      first.academicClass.name.localeCompare(second.academicClass.name),
-    ),
 );
 
 // Errores de validación inline por criterio (índice → mensaje)
@@ -242,6 +240,7 @@ function formatFileSize(bytes: number) {
 }
 
 async function createActivity() {
+  const classId = activityForm.classId;
   const created = await act('Actividad creada como borrador', async () => {
     await api('/teacher/activities', { method: 'POST', body: JSON.stringify(activityForm) });
     Object.assign(activityForm, {
@@ -249,11 +248,15 @@ async function createActivity() {
       classId: 0,
       dueDate: '',
       activityType: '',
-      evaluationPhase: 'pilot',
+      rubricId: 0,
+      agentInstructions: '',
     });
     await load();
   });
-  if (created) closeModal();
+  if (created) {
+    selectedClassId.value = classId;
+    activeModal.value = 'class-detail';
+  }
 }
 
 async function saveOutcomes(activityId: number) {
@@ -318,7 +321,7 @@ async function deleteActivity() {
   try {
     await api(`/teacher/activities/${activity.id}`, { method: 'DELETE' });
     const deletedTitle = activity.title;
-    activeModal.value = null;
+    activeModal.value = selectedClass.value ? 'class-detail' : null;
     selectedActivityId.value = null;
     await load();
     message.value = `Actividad "${deletedTitle}" eliminada`;
@@ -378,15 +381,30 @@ function openClassDetail(classId: number) {
   activeModal.value = 'class-detail';
 }
 
-function openCreateActivity() {
+function openCreateActivity(classId: number) {
   clearFeedback();
+  selectedClassId.value = classId;
+  activityForm.classId = classId;
+  activityForm.rubricId = 0;
   activeModal.value = 'create-activity';
+}
+
+function openRubrics() {
+  closeModal();
+  section.value = 'rubrics';
 }
 
 function openActivityDetail(activityId: number) {
   clearFeedback();
   selectedActivityId.value = activityId;
+  const classId = activities.value.find((activity) => activity.id === activityId)?.academicClass?.id;
+  if (classId) selectedClassId.value = classId;
   activeModal.value = 'activity-detail';
+}
+
+function returnToClassDashboard() {
+  clearFeedback();
+  activeModal.value = selectedClass.value ? 'class-detail' : null;
 }
 
 function closeModal() {
@@ -433,7 +451,6 @@ onBeforeUnmount(() => {
     </section>
     <nav class="tabs teacher-tabs">
       <button :class="{ active: section === 'classes' }" @click="section = 'classes'">Clases y matrícula</button>
-      <button :class="{ active: section === 'activities' }" @click="section = 'activities'">Actividades</button>
       <button :class="{ active: section === 'rubrics' }" @click="section = 'rubrics'">Rúbricas</button>
     </nav>
     <p v-if="message" class="alert success">{{ message }}</p>
@@ -466,7 +483,10 @@ onBeforeUnmount(() => {
             </div>
             <div class="catalog-actions">
               <button class="button secondary" type="button" @click="openClassDetail(academicClass.id)">
-                Ver clase y matrícula
+                Gestionar clase
+              </button>
+              <button class="button primary" type="button" @click="openCreateActivity(academicClass.id)">
+                Crear actividad
               </button>
             </div>
           </article>
@@ -475,78 +495,6 @@ onBeforeUnmount(() => {
           <h3>Aún no tienes clases</h3>
           <p>Crea tu primera clase para comenzar a matricular estudiantes y preparar actividades.</p>
           <button class="button primary" type="button" @click="openCreateClass">Crear primera clase</button>
-        </div>
-      </section>
-    </template>
-
-    <template v-else-if="section === 'activities'">
-      <section class="section-block catalog-section">
-        <div class="management-toolbar">
-          <div>
-            <span class="eyebrow">Planificación del piloto</span>
-            <div class="section-title"><h2>Mis actividades</h2><span>{{ activities.length }}</span></div>
-            <p class="muted">Revisa la configuración de cada actividad y accede a sus entregas.</p>
-          </div>
-          <button class="button primary" type="button" :disabled="!classes.length" @click="openCreateActivity">
-            Nueva actividad
-          </button>
-        </div>
-
-        <p v-if="!classes.length" class="alert error">
-          Primero debes crear una clase antes de registrar actividades.
-        </p>
-        <div v-if="activities.length" class="activity-class-groups">
-          <section v-for="group in activityGroups" :key="group.academicClass.id" class="panel activity-class-group">
-            <header class="activity-class-header">
-              <div>
-                <span class="catalog-code">{{ group.academicClass.code }}</span>
-                <div>
-                  <h3 class="class-name">{{ group.academicClass.name }}</h3>
-                  <p class="class-section">
-                    Sección {{ group.academicClass.section }} · {{ group.academicClass.period }}
-                  </p>
-                </div>
-              </div>
-              <span class="status">
-                {{ group.activities.length }} {{ group.activities.length === 1 ? 'actividad' : 'actividades' }}
-              </span>
-            </header>
-            <div class="teacher-catalog-grid activity-group-grid">
-          <article v-for="activity in group.activities" :key="activity.id" class="teacher-catalog-card activity-catalog-card">
-            <div class="catalog-card-header">
-              <span class="catalog-code">{{ activity.academicClass?.code }}</span>
-              <span class="status" :data-status="activity.published ? 'evaluated' : 'not_submitted'">
-                {{ activity.published ? 'Publicada' : 'Borrador' }}
-              </span>
-            </div>
-            <div class="catalog-card-content">
-              <p class="eyebrow">{{ activity.activityType }}</p>
-              <h3>{{ activity.title }}</h3>
-              <p class="muted">Entrega: {{ activity.dueDate }}</p>
-            </div>
-            <div class="catalog-badges">
-              <span class="submission-count">
-                {{ activity.submissionCount ?? 0 }}
-                {{ (activity.submissionCount ?? 0) === 1 ? 'entrega' : 'entregas' }}
-              </span>
-              <span>{{ activity.learningOutcomes?.length ?? 0 }} resultado(s)</span>
-              <span :class="{ pending: !activity.rubric }">{{ activity.rubric?.name ?? 'Sin rúbrica' }}</span>
-            </div>
-            <p v-if="activity.manualEvaluationRequired" class="catalog-warning">Requiere evaluación manual</p>
-            <div class="catalog-actions">
-              <button class="button secondary" type="button" @click="openActivityDetail(activity.id)">Configurar</button>
-              <RouterLink class="button primary" :to="`/teacher/activities/${activity.id}/submissions`">Ver entregas</RouterLink>
-            </div>
-          </article>
-            </div>
-          </section>
-        </div>
-        <div v-else class="panel empty-state">
-          <h3>Aún no tienes actividades</h3>
-          <p>Cuando tengas una clase, crea aquí la primera actividad del piloto.</p>
-          <button v-if="classes.length" class="button primary" type="button" @click="openCreateActivity">
-            Crear primera actividad
-          </button>
         </div>
       </section>
     </template>
@@ -645,7 +593,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="activeModal === 'class-detail' && selectedClass" class="modal-backdrop" @click.self="closeModal">
-      <section class="modal-dialog wide" role="dialog" aria-modal="true" aria-labelledby="class-detail-title">
+      <section class="modal-dialog wide class-dashboard-dialog" role="dialog" aria-modal="true" aria-labelledby="class-detail-title">
         <header class="modal-header">
           <div>
             <span class="eyebrow">{{ selectedClass.code }} · {{ selectedClass.period }}</span>
@@ -659,6 +607,63 @@ onBeforeUnmount(() => {
             <div><strong>{{ selectedClass.studentCount }}</strong><span>Estudiantes matriculados</span></div>
             <div><strong>{{ classActivityCount(selectedClass.id) }}</strong><span>Actividades asignadas</span></div>
           </div>
+
+          <section class="modal-section class-activities-dashboard">
+            <div class="class-activities-heading">
+              <div>
+                <h3>Actividades de la clase</h3>
+                <p class="muted">Consulta las entregas pendientes y configura cada actividad desde esta clase.</p>
+              </div>
+              <button class="button primary" type="button" @click="openCreateActivity(selectedClass.id)">
+                Crear actividad
+              </button>
+            </div>
+            <div v-if="selectedClassActivities.length" class="class-activity-grid">
+              <article
+                v-for="activity in selectedClassActivities"
+                :key="activity.id"
+                class="class-activity-card"
+              >
+                <div class="catalog-card-header">
+                  <span class="eyebrow">{{ activity.activityType }}</span>
+                  <span class="status" :data-status="activity.published ? 'evaluated' : 'not_submitted'">
+                    {{ activity.published ? 'Publicada' : 'Borrador' }}
+                  </span>
+                </div>
+                <div>
+                  <h4>{{ activity.title }}</h4>
+                  <p class="muted">Entrega: {{ activity.dueDate }}</p>
+                </div>
+                <div class="catalog-badges">
+                  <span class="submission-count">
+                    {{ activity.submissionCount ?? 0 }}
+                    {{ (activity.submissionCount ?? 0) === 1 ? 'entrega' : 'entregas' }}
+                  </span>
+                  <span :class="{ pending: !activity.rubric }">
+                    {{ activity.rubric?.name ?? 'Sin rúbrica' }}
+                  </span>
+                </div>
+                <p v-if="(activity.pendingEvaluationCount ?? 0) > 0" class="catalog-warning">
+                  {{ activity.pendingEvaluationCount }}
+                  {{ activity.pendingEvaluationCount === 1 ? 'entrega pendiente' : 'entregas pendientes' }} de evaluación
+                </p>
+                <div class="catalog-actions">
+                  <button class="button secondary" type="button" @click="openActivityDetail(activity.id)">
+                    Configurar
+                  </button>
+                  <RouterLink class="button primary" :to="`/teacher/activities/${activity.id}/submissions`">
+                    Ver entregas
+                  </RouterLink>
+                </div>
+              </article>
+            </div>
+            <div v-else class="empty-inline class-activities-empty">
+              <p>Esta clase todavía no tiene actividades.</p>
+              <button class="button secondary" type="button" @click="openCreateActivity(selectedClass.id)">
+                Crear la primera actividad
+              </button>
+            </div>
+          </section>
 
           <section class="modal-section">
             <div class="section-title"><h3>Estudiantes</h3><span>{{ selectedClass.studentCount }}</span></div>
@@ -804,55 +809,68 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="activeModal === 'create-activity'" class="modal-backdrop" @click.self="closeModal">
+    <div v-if="activeModal === 'create-activity'" class="modal-backdrop" @click.self="returnToClassDashboard">
       <section class="modal-dialog wide" role="dialog" aria-modal="true" aria-labelledby="create-activity-title">
         <header class="modal-header">
           <div>
             <span class="eyebrow">Nueva actividad</span>
             <h2 id="create-activity-title">Información básica</h2>
           </div>
-          <button class="modal-close" type="button" aria-label="Cerrar modal" @click="closeModal">×</button>
+          <button class="modal-close" type="button" aria-label="Volver a la clase" @click="returnToClassDashboard">×</button>
         </header>
         <form class="modal-body form-grid" @submit.prevent="createActivity">
-          <p class="muted span-2">Define la actividad que verá el estudiante durante el piloto.</p>
+          <p class="muted span-2">
+            Define la actividad para
+            <strong>{{ selectedClass?.name }}</strong>, sección {{ selectedClass?.section }}.
+          </p>
           <p v-if="error" class="alert error span-2">{{ error }}</p>
           <label>Título<input v-model="activityForm.title" required maxlength="160" autofocus /></label>
-          <label>Clase
-            <select v-model.number="activityForm.classId" required>
-              <option :value="0" disabled>Selecciona una clase</option>
-              <option v-for="academicClass in classes" :key="academicClass.id" :value="academicClass.id">
-                {{ academicClass.code }} — {{ academicClass.name }} · Sección {{ academicClass.section }}
+          <label>Fecha de entrega<input v-model="activityForm.dueDate" type="date" required /></label>
+          <label>Tipo<input v-model="activityForm.activityType" placeholder="Ensayo, proyecto…" required maxlength="80" /></label>
+          <label>Rúbrica de evaluación
+            <select v-model.number="activityForm.rubricId" required>
+              <option :value="0" disabled>Selecciona una rúbrica disponible</option>
+              <option v-for="rubric in availableRubrics" :key="rubric.id" :value="rubric.id">
+                {{ rubric.name }}
               </option>
             </select>
           </label>
-          <label>Fecha de entrega<input v-model="activityForm.dueDate" type="date" required /></label>
-          <label>Tipo<input v-model="activityForm.activityType" placeholder="Ensayo, proyecto…" required maxlength="80" /></label>
-          <label>Fase de evaluación
-            <select v-model="activityForm.evaluationPhase" required>
-              <option value="baseline">Línea base interna</option>
-              <option value="pilot">Piloto</option>
-            </select>
+          <div v-if="!availableRubrics.length" class="alert warning span-2 create-activity-rubric-warning">
+            <span>Necesitas una rúbrica libre antes de crear la actividad.</span>
+            <button class="button secondary" type="button" @click="openRubrics">Crear una rúbrica</button>
+          </div>
+          <label class="span-2">Instrucciones personalizadas para el agente
+            <textarea
+              v-model="activityForm.agentInstructions"
+              rows="5"
+              maxlength="5000"
+              placeholder="Ej. Prioriza la justificación de decisiones y verifica el uso de fuentes confiables."
+            />
+            <small class="muted">
+              Opcional · {{ activityForm.agentInstructions.length }}/5000 caracteres. Se aplicarán al análisis de IA.
+            </small>
           </label>
           <div class="modal-actions span-2">
-            <button class="button secondary" type="button" @click="closeModal">Cancelar</button>
-            <button class="button primary">Crear actividad</button>
+            <button class="button secondary" type="button" @click="returnToClassDashboard">Cancelar</button>
+            <button class="button primary" :disabled="!availableRubrics.length || !activityForm.rubricId">
+              Crear actividad
+            </button>
           </div>
         </form>
       </section>
     </div>
 
-    <div v-if="activeModal === 'activity-detail' && selectedActivity" class="modal-backdrop" @click.self="closeModal">
+    <div v-if="activeModal === 'activity-detail' && selectedActivity" class="modal-backdrop" @click.self="returnToClassDashboard">
       <section class="modal-dialog wide" role="dialog" aria-modal="true" aria-labelledby="activity-detail-title">
         <header class="modal-header">
           <div>
             <span class="eyebrow">
-              {{ selectedActivity.academicClass?.code }} · {{ selectedActivity.activityType }} ·
-              {{ selectedActivity.evaluationPhase === 'baseline' ? 'Línea base' : 'Piloto' }}
+              {{ selectedActivity.academicClass?.code }} · {{ selectedActivity.activityType }}
             </span>
             <h2 id="activity-detail-title">{{ selectedActivity.title }}</h2>
             <p class="muted">Fecha de entrega: {{ selectedActivity.dueDate }}</p>
           </div>
-          <button class="modal-close" type="button" aria-label="Cerrar modal" @click="closeModal">×</button>
+          <button class="modal-close" type="button" aria-label="Volver a la clase" @click="returnToClassDashboard">×</button>
         </header>
         <div class="modal-body">
           <p v-if="error" class="alert error">{{ error }}</p>
@@ -885,6 +903,14 @@ onBeforeUnmount(() => {
             <button class="button secondary" type="button" @click="saveOutcomes(selectedActivity.id)">
               Guardar resultados
             </button>
+          </section>
+
+          <section v-if="selectedActivity.agentInstructions" class="modal-section">
+            <div>
+              <h3>Instrucciones para el agente</h3>
+              <p class="muted">Indicaciones definidas al crear la actividad para orientar el análisis de IA.</p>
+            </div>
+            <p class="agent-instructions-copy">{{ selectedActivity.agentInstructions }}</p>
           </section>
 
           <section class="modal-section">
@@ -934,7 +960,7 @@ onBeforeUnmount(() => {
             >
               Publicar actividad
             </button>
-            <button class="button secondary" type="button" @click="closeModal">Cerrar</button>
+            <button class="button secondary" type="button" @click="returnToClassDashboard">Volver a la clase</button>
             <RouterLink class="button primary" :to="`/teacher/activities/${selectedActivity.id}/submissions`">
               Ver entregas
             </RouterLink>

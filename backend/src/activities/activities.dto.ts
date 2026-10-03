@@ -18,9 +18,15 @@ import { ActivityPhase } from '../entities/activity.entity';
 
 export const MAX_LEARNING_OUTCOMES = 20;
 export const MAX_LEARNING_OUTCOME_LENGTH = 500;
+export const MAX_AGENT_INSTRUCTIONS_LENGTH = 5000;
+
+const trimString = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
 
 export class CreateActivityDto {
+  @Transform(trimString)
   @IsString()
+  @Matches(/\S/u, { message: 'El título debe contener texto' })
   @MaxLength(160)
   title: string;
 
@@ -31,12 +37,27 @@ export class CreateActivityDto {
   @IsDateString()
   dueDate: string;
 
+  @Transform(trimString)
   @IsString()
+  @Matches(/\S/u, { message: 'El tipo de actividad debe contener texto' })
   @MaxLength(80)
   activityType: string;
 
+  // Compatibilidad con clientes anteriores. El nuevo flujo siempre usa la fase piloto.
+  @IsOptional()
   @IsEnum(ActivityPhase)
-  evaluationPhase: ActivityPhase;
+  evaluationPhase?: ActivityPhase;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  rubricId?: number;
+
+  @IsOptional()
+  @Transform(trimString)
+  @IsString()
+  @MaxLength(MAX_AGENT_INSTRUCTIONS_LENGTH)
+  agentInstructions?: string;
 
   @IsOptional()
   @IsNumber()

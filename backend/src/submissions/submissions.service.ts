@@ -284,6 +284,29 @@ export class SubmissionsService {
     );
   }
 
+  async countPendingEvaluationByActivityIds(activityIds: number[]) {
+    if (!activityIds.length) return new Map<number, number>();
+
+    const rows = await this.submissions
+      .createQueryBuilder('submission')
+      .innerJoin('submission.activity', 'activity')
+      .select('activity.id', 'activityId')
+      .addSelect('COUNT(submission.id)', 'pendingEvaluationCount')
+      .where('activity.id IN (:...activityIds)', { activityIds })
+      .andWhere('submission.status != :evaluatedStatus', {
+        evaluatedStatus: SubmissionStatus.EVALUATED,
+      })
+      .groupBy('activity.id')
+      .getRawMany<{
+        activityId: string | number;
+        pendingEvaluationCount: string | number;
+      }>();
+
+    return new Map(
+      rows.map((row) => [Number(row.activityId), Number(row.pendingEvaluationCount)]),
+    );
+  }
+
   async getForTeacher(teacherId: number, submissionId: number) {
     const submission = await this.submissions.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('La entrega no existe');
@@ -561,6 +584,7 @@ export class SubmissionsService {
             title: activity.title,
             subject: activity.subject,
             activityType: activity.activityType,
+            agentInstructions: activity.agentInstructions,
           },
           logbook: logbook
             ? {

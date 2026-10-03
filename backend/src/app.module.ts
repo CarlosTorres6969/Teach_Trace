@@ -5,6 +5,7 @@ import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1
 import { AddPromptAssessment1790812800000 } from './database/migrations/1790812800000-add-prompt-assessment';
 import { AddAdminRole1790899200000 } from './database/migrations/1790899200000-add-admin-role';
 import { AddClassSection1790985600000 } from './database/migrations/1790985600000-add-class-section';
+import { AddActivityAgentInstructions1791072000000 } from './database/migrations/1791072000000-add-activity-agent-instructions';
 import { AdminModule } from './admin/admin.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { AiDeclarationsModule } from './ai-declarations/ai-declarations.module';
@@ -110,6 +111,7 @@ const entities = [
               AddPromptAssessment1790812800000,
               AddAdminRole1790899200000,
               AddClassSection1790985600000,
+              AddActivityAgentInstructions1791072000000,
             ],
             migrationsRun: true,
             synchronize,

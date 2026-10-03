@@ -7,12 +7,13 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
 import { ClassesService } from '../classes/classes.service';
-import { Activity } from '../entities/activity.entity';
+import { Activity, ActivityPhase } from '../entities/activity.entity';
 import { AiConversation } from '../entities/ai-conversation.entity';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Enrollment } from '../entities/enrollment.entity';
 import { Logbook } from '../entities/logbook.entity';
 import { Notification } from '../entities/notification.entity';
+import { Rubric } from '../entities/rubric.entity';
 import { Submission } from '../entities/submission.entity';
 import { User } from '../entities/user.entity';
 import {
@@ -85,22 +86,46 @@ export class ActivitiesService {
 
   async create(teacher: User, input: CreateActivityDto) {
     const academicClass = await this.classesService.ownedClass(teacher.id, input.classId);
-    return this.activities.save(
-      this.activities.create({
-        title: input.title.trim(),
-        subject: this.classesService.classDetails(academicClass).name,
-        dueDate: input.dueDate,
-        activityType: input.activityType.trim(),
-        evaluationPhase: input.evaluationPhase,
-        learningOutcomes: [],
-        teacher,
-        academicClass,
-        manualEvaluationRequired: false,
-        published: false,
-        weight: input.weight ?? 1.0,
-        rubric: null,
-      }),
-    );
+    const values = {
+      title: input.title.trim(),
+      subject: this.classesService.classDetails(academicClass).name,
+      dueDate: input.dueDate,
+      activityType: input.activityType.trim(),
+      agentInstructions: input.agentInstructions?.trim() ?? '',
+      evaluationPhase: ActivityPhase.PILOT,
+      learningOutcomes: [],
+      teacher,
+      academicClass,
+      manualEvaluationRequired: false,
+      published: false,
+      weight: input.weight ?? 1.0,
+      rubric: null,
+    };
+
+    if (!input.rubricId) {
+      return this.activities.save(this.activities.create(values));
+    }
+
+    return this.activities.manager.transaction(async (manager) => {
+      const rubricRepository = manager.getRepository(Rubric);
+      const rubric = await rubricRepository.findOne({
+        where: { id: input.rubricId, teacher: { id: teacher.id } },
+        relations: { activity: true },
+      });
+      if (!rubric) {
+        throw new NotFoundException('La rúbrica no existe o no pertenece al docente');
+      }
+      if (rubric.activity) {
+        throw new ConflictException('La rúbrica ya está asociada a otra actividad');
+      }
+
+      const activityRepository = manager.getRepository(Activity);
+      const activity = await activityRepository.save(activityRepository.create(values));
+      rubric.activity = activity;
+      await rubricRepository.save(rubric);
+      activity.rubric = rubric;
+      return activity;
+    });
   }
 
   async updateLearningOutcomes(

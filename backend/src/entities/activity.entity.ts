@@ -37,6 +37,9 @@ export class Activity {
   @Column()
   activityType: string;
 
+  @Column({ type: 'text', default: '' })
+  agentInstructions: string;
+
   @Column({ type: 'simple-enum', enum: ActivityPhase, default: ActivityPhase.PILOT })
   evaluationPhase: ActivityPhase;
 
