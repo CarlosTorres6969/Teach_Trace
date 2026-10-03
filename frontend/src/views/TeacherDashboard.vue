@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import readXlsxFile from 'read-excel-file';
 import { useRoute } from 'vue-router';
@@ -63,6 +64,10 @@ const enrollmentMode = ref<EnrollmentMode>('excel');
 const selectedEnrollmentFile = ref<File | null>(null);
 const bulkEnrollmentResult = ref<BulkEnrollmentResult | null>(null);
 const bulkEnrollmentBusy = ref(false);
+const individualEnrollmentBusy = ref(false);
+const enrollmentBusy = computed(
+  () => bulkEnrollmentBusy.value || individualEnrollmentBusy.value,
+);
 const deletingActivity = ref(false);
 const selectedClass = computed(
   () => classes.value.find((academicClass) => academicClass.id === selectedClassId.value) ?? null,
@@ -145,11 +150,13 @@ async function createClass() {
 }
 
 async function enrollStudent(classId: number) {
+  if (individualEnrollmentBusy.value) return;
   const email = enrollmentEmails[classId]?.trim();
   const name = enrollmentNames[classId]?.trim();
   if (!email || !name) return;
   error.value = '';
   message.value = '';
+  individualEnrollmentBusy.value = true;
   try {
     const result = await api<{
       accountCreated: boolean;
@@ -173,6 +180,8 @@ async function enrollStudent(classId: number) {
           : 'El estudiante ya estaba matriculado en esta clase.';
   } catch (cause) {
     showError(cause);
+  } finally {
+    individualEnrollmentBusy.value = false;
   }
 }
 
@@ -671,6 +680,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 :class="{ active: enrollmentMode === 'excel' }"
+                :disabled="enrollmentBusy"
                 @click="enrollmentMode = 'excel'; clearFeedback()"
               >
                 Desde Excel
@@ -678,6 +688,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 :class="{ active: enrollmentMode === 'individual' }"
+                :disabled="enrollmentBusy"
                 @click="enrollmentMode = 'individual'; clearFeedback()"
               >
                 Individual
@@ -698,10 +709,11 @@ onBeforeUnmount(() => {
                   Máximo 500 estudiantes.
                 </small>
               </div>
-              <label class="excel-file-picker">
+              <label class="excel-file-picker" :class="{ disabled: bulkEnrollmentBusy }">
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  :disabled="bulkEnrollmentBusy"
                   @change="selectEnrollmentFile"
                 />
                 <span class="excel-file-icon" aria-hidden="true">XLSX</span>
@@ -721,8 +733,13 @@ onBeforeUnmount(() => {
                 :disabled="!selectedEnrollmentFile || bulkEnrollmentBusy"
                 @click="importEnrollments(selectedClass.id)"
               >
-                {{ bulkEnrollmentBusy ? 'Procesando archivo…' : 'Importar y matricular' }}
+                <LoaderCircleIcon v-if="bulkEnrollmentBusy" class="ui-icon icon-spin" aria-hidden="true" />
+                {{ bulkEnrollmentBusy ? 'Procesando matrícula…' : 'Importar y matricular' }}
               </button>
+              <p v-if="bulkEnrollmentBusy" class="enrollment-loader" role="status" aria-live="polite">
+                <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
+                Validando el Excel y matriculando estudiantes. No cierres esta ventana.
+              </p>
 
               <div v-if="bulkEnrollmentResult" class="bulk-enrollment-result">
                 <strong>Importación completada</strong>
@@ -743,7 +760,12 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <form v-else class="individual-enrollment" @submit.prevent="enrollStudent(selectedClass.id)">
+            <form
+              v-else
+              class="individual-enrollment"
+              :aria-busy="individualEnrollmentBusy"
+              @submit.prevent="enrollStudent(selectedClass.id)"
+            >
               <p class="muted">
                 Si el correo no tiene una cuenta, se creará como estudiante y recibirá una contraseña temporal por correo.
                 Al iniciar sesión deberá cambiarla antes de acceder al sistema.
@@ -754,6 +776,7 @@ onBeforeUnmount(() => {
                     v-model="enrollmentNames[selectedClass.id]"
                     type="text"
                     maxlength="120"
+                    :disabled="individualEnrollmentBusy"
                     required
                   />
                 </label>
@@ -762,11 +785,19 @@ onBeforeUnmount(() => {
                     v-model="enrollmentEmails[selectedClass.id]"
                     type="email"
                     placeholder="correo@institucion.edu"
+                    :disabled="individualEnrollmentBusy"
                     required
                   />
                 </label>
-                <button class="button primary">Crear o matricular</button>
+                <button class="button primary" :disabled="individualEnrollmentBusy">
+                  <LoaderCircleIcon v-if="individualEnrollmentBusy" class="ui-icon icon-spin" aria-hidden="true" />
+                  {{ individualEnrollmentBusy ? 'Matriculando…' : 'Crear o matricular' }}
+                </button>
               </div>
+              <p v-if="individualEnrollmentBusy" class="enrollment-loader" role="status" aria-live="polite">
+                <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
+                Creando o matriculando la cuenta y enviando la notificación.
+              </p>
             </form>
           </section>
         </div>

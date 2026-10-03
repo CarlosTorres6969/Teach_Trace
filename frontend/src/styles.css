@@ -227,6 +227,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .excel-format-note small { color: var(--muted); }
 .excel-file-picker { position: relative; min-height: 105px; display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1.5px dashed #93aed2; border-radius: 12px 4px 12px 4px; color: var(--green); background: white; cursor: pointer; transition: border-color .15s, background .15s; }
 .excel-file-picker:hover, .excel-file-picker:focus-within { border-color: var(--green); background: #f7fafd; box-shadow: 0 0 0 3px rgba(35,79,143,.1); }
+.excel-file-picker.disabled { opacity: .65; cursor: wait; pointer-events: none; }
 .excel-file-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .excel-file-picker > span:not(.excel-file-icon) { display: grid; gap: .25rem; min-width: 0; }
 .excel-file-picker strong { overflow-wrap: anywhere; }
@@ -241,6 +242,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .bulk-enrollment-result details { padding: .55rem 0 0; border-color: #bcd4f0; }
 .bulk-enrollment-result ul { max-height: 130px; margin-bottom: 0; overflow-y: auto; color: var(--danger); font-size: .78rem; }
 .individual-enrollment { display: grid; }
+.enrollment-loader { display: flex; align-items: center; justify-content: center; gap: .5rem; margin: 0; padding: .7rem .85rem; color: var(--green); background: var(--green-light); border-radius: 9px 3px 9px 3px; font-size: .82rem; font-weight: 700; text-align: center; }
+.enrollment-loader .ui-icon { width: 1.15rem; height: 1.15rem; }
 .criterion-box { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; }
 .criterion-box legend { padding: 0 .5rem; font-weight: 700; }
 .criterion-box--error { border-color: var(--danger); background: #fff6f5; }

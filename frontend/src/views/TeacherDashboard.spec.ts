@@ -1,4 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import readXlsxFile from 'read-excel-file';
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import TeacherDashboard from './TeacherDashboard.vue';
@@ -13,6 +15,7 @@ vi.mock('read-excel-file', () => ({ default: vi.fn() }));
 vi.mock('vue-router', () => ({ useRoute: () => routeMock }));
 
 const apiMock = vi.mocked(api);
+const readXlsxFileMock = vi.mocked(readXlsxFile);
 
 const classes = [
   {
@@ -67,6 +70,7 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
       },
     ];
     apiMock.mockReset();
+    readXlsxFileMock.mockReset();
     apiMock.mockImplementation(async (path, options = {}) => {
       if (path === '/teacher/classes' && options.method === 'POST') return { id: 3 } as never;
       if (path === '/teacher/classes') return classes as never;
@@ -128,6 +132,104 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(cards[0].get('.class-name').element.compareDocumentPosition(
       cards[0].get('.class-section').element,
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('muestra un loader y bloquea el formulario durante la matrícula individual', async () => {
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.findAll('.teacher-catalog-card')[0].get('button').trigger('click');
+    await wrapper.findAll('.enrollment-mode-tabs button')[1].trigger('click');
+
+    let resolveEnrollment!: (value: unknown) => void;
+    const pendingEnrollment = new Promise((resolve) => { resolveEnrollment = resolve; });
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes/2/enrollments' && options.method === 'POST') {
+        return pendingEnrollment as never;
+      }
+      if (path === '/teacher/classes') return classes as never;
+      if (path === '/teacher/activities' && !options.method) return currentActivities as never;
+      if (path === '/teacher/rubrics') return [] as never;
+      throw new Error(`Solicitud inesperada: ${path}`);
+    });
+
+    const inputs = wrapper.findAll('.individual-enrollment input');
+    await inputs[0].setValue('Ana Pérez');
+    await inputs[1].setValue('ana.perez@unah.edu.hn');
+    await wrapper.get('.individual-enrollment').trigger('submit');
+    await nextTick();
+
+    const submitButton = wrapper.get('.individual-enrollment button');
+    expect(submitButton.attributes('disabled')).toBeDefined();
+    expect(submitButton.text()).toContain('Matriculando');
+    expect(wrapper.get('.individual-enrollment .enrollment-loader').text()).toContain(
+      'Creando o matriculando',
+    );
+    expect(wrapper.find('.individual-enrollment .icon-spin').exists()).toBe(true);
+
+    resolveEnrollment({
+      accountCreated: false,
+      invitationEmailSent: null,
+      enrollmentEmailSent: true,
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.individual-enrollment .enrollment-loader').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Estudiante matriculado');
+  });
+
+  it('muestra un loader mientras procesa la matrícula desde Excel', async () => {
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.findAll('.teacher-catalog-card')[0].get('button').trigger('click');
+
+    let resolveRows!: (value: unknown[][]) => void;
+    const pendingRows = new Promise<unknown[][]>((resolve) => { resolveRows = resolve; });
+    readXlsxFileMock.mockReturnValue(pendingRows as never);
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes/2/enrollments/bulk' && options.method === 'POST') {
+        return {
+          processedCount: 1,
+          enrolledCount: 1,
+          alreadyEnrolledCount: 0,
+          createdAccountCount: 1,
+          notificationFailedEmails: [],
+        } as never;
+      }
+      if (path === '/teacher/classes') return classes as never;
+      if (path === '/teacher/activities' && !options.method) return currentActivities as never;
+      if (path === '/teacher/rubrics') return [] as never;
+      throw new Error(`Solicitud inesperada: ${path}`);
+    });
+
+    const fileInput = wrapper.get('.excel-file-picker input');
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [new File(['excel'], 'estudiantes.xlsx')],
+    });
+    await fileInput.trigger('change');
+    const importButton = wrapper.get('.excel-enrollment > .button.primary');
+    await importButton.trigger('click');
+    await nextTick();
+
+    expect(importButton.attributes('disabled')).toBeDefined();
+    expect(importButton.text()).toContain('Procesando matrícula');
+    expect(wrapper.get('.excel-enrollment .enrollment-loader').text()).toContain(
+      'Validando el Excel',
+    );
+    expect(wrapper.find('.excel-enrollment .icon-spin').exists()).toBe(true);
+
+    resolveRows([
+      ['nombre', 'correo'],
+      ['Ana Pérez', 'ana.perez@unah.edu.hn'],
+    ]);
+    await flushPromises();
+
+    expect(wrapper.find('.excel-enrollment .enrollment-loader').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Importación de matrícula completada');
   });
 
   it('abre directamente la sección de actividades cuando se solicita por la URL', async () => {
