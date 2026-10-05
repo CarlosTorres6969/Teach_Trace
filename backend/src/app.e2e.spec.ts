@@ -1481,6 +1481,34 @@ describe('TeachTrace API (integración)', () => {
     expect(asStudent.response.status).toBe(403);
   });
 
+  it('protege y persiste la configuración Markdown del motor de IA', async () => {
+    expect((await request('/api/admin/ai-engine')).response.status).toBe(401);
+    for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
+      expect((await request('/api/admin/ai-engine', {
+        headers: sessionHeaders(cookie),
+      })).response.status).toBe(403);
+      expect((await request('/api/admin/ai-engine', {
+        method: 'PUT',
+        headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: '---\nmodel: changed\nenabled: false\n---\nInstrucciones' }),
+      })).response.status).toBe(403);
+    }
+    const headers = { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' };
+    const original = await request('/api/admin/ai-engine', { headers });
+    expect(original.response.status).toBe(200);
+    const markdown = '---\nmodel: provider/admin-model\nenabled: false\n---\n# Política\nVerifica las fuentes.';
+    const saved = await request('/api/admin/ai-engine', { method: 'PUT', headers, body: JSON.stringify({ markdown }) });
+    expect(saved.response.status).toBe(200);
+    expect(saved.body).toMatchObject({ effectiveModel: 'provider/admin-model', enabled: false });
+    const invalid = await request('/api/admin/ai-engine', { method: 'PUT', headers, body: JSON.stringify({ markdown: '# Incompleto' }) });
+    expect(invalid.response.status).toBe(400);
+    const reloaded = await request('/api/admin/ai-engine', { headers });
+    expect(reloaded.body).toMatchObject({ markdown });
+    expect(JSON.stringify(reloaded.body)).not.toContain('AI_API_KEY');
+    const restored = await request('/api/admin/ai-engine', { method: 'PUT', headers, body: JSON.stringify({ markdown: (original.body as { markdown: string }).markdown }) });
+    expect(restored.response.status).toBe(200);
+  });
+
   it('permite únicamente al administrador listar y crear cuentas docentes', async () => {
     const anonymous = await request('/api/admin/teachers');
     expect(anonymous.response.status).toBe(401);

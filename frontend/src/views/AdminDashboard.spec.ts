@@ -16,6 +16,9 @@ describe('AdminDashboard', () => {
   beforeEach(() => {
     apiMock.mockReset();
     apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/admin/ai-engine') {
+        return { markdown: '---\nmodel: default\nenabled: true\n---\nEvalúa con evidencia.', effectiveModel: 'server-model', enabled: true, providerConfigured: true } as never;
+      }
       if (path === '/admin/teachers' && !options.method) {
         return [{
           id: 4,

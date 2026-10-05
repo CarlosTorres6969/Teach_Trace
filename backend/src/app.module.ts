@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AiEngineSettings } from './entities/ai-engine-settings.entity';
+import { AddAiEngineSettings1791158400000 } from './database/migrations/1791158400000-add-ai-engine-settings';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1790726400000-add-understanding-assessment';
@@ -42,6 +44,7 @@ import { TeacherModule } from './teacher/teacher.module';
 import { UsersModule } from './users/users.module';
 
 const entities = [
+  AiEngineSettings,
   User,
   AuthSession,
   PasswordResetToken,
@@ -112,6 +115,7 @@ const entities = [
               AddAdminRole1790899200000,
               AddClassSection1790985600000,
               AddActivityAgentInstructions1791072000000,
+              AddAiEngineSettings1791158400000,
             ],
             migrationsRun: true,
             synchronize,

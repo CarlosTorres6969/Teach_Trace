@@ -6,9 +6,10 @@ import { User } from '../entities/user.entity';
 import { AdminBootstrapService } from './admin-bootstrap.service';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AiEngineModule } from '../ai-engine/ai-engine.module';
 
 @Module({
-  imports: [AuthModule, ConfigModule, TypeOrmModule.forFeature([User])],
+  imports: [AuthModule, ConfigModule, AiEngineModule, TypeOrmModule.forFeature([User])],
   controllers: [AdminController],
   providers: [AdminService, AdminBootstrapService],
 })

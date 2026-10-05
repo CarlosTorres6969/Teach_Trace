@@ -19,3 +19,7 @@ frontend/src/**/*.js
 docs/
 *.md
 !README.md
+!docs/
+docs/*
+!docs/motor-ia-actividades.md
+!docs/configuracion-motor-ia.md

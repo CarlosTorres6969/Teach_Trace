@@ -10,6 +10,7 @@ import {
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
+import AdminAiSettings from '../components/AdminAiSettings.vue';
 
 type AdminTeacher = {
   id: number;
@@ -166,6 +167,8 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </section>
+
+    <AdminAiSettings />
 
     <div v-if="modalOpen" class="modal-backdrop" @click.self="closeModal">
       <section class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="create-teacher-title">

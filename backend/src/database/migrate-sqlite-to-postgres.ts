@@ -4,6 +4,7 @@ import { config as loadEnv } from 'dotenv';
 import initSqlJs from 'sql.js';
 import { DataSource, EntityMetadata } from 'typeorm';
 import { Activity } from '../entities/activity.entity';
+import { AiEngineSettings } from '../entities/ai-engine-settings.entity';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { AiConversation, AiMessage } from '../entities/ai-conversation.entity';
 import { AuthSession } from '../entities/auth-session.entity';
@@ -21,6 +22,7 @@ import { User } from '../entities/user.entity';
 import { Valuation } from '../entities/valuation.entity';
 
 const entities = [
+  AiEngineSettings,
   User,
   AuthSession,
   PasswordResetToken,

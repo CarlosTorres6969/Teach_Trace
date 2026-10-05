@@ -62,7 +62,7 @@ const successfulResponse = (content: Record<string, unknown>) => new Response(
   { status: 200, headers: { 'content-type': 'application/json' } },
 );
 
-function configuredService(overrides: Record<string, string> = {}) {
+function configuredService(overrides: Record<string, string> = {}, settings?: { getSettings: () => Promise<unknown> }) {
   const values = {
     AI_API_URL: 'https://example.test/v1/chat/completions',
     AI_API_KEY: 'test-key',
@@ -73,7 +73,7 @@ function configuredService(overrides: Record<string, string> = {}) {
   };
   return new AiEngineService({
     get: (key: string) => values[key as keyof typeof values],
-  } as never);
+  } as never, settings as never);
 }
 
 function evidence() {
@@ -105,6 +105,24 @@ function evidence() {
 
 describe('AiEngineService', () => {
   const originalFetch = global.fetch;
+
+  it('uses the administrator model and Markdown instructions in the provider request', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
+    const settings = { getSettings: async () => ({ enabled: true, effectiveModel: 'admin/model', instructions: '# Política\nContrasta las fuentes.' }) };
+    const result = await configuredService({ AI_MODEL: '' }, settings).analyzeEvidence(evidence());
+    expect(result.implemented).toBe(true);
+    const request = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(request.model).toBe('admin/model');
+    expect(request.messages[0].content).toContain('# Política\nContrasta las fuentes.');
+    expect(request.messages[1].content).toContain('Prioriza decisiones justificadas con evidencia.');
+  });
+
+  it('does not send evidence to the provider when disabled by the administrator', async () => {
+    global.fetch = jest.fn();
+    const settings = { getSettings: async () => ({ enabled: false, effectiveModel: 'admin/model', instructions: 'Política' }) };
+    expect(await configuredService({}, settings).analyzeEvidence(evidence())).toMatchObject({ implemented: false, reason: expect.stringContaining('desactivó') });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 
   afterEach(() => {
     global.fetch = originalFetch;
