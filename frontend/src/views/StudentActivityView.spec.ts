@@ -80,6 +80,25 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     await input.trigger('change');
   }
 
+  async function importConversation(
+    wrapper: ReturnType<typeof mount>,
+    content = 'ESTUDIANTE: Prompt actualizado\n\nIA: Respuesta actualizada',
+    fileName = 'conversacion.txt',
+  ) {
+    const input = wrapper.get('.conversation-file-picker input[type="file"]');
+    const file = new File([content], fileName, { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true,
+      value: () => Promise.resolve(content),
+    });
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [file],
+    });
+    await input.trigger('change');
+    await flushPromises();
+  }
+
   it('muestra una entrega evaluada en solo lectura y no intenta guardar cambios', async () => {
     submissionStatus = 'evaluated';
     window.localStorage.setItem(
@@ -108,9 +127,9 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     expect(window.localStorage.getItem('teachtrace:activity-draft:12')).toBeNull();
 
     await wrapper.findAll('.logbook-step-button')[1].trigger('click');
-    expect(wrapper.get('.conversation-message select').attributes('disabled')).toBeDefined();
-    expect(wrapper.get('.conversation-message textarea').attributes('disabled')).toBeDefined();
-    expect(wrapper.get('.conversation-actions button').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.conversation-file-picker').exists()).toBe(false);
+    expect(wrapper.findAll('.conversation-transcript li')).toHaveLength(2);
+    expect(wrapper.text()).toContain('Prompt de prueba');
 
     await wrapper.get('.submission-step-button').trigger('click');
     expect(wrapper.get('textarea[maxlength="50000"]').attributes('disabled')).toBeDefined();
@@ -184,8 +203,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
 
     await wrapper.findAll('.logbook-step-button')[1].trigger('click');
     await wrapper.get('textarea[maxlength="10000"]').setValue('Resumen actualizado');
-    const conversationTextareas = wrapper.findAll('.conversation-message textarea');
-    await conversationTextareas[0].setValue('Prompt actualizado');
+    await importConversation(wrapper);
 
     expect(wrapper.findAll('.step-save-status')[1].text()).toBe('Sin guardar');
     expect(wrapper.text()).not.toContain('Guardar paso 2');
@@ -202,6 +220,15 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     expect(apiMock.mock.calls.some(([path, options]) =>
       String(path).endsWith('/ai-conversation') && options?.method === 'PUT',
     )).toBe(true);
+    const conversationCall = apiMock.mock.calls.find(([path, options]) =>
+      String(path).endsWith('/ai-conversation') && options?.method === 'PUT',
+    );
+    expect(JSON.parse(String(conversationCall?.[1]?.body))).toEqual({
+      messages: [
+        { role: 'student', content: 'Prompt actualizado' },
+        { role: 'ai', content: 'Respuesta actualizada' },
+      ],
+    });
     expect(wrapper.findAll('.step-save-status')[1].text()).toBe('Guardado');
     expect(wrapper.get('.logbook-progress-label').text()).toContain('4 de 5 pasos completados');
     expect(wrapper.text()).toContain('Progreso guardado correctamente.');
@@ -359,6 +386,9 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     const summary = wrapper.get('textarea[maxlength="10000"]');
     expect(wrapper.text()).toContain('Resumen de prompts');
     expect(wrapper.text()).toContain('Conversación con IA');
+    expect(wrapper.text()).toContain('Descargar plantilla TXT');
+    expect(wrapper.find('.conversation-message').exists()).toBe(false);
+    expect(wrapper.find('.conversation-actions').exists()).toBe(false);
     expect(summary.attributes('maxlength')).toBe('10000');
     await summary.setValue('  Primer prompt.\n\nSegundo prompt.  ');
 
@@ -368,6 +398,8 @@ describe('StudentActivityView - nivel declarado de IA', () => {
 
     expect(wrapper.text()).not.toContain('Resumen de prompts');
     expect(wrapper.text()).not.toContain('Conversación con IA');
+    expect(wrapper.text()).not.toContain('Enlace complementario');
+    expect(wrapper.find('input[type="url"]').exists()).toBe(false);
     await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico');
     await wrapper.get('input[placeholder^="Ej."]').setValue('ChatGPT');
     await wrapper.get('select').setValue('2');
@@ -382,6 +414,22 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     );
     const form = submissionCall?.[1]?.body as FormData;
     expect(form.get('promptSummary')).toBe('Primer prompt.\n\nSegundo prompt.');
+    expect(form.get('productUrl')).toBe('');
+  });
+
+  it('rechaza un archivo que no sea TXT sin reemplazar la conversación guardada', async () => {
+    const wrapper = mount(StudentActivityView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.findAll('.logbook-step-button')[1].trigger('click');
+    await importConversation(wrapper, 'ESTUDIANTE: Consulta\nIA: Respuesta', 'conversacion.pdf');
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('extensión .txt');
+    expect(wrapper.text()).toContain('Prompt de prueba');
+    expect(wrapper.text()).not.toContain('Consulta');
   });
 
   it('guarda la bitácora al salir de la actividad', async () => {

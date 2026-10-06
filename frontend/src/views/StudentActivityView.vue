@@ -2,6 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
 import { api } from '../api';
+import {
+  MAX_CONVERSATION_FILE_SIZE,
+  parseConversationText,
+  type ImportedConversationMessage,
+} from '../conversation-import';
 
 const route = useRoute();
 const activityId = Number(route.params.id);
@@ -71,11 +76,15 @@ type ConversationMessage = { role: ConversationRole; content: string; createdAt?
 const conversation = ref<ConversationMessage[]>([]);
 const savedConversationSignature = ref('');
 const savingConversation = ref(false);
+const conversationImportError = ref('');
+const importedConversationFileName = ref('');
+const conversationTemplateUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(
+  'ESTUDIANTE:\nEscribe aquí el prompt utilizado.\n\nIA:\nEscribe aquí la respuesta de la herramienta.\n',
+)}`;
 const submission = reactive({
   status: 'not_submitted',
   submittedAt: '',
   productText: '',
-  productUrl: '',
   fileName: null as string | null,
   evaluationStatus: 'not_requested',
   manualReviewRequired: false,
@@ -160,7 +169,7 @@ type ActivityDraft = {
   currentStep: number;
   logbook: Record<LogbookField, string>;
   declaration: { toolName: string; usageLevel: number | ''; purpose: string };
-  submission: { productText: string; productUrl: string };
+  submission: { productText: string };
   conversation: ConversationMessage[];
 };
 
@@ -206,12 +215,12 @@ function logbookStepRequirement(step: (typeof logbookSteps)[number]) {
     (item) => item.role === 'ai' && item.content.trim(),
   );
   if (!hasStudentPrompt && !hasAiResponse) {
-    return 'Agrega al menos un prompt del estudiante y una respuesta de IA antes de guardar este paso.';
+    return 'Importa un archivo TXT con al menos un prompt del estudiante y una respuesta de IA antes de guardar este paso.';
   }
-  if (!hasStudentPrompt) return 'Agrega al menos un prompt del estudiante antes de guardar este paso.';
-  if (!hasAiResponse) return 'Agrega al menos una respuesta de IA antes de guardar este paso.';
+  if (!hasStudentPrompt) return 'El archivo TXT debe incluir al menos un prompt del estudiante.';
+  if (!hasAiResponse) return 'El archivo TXT debe incluir al menos una respuesta de IA.';
   if (conversation.value.some((item) => !item.content.trim())) {
-    return 'Completa o elimina los mensajes vacíos de la conversación antes de guardar este paso.';
+    return 'El archivo TXT contiene mensajes vacíos. Corrígelo y vuelve a importarlo.';
   }
   return '';
 }
@@ -244,7 +253,6 @@ function persistLocalDraft() {
     },
     submission: {
       productText: submission.productText,
-      productUrl: submission.productUrl,
     },
     conversation: conversation.value.map(({ role, content, createdAt }) => ({ role, content, createdAt })),
   };
@@ -283,9 +291,6 @@ function restoreLocalDraft() {
     }
     if (typeof draft.submission?.productText === 'string') {
       submission.productText = draft.submission.productText;
-    }
-    if (typeof draft.submission?.productUrl === 'string') {
-      submission.productUrl = draft.submission.productUrl;
     }
     if (Array.isArray(draft.conversation)) {
       conversation.value = draft.conversation
@@ -495,14 +500,37 @@ function selectFile(event: Event) {
   selectedFile.value = file;
 }
 
-function addConversationMessage(role: ConversationRole) {
+async function importConversationFile(event: Event) {
   if (isEvaluationLocked.value) return;
-  conversation.value.push({ role, content: '' });
-}
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  conversationImportError.value = '';
+  message.value = '';
 
-function removeConversationMessage(index: number) {
-  if (isEvaluationLocked.value) return;
-  conversation.value.splice(index, 1);
+  if (!file) return;
+  if (!file.name.toLocaleLowerCase().endsWith('.txt')) {
+    conversationImportError.value = 'Selecciona un archivo con extensión .txt.';
+    target.value = '';
+    return;
+  }
+  if (file.size > MAX_CONVERSATION_FILE_SIZE) {
+    conversationImportError.value = 'El archivo TXT no puede superar 1 MB.';
+    target.value = '';
+    return;
+  }
+
+  try {
+    const imported: ImportedConversationMessage[] = parseConversationText(await file.text());
+    conversation.value = imported;
+    importedConversationFileName.value = file.name;
+    error.value = '';
+    message.value = 'Conversación importada. Presiona “Guardar progreso” para conservarla.';
+  } catch (cause) {
+    conversationImportError.value = cause instanceof Error
+      ? cause.message
+      : 'No fue posible leer la conversación del archivo TXT.';
+    target.value = '';
+  }
 }
 
 async function saveAiInteraction(success = 'Interacción con IA guardada.') {
@@ -609,7 +637,7 @@ async function submitEvidence() {
   submittingEvidence.value = true;
   const form = new FormData();
   form.set('productText', submission.productText);
-  form.set('productUrl', submission.productUrl);
+  form.set('productUrl', '');
   form.set('toolName', declaration.toolName);
   form.set('usageLevel', String(usageLevel));
   form.set('purpose', purpose);
@@ -668,7 +696,6 @@ watch(
     () => declaration.usageLevel,
     () => declaration.purpose,
     () => submission.productText,
-    () => submission.productUrl,
   ],
   () => {
     if (!hydrated.value || isEvaluationLocked.value) return;
@@ -826,28 +853,35 @@ onMounted(() => {
           >
             <div>
               <h3 id="conversation-title">Conversación con IA</h3>
-              <p class="muted">Registra al menos un prompt del estudiante y una respuesta de IA. Esta evidencia se captura una sola vez en este paso.</p>
+              <p class="muted">Importa la conversación completa desde un archivo TXT. Debe contener al menos un mensaje del estudiante y una respuesta de IA.</p>
             </div>
-            <div v-if="conversation.length" class="conversation-messages">
-              <article v-for="(item, index) in conversation" :key="index" class="conversation-message">
-                <label>
-                  Participante
-                  <select v-model="item.role" :disabled="isEvaluationLocked">
-                    <option value="student">Estudiante</option>
-                    <option value="ai">IA</option>
-                  </select>
-                </label>
-                <label>
-                  Mensaje
-                  <textarea v-model="item.content" rows="3" maxlength="20000" :disabled="isEvaluationLocked" required />
-                </label>
-                <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="removeConversationMessage(index)">Quitar mensaje</button>
-              </article>
+            <div v-if="!isEvaluationLocked" class="conversation-import-controls">
+              <label class="conversation-file-picker">
+                Archivo de conversación (.txt)
+                <input type="file" accept=".txt,text/plain" @change="importConversationFile" />
+                <small class="muted">Formato: inicia cada intervención con <strong>ESTUDIANTE:</strong> o <strong>IA:</strong>. Tamaño máximo: 1 MB.</small>
+              </label>
+              <a
+                class="button secondary"
+                :href="conversationTemplateUrl"
+                download="plantilla-conversacion-ia.txt"
+              >Descargar plantilla TXT</a>
             </div>
-            <div class="conversation-actions">
-              <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="addConversationMessage('student')">Agregar mensaje del estudiante</button>
-              <button class="button secondary" type="button" :disabled="isEvaluationLocked" @click="addConversationMessage('ai')">Agregar respuesta de IA</button>
+            <p v-if="conversationImportError" class="alert error" role="alert">{{ conversationImportError }}</p>
+            <p v-if="importedConversationFileName" class="muted">Archivo importado: {{ importedConversationFileName }}</p>
+            <div v-if="conversation.length" class="conversation-import-preview">
+              <div class="conversation-preview-heading">
+                <strong>Vista previa</strong>
+                <span>{{ conversation.length }} mensaje{{ conversation.length === 1 ? '' : 's' }}</span>
+              </div>
+              <ol class="conversation-transcript">
+                <li v-for="(item, index) in conversation" :key="index" :data-role="item.role">
+                  <strong>{{ item.role === 'student' ? 'Estudiante' : 'IA' }}</strong>
+                  <p>{{ item.content }}</p>
+                </li>
+              </ol>
             </div>
+            <p v-else class="muted">Aún no se ha importado una conversación.</p>
           </section>
         </section>
 
@@ -862,7 +896,6 @@ onMounted(() => {
           <p class="muted">Cierra tu proceso entregando el producto académico junto a tu declaración de uso de IA.</p>
           <div class="form-stack submission-fields">
             <label>Contenido del producto<textarea v-model="submission.productText" rows="7" maxlength="50000" :disabled="isEvaluationLocked" /></label>
-            <label>Enlace complementario<input v-model="submission.productUrl" type="url" placeholder="https://…" maxlength="500" :disabled="isEvaluationLocked" /></label>
             <label>Archivo PDF obligatorio
               <input type="file" accept="application/pdf,.pdf" :required="!submission.fileName" :disabled="isEvaluationLocked" @change="selectFile" />
               <small class="muted">Debes adjuntar la tarea en PDF. Tamaño máximo: 10 MB. Si sales antes de entregar, deberás seleccionar el archivo nuevamente.</small>
