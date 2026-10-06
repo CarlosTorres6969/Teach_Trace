@@ -1,5 +1,13 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 
 export const normalizeAiDeclarationText = (value: string) =>
   value.replace(/\r\n?/g, '\n').trim();
@@ -20,6 +28,7 @@ export class UpdateAiDeclarationDto {
   usageLevel: number;
 
   @Transform(trimString)
+  @ValidateIf((input: UpdateAiDeclarationDto) => input.usageLevel !== 1)
   @IsString()
   @MinLength(1)
   @MaxLength(5000)

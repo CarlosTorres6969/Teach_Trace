@@ -2358,7 +2358,7 @@ describe('TeachTrace API (integración)', () => {
     form.set('productUrl', '');
     form.set('toolName', 'ChatGPT');
     form.set('usageLevel', '1');
-    form.set('purpose', 'Apoyo para estructurar ideas');
+    form.set('purpose', '');
     form.set('promptSummary', 'Resumen de prompts utilizados para preparar el archivo');
     form.set('file', new Blob(['%PDF-1.7\ncontenido del archivo'], { type: 'application/pdf' }), 'entrega.pdf');
 
@@ -2368,6 +2368,10 @@ describe('TeachTrace API (integración)', () => {
       body: form,
     });
     expect(response.response.status).toBe(200);
+    const declaration = await dataSource.getRepository(AiDeclaration).findOneOrFail({
+      where: { student: { id: student.user.id }, activity: { id: activityId } },
+    });
+    expect(declaration.purpose).toBe('');
   });
 
   it('HU-19: acepta archivo de exactamente 10 MB', async () => {

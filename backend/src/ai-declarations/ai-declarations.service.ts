@@ -41,8 +41,12 @@ export class AiDeclarationsService {
     if (!toolName) {
       throw new BadRequestException('El nombre de la herramienta de IA es obligatorio');
     }
-    const purpose = normalizeAiDeclarationText(input.purpose);
-    if (!purpose) {
+    const purpose = input.usageLevel === 1
+      ? ''
+      : typeof input.purpose === 'string'
+        ? normalizeAiDeclarationText(input.purpose)
+        : '';
+    if (input.usageLevel !== 1 && !purpose) {
       throw new BadRequestException('El propósito del uso de IA es obligatorio');
     }
     const promptSummary = normalizeAiDeclarationText(input.promptSummary);

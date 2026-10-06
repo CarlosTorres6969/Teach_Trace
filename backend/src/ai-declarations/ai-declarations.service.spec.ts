@@ -101,6 +101,24 @@ describe('AiDeclarationsService', () => {
     expect(dto.purpose).toHaveLength(5000);
   });
 
+  it('permite propósito vacío únicamente para el nivel 1 de autoría propia', async () => {
+    const ownWork = plainToInstance(UpdateAiDeclarationDto, {
+      ...validInput,
+      usageLevel: 1,
+      purpose: '',
+    });
+    expect(await validate(ownWork)).toHaveLength(0);
+
+    for (const usageLevel of [2, 3]) {
+      const aiAssisted = plainToInstance(UpdateAiDeclarationDto, {
+        ...validInput,
+        usageLevel,
+        purpose: '',
+      });
+      expect(await validate(aiAssisted)).not.toHaveLength(0);
+    }
+  });
+
   it.each([undefined, null, '', '   ', 42, 'a'.repeat(5001)])(
     'rechaza un propósito vacío, inválido o demasiado extenso: %p',
     async (purpose) => {
@@ -228,6 +246,29 @@ describe('AiDeclarationsService', () => {
         purpose: 'Contrastar fuentes.\n\nDocumentar decisiones.',
         promptSummary: 'Comparar argumentos.\n\nRevisar coherencia.',
       }),
+    );
+  });
+
+  it('descarta cualquier propósito previo al guardar el nivel 1', async () => {
+    const declaration = { detectedUsageLevel: null, usageDiscrepancy: false };
+    const declarations = {
+      findOne: jest.fn().mockResolvedValue(declaration),
+      save: jest.fn(async (value) => value),
+    };
+    const service = new AiDeclarationsService(
+      declarations as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      { getForStudent: jest.fn().mockResolvedValue({ id: 9, title: 'Actividad' }) } as never,
+    );
+
+    await service.update({ id: 4 } as never, 9, {
+      ...validInput,
+      usageLevel: 1,
+      purpose: 'Este texto ya no corresponde',
+    });
+
+    expect(declarations.save).toHaveBeenCalledWith(
+      expect.objectContaining({ usageLevel: 1, purpose: '' }),
     );
   });
 

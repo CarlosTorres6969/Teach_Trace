@@ -300,7 +300,7 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     expect(wrapper.text()).toContain('Describe el propósito para el cual utilizaste IA.');
-    expect(apiMock).not.toHaveBeenCalled();
+    expect(apiMock.mock.calls.some(([path]) => String(path).endsWith('/submission'))).toBe(false);
 
     await purpose.setValue('  Primer párrafo.\n\nSegundo párrafo.  ');
     await wrapper.get('form').trigger('submit');
@@ -311,6 +311,39 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     );
     const form = submissionCall?.[1]?.body as FormData;
     expect(form.get('purpose')).toBe('Primer párrafo.\n\nSegundo párrafo.');
+  });
+
+  it('oculta y omite el propósito cuando el estudiante declara autoría propia', async () => {
+    const wrapper = mount(StudentActivityView, {
+      global: {
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-step-button').trigger('click');
+    await attachPdf(wrapper);
+
+    await wrapper.get('textarea[maxlength="50000"]').setValue('Producto académico propio');
+    await wrapper.get('input[placeholder^="Ej."]').setValue('No aplica');
+    const select = wrapper.get('select');
+    await select.setValue('2');
+    await wrapper.get('textarea[maxlength="5000"]').setValue('Texto que debe limpiarse');
+    await select.setValue('1');
+
+    expect(wrapper.find('textarea[maxlength="5000"]').exists()).toBe(false);
+    expect(wrapper.get('.step-guidance').text()).not.toContain('propósito');
+    apiMock.mockClear();
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const submissionCall = apiMock.mock.calls.find(([path]) =>
+      String(path).endsWith('/submission'),
+    );
+    expect(submissionCall).toBeDefined();
+    const form = submissionCall?.[1]?.body as FormData;
+    expect(form.get('usageLevel')).toBe('1');
+    expect(form.get('purpose')).toBe('');
   });
 
   it('captura los prompts y la conversación solo en el paso 2 y reutiliza el resumen al entregar', async () => {

@@ -96,6 +96,7 @@ let draftPersistenceEnabled = true;
 const isSubmissionStep = computed(() => currentStep.value === logbookSteps.length);
 const activeStep = computed(() => logbookSteps[currentStep.value]);
 const isEvaluationLocked = computed(() => submission.status === 'evaluated');
+const requiresAiPurpose = computed(() => declaration.usageLevel !== 1);
 
 const stepCompletion = computed<boolean[]>(() => [
   ...logbookSteps.map((step) =>
@@ -130,7 +131,9 @@ const currentStepNotice = computed(() => {
     if (typeof declaration.usageLevel !== 'number' || ![1, 2, 3].includes(declaration.usageLevel)) {
       missing.push('seleccionar el nivel de uso de IA');
     }
-    if (!declaration.purpose.trim()) missing.push('describir el propósito de uso de IA');
+    if (requiresAiPurpose.value && !declaration.purpose.trim()) {
+      missing.push('describir el propósito de uso de IA');
+    }
 
     return missing.length
       ? { state: 'pending', message: `Para realizar la entrega falta: ${missing.join(', ')}.` }
@@ -273,8 +276,10 @@ function restoreLocalDraft() {
     ) {
       declaration.usageLevel = draft.declaration.usageLevel;
     }
-    if (typeof draft.declaration?.purpose === 'string') {
+    if (declaration.usageLevel !== 1 && typeof draft.declaration?.purpose === 'string') {
       declaration.purpose = draft.declaration.purpose;
+    } else if (declaration.usageLevel === 1) {
+      declaration.purpose = '';
     }
     if (typeof draft.submission?.productText === 'string') {
       submission.productText = draft.submission.productText;
@@ -325,7 +330,10 @@ async function load() {
       typeof loadedUsageLevel === 'number' && [1, 2, 3].includes(loadedUsageLevel)
         ? loadedUsageLevel
         : '';
-    declaration.purpose = typeof declarationData.purpose === 'string' ? declarationData.purpose : '';
+    declaration.purpose =
+      declaration.usageLevel !== 1 && typeof declarationData.purpose === 'string'
+        ? declarationData.purpose
+        : '';
     let promptNeedsMigration = false;
     if (!logbook.prompts.trim() && typeof declarationData.promptSummary === 'string') {
       logbook.prompts = declarationData.promptSummary;
@@ -586,8 +594,8 @@ async function submitEvidence() {
     error.value = 'Selecciona tu nivel declarado de uso de IA.';
     return;
   }
-  const purpose = declaration.purpose.trim();
-  if (!purpose) {
+  const purpose = usageLevel === 1 ? '' : declaration.purpose.trim();
+  if (usageLevel !== 1 && !purpose) {
     error.value = 'Describe el propósito para el cual utilizaste IA.';
     return;
   }
@@ -668,6 +676,14 @@ watch(
     persistLocalDraft();
   },
   { deep: true, flush: 'sync' },
+);
+
+watch(
+  () => declaration.usageLevel,
+  (usageLevel) => {
+    if (usageLevel === 1) declaration.purpose = '';
+  },
+  { flush: 'sync' },
 );
 
 watch(
@@ -863,7 +879,7 @@ onMounted(() => {
                 <option :value="3">Nivel 3 - Hecho por IA</option>
               </select>
             </label>
-            <label>Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" :disabled="isEvaluationLocked" required /></label>
+            <label v-if="requiresAiPurpose">Propósito<textarea v-model.trim="declaration.purpose" rows="3" maxlength="5000" :disabled="isEvaluationLocked" required /></label>
             <p v-if="submission.submittedAt" class="muted">Última entrega: {{ new Date(submission.submittedAt).toLocaleString() }}</p>
           </div>
         </section>
