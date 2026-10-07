@@ -52,7 +52,8 @@ a { color: var(--green); }
 .user-menu div { display: flex; flex-direction: column; text-align: right; font-size: .86rem; }
 .user-menu span { opacity: .72; }
 .topbar-settings-icon { display: none; }
-.theme-toggle { width: 42px; min-width: 42px; padding-inline: 0; font-size: 1.2rem; }
+.theme-toggle, .bell-button { width: 42px; min-width: 42px; height: 42px; padding: 0; line-height: 1; }
+.theme-toggle { font-size: 1.2rem; }
 .activities-nav-link { gap: .45rem; }
 .activities-nav-badge { min-width: 20px; height: 20px; padding: 0 .35rem; display: inline-grid; place-items: center; color: white; background: #2478d0; border: 1px solid rgba(255,255,255,.65); border-radius: 99px; font-size: .7rem; line-height: 1; opacity: 1 !important; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
@@ -490,8 +491,8 @@ html.dark .notification-checkbox input:disabled + span { background: #35618f; bo
 }
 
 /* ─── Campana de notificaciones ──────────────────────────────────────────── */
-.bell-wrapper { position: relative; }
-.bell-button { position: relative; font-size: 1.15rem; padding: .5rem .65rem; }
+.bell-wrapper { position: relative; flex: 0 0 42px; width: 42px; height: 42px; }
+.bell-button { position: relative; font-size: 1.15rem; }
 .bell-badge { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; padding: 0 4px; display: grid; place-items: center; background: var(--gold); color: #1a1a1a; border-radius: 99px; font-size: .65rem; font-weight: 800; line-height: 1; }
 .bell-backdrop { position: fixed; inset: 0; z-index: 19; }
 .bell-dropdown { position: absolute; top: calc(100% + .6rem); right: 0; z-index: 20; width: min(380px, calc(100vw - 2rem)); background: var(--paper); border: 1px solid var(--line); border-radius: 16px 4px 16px 4px; box-shadow: 0 16px 50px rgba(10,28,55,.18); overflow: hidden; }
@@ -740,7 +741,7 @@ html.dark .valuation-editor--confirmed { background: #0d1f35; border-color: #3a6
 html.dark .valuation-ai-hint { background: #101b2b; }
 
 .conversation-editor, .conversation-review, .feedback-editor { display: grid; gap: .75rem; margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-.conversation-import-controls { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; padding: .9rem; border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.conversation-import-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .9rem; border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .conversation-file-picker { flex: 1 1 320px; }
 .conversation-import-controls .button { flex: 0 0 auto; }
 .conversation-import-preview { display: grid; gap: .7rem; }
