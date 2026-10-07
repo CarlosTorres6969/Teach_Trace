@@ -57,8 +57,50 @@ describe('AuthService', () => {
 
     expect(result.accessToken).toBe('token-firmado');
     expect(result.user.role).toBe(UserRole.STUDENT);
+    expect(result.user.roles).toEqual([UserRole.STUDENT]);
     expect(service['sessions'].save).toHaveBeenCalled();
     expect(loginAttempts.recordSuccess).toHaveBeenCalledWith('estudiante@unah.edu.hn');
+  });
+
+  it('permite a una cuenta administradora cambiar al modo docente con la misma sesión', async () => {
+    const service = createService();
+    const user = {
+      id: 7,
+      email: 'admin@unah.edu.hn',
+      name: 'Administrador',
+      role: UserRole.ADMIN,
+      active: true,
+    };
+    const session = {
+      id: 'session-admin',
+      user,
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+    };
+
+    const result = await service.switchRole(user as never, session as never, UserRole.TEACHER);
+
+    expect(service['jwtService'].signAsync).toHaveBeenCalledWith({
+      sub: 7,
+      sid: 'session-admin',
+      role: UserRole.TEACHER,
+    });
+    expect(result.user).toMatchObject({
+      role: UserRole.TEACHER,
+      roles: [UserRole.ADMIN, UserRole.TEACHER],
+    });
+    expect(result.expiresAt).toBe(session.expiresAt);
+  });
+
+  it('rechaza cambiar a un perfil no autorizado', async () => {
+    const service = createService();
+    const user = { id: 2, role: UserRole.TEACHER };
+    const session = { id: 'session-teacher', user, expiresAt: new Date() };
+
+    await expect(
+      service.switchRole(user as never, session as never, UserRole.ADMIN),
+    ).rejects.toThrow('El perfil solicitado no está autorizado');
+    expect(service['jwtService'].signAsync).not.toHaveBeenCalled();
   });
 
   it('rechaza una contraseña incorrecta', async () => {

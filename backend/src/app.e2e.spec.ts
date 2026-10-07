@@ -36,7 +36,7 @@ jest.setTimeout(180000);
 
 type LoginResponse = {
   sessionCookie: string;
-  user: { id: number; role: UserRole };
+  user: { id: number; role: UserRole; roles?: UserRole[] };
 };
 
 describe('TeachTrace API (integración)', () => {
@@ -345,6 +345,63 @@ describe('TeachTrace API (integración)', () => {
     expect(authenticated.body).toMatchObject({
       user: { email: 'docente@unah.edu.hn', role: 'teacher' },
     });
+  });
+
+  it('permite al administrador alternar de forma segura entre administrador y docente', async () => {
+    expect(admin.user).toMatchObject({
+      role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN, UserRole.TEACHER],
+    });
+
+    const teacherMode = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(admin.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.TEACHER }),
+    });
+
+    expect(teacherMode.response.status).toBe(201);
+    expect(teacherMode.body).toMatchObject({
+      user: {
+        id: admin.user.id,
+        role: UserRole.TEACHER,
+        roles: [UserRole.ADMIN, UserRole.TEACHER],
+      },
+    });
+    const teacherModeCookie = readSessionCookie(teacherMode.response);
+
+    const teacherAccess = await request('/api/teacher/classes', {
+      headers: sessionHeaders(teacherModeCookie),
+    });
+    expect(teacherAccess.response.status).toBe(200);
+
+    const adminAccessWhileTeacher = await request('/api/admin/teachers', {
+      headers: sessionHeaders(teacherModeCookie),
+    });
+    expect(adminAccessWhileTeacher.response.status).toBe(403);
+
+    const adminMode = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacherModeCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.ADMIN }),
+    });
+    expect(adminMode.response.status).toBe(201);
+    expect(adminMode.body).toMatchObject({ user: { role: UserRole.ADMIN } });
+
+    const teacherEscalation = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.ADMIN }),
+    });
+    expect(teacherEscalation.response.status).toBe(403);
   });
 
   it('rechaza el inicio de sesión de un docente inactivo', async () => {

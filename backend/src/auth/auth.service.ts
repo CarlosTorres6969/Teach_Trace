@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,7 +7,7 @@ import { promisify } from 'util';
 import { IsNull, Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
 import { PasswordResetToken } from '../entities/password-reset-token.entity';
-import { DEFAULT_ACCESSIBILITY_SETTINGS, User } from '../entities/user.entity';
+import { availableUserRoles, DEFAULT_ACCESSIBILITY_SETTINGS, User, UserRole } from '../entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './login.dto';
 import { LoginAttemptService } from './login-attempt.service';
@@ -62,6 +62,25 @@ export class AuthService {
       role: user.role,
     });
     return { accessToken, expiresAt, user: this.safeUser(user) };
+  }
+
+  async switchRole(user: User, session: AuthSession, role: UserRole) {
+    const roles = availableUserRoles(user);
+    if (!roles.includes(role)) {
+      throw new ForbiddenException('El perfil solicitado no está autorizado para esta cuenta');
+    }
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      sid: session.id,
+      role,
+    });
+    user.activeRole = role;
+    return {
+      accessToken,
+      expiresAt: session.expiresAt,
+      user: this.safeUser(user),
+    };
   }
 
   async logout(session: AuthSession) {
@@ -188,11 +207,16 @@ export class AuthService {
   }
 
   safeUser(user: User) {
+    const roles = availableUserRoles(user);
+    const activeRole = user.activeRole && roles.includes(user.activeRole)
+      ? user.activeRole
+      : user.role;
     return {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: activeRole,
+      roles,
       mustChangePassword: user.mustChangePassword ?? false,
       theme: user.theme,
       accessibilitySettings: user.accessibilitySettings ?? {

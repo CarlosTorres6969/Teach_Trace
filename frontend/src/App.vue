@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { LoaderCircleIcon } from '@lucide/vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from './api';
 import { API_URL } from './api-url';
-import { auth, clearSession } from './auth';
+import { auth, clearSession, setSession } from './auth';
 import { homeForRole } from './role-home';
 import { applyTheme, oppositeResolvedTheme, resolvedTheme } from './theme';
-import type { AppNotification, ThemePreference } from './types';
+import type { AppNotification, Role, ThemePreference, User } from './types';
 import { registerPushNotifications } from './usePush';
 import PageLoader from './components/PageLoader.vue';
 
 const router = useRouter();
 const savingTheme = ref(false);
+const switchingRole = ref(false);
+const roleSwitchError = ref('');
 const newActivityCount = ref(0);
+const roleOptions = computed<Role[]>(() => {
+  const roles = auth.user?.roles ?? [auth.user?.role].filter(Boolean) as Role[];
+  return [...new Set(roles)].filter((role) => role === 'admin' || role === 'teacher');
+});
 
 // ─── Notificaciones ───────────────────────────────────────────────────────────
 const notifications = ref<AppNotification[]>([]);
@@ -22,13 +29,13 @@ let pollInterval: ReturnType<typeof setInterval> | null = null;
 let sseSource: EventSource | null = null;
 
 function startNotificationServices() {
+  stopNotificationServices();
   if (!auth.user || auth.user.role === 'admin') return;
 
   // Contar no leídas de inmediato
   void fetchUnreadCount();
 
   // SSE para actualización instantánea del badge
-  stopNotificationServices();
   const sseUrl = `${API_URL}/notifications/badge-stream`;
   sseSource = new EventSource(sseUrl, { withCredentials: true });
   sseSource.onmessage = (event) => {
@@ -151,6 +158,42 @@ function roleLabel() {
   return auth.user?.role === 'student' ? 'Estudiante' : 'Docente';
 }
 
+function roleOptionLabel(role: Role) {
+  if (role === 'admin') return 'Modo administrador';
+  if (role === 'teacher') return 'Modo docente';
+  return 'Modo estudiante';
+}
+
+async function switchRole(event: Event) {
+  if (!auth.user || switchingRole.value) return;
+  const select = event.target as HTMLSelectElement;
+  const previousRole = auth.user.role;
+  const role = select.value as Role;
+  if (role === previousRole) return;
+  if (!roleOptions.value.includes(role)) {
+    select.value = previousRole;
+    return;
+  }
+
+  switchingRole.value = true;
+  roleSwitchError.value = '';
+  try {
+    const result = await api<{ user: User }>('/auth/switch-role', {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+    setSession(result.user);
+    await router.push(homeForRole(result.user.role));
+  } catch (cause) {
+    select.value = previousRole;
+    roleSwitchError.value = cause instanceof Error
+      ? cause.message
+      : 'No fue posible cambiar el modo de trabajo';
+  } finally {
+    switchingRole.value = false;
+  }
+}
+
 function closeBellOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape') bellOpen.value = false;
 }
@@ -250,6 +293,21 @@ onBeforeUnmount(() => {
         <strong>{{ auth.user.name }}</strong>
         <span>{{ roleLabel() }}</span>
       </div>
+
+      <label v-if="roleOptions.length > 1" class="role-switcher">
+        <span class="sr-only">Cambiar modo de trabajo</span>
+        <LoaderCircleIcon v-if="switchingRole" class="ui-icon icon-spin" aria-hidden="true" />
+        <select
+          :value="auth.user.role"
+          :disabled="switchingRole"
+          aria-label="Cambiar modo de trabajo"
+          @change="switchRole"
+        >
+          <option v-for="role in roleOptions" :key="role" :value="role">
+            {{ roleOptionLabel(role) }}
+          </option>
+        </select>
+      </label>
 
       <RouterLink
         v-if="auth.user.role === 'student'"
@@ -356,6 +414,10 @@ onBeforeUnmount(() => {
       <button class="button ghost" type="button" @click="logout">Cerrar sesión</button>
     </div>
   </header>
+
+  <p v-if="roleSwitchError" class="role-switch-error alert error" role="alert">
+    {{ roleSwitchError }}
+  </p>
 
   <RouterView v-if="auth.initialized" />
 </template>

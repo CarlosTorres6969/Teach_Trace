@@ -81,6 +81,7 @@ function createAdminUser(overrides: Partial<User> = {}): User {
     email: 'administrador@unah.edu.hn',
     name: 'Administrador',
     role: 'admin',
+    roles: ['admin', 'teacher'],
     mustChangePassword: false,
     theme: 'system',
     accessibilitySettings: { fontSize: 100, highContrast: false, reducedMotion: false },
@@ -239,6 +240,13 @@ describe('Router - Role-based access control (logic)', () => {
   it('impide que docentes y estudiantes accedan al panel administrador', () => {
     expect(checkAccess(createTeacherUser(), '/admin', { role: 'admin' })).toBe('/teacher');
     expect(checkAccess(createStudentUser(), '/admin', { role: 'admin' })).toBe('/student');
+  });
+
+  it('aplica las rutas docentes cuando el administrador activa ese modo', () => {
+    const user = createAdminUser({ role: 'teacher' });
+
+    expect(checkAccess(user, '/teacher', { role: 'teacher' })).toBe(true);
+    expect(checkAccess(user, '/admin', { role: 'admin' })).toBe('/teacher');
   });
 });
 

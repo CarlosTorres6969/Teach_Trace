@@ -54,6 +54,12 @@ a { color: var(--green); }
 .topbar-settings-icon { display: none; }
 .theme-toggle, .bell-button { width: 42px; min-width: 42px; height: 42px; padding: 0; line-height: 1; }
 .theme-toggle { font-size: 1.2rem; }
+.role-switcher { display: flex; align-items: center; gap: .4rem; color: white; }
+.role-switcher select { width: auto; min-width: 168px; height: 42px; padding: .5rem 2rem .5rem .75rem; color: white; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); font-weight: 700; cursor: pointer; }
+.role-switcher select:focus { border-color: white; box-shadow: 0 0 0 3px rgba(255,255,255,.18); }
+.role-switcher select:disabled { cursor: wait; }
+.role-switcher option { color: var(--ink); background: var(--paper); }
+.role-switch-error { position: fixed; top: 84px; right: 1rem; z-index: 40; width: min(420px, calc(100% - 2rem)); box-shadow: 0 12px 35px rgba(12,35,64,.18); }
 .activities-nav-link { gap: .45rem; }
 .activities-nav-badge { min-width: 20px; height: 20px; padding: 0 .35rem; display: inline-grid; place-items: center; color: white; background: #2478d0; border: 1px solid rgba(255,255,255,.65); border-radius: 99px; font-size: .7rem; line-height: 1; opacity: 1 !important; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }

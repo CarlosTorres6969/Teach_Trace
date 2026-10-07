@@ -61,6 +61,26 @@ function studentSession() {
   );
 }
 
+function adminSession() {
+  setSession(
+    {
+      id: 3,
+      email: 'administrador@unah.edu.hn',
+      name: 'Administrador',
+      role: 'admin',
+      roles: ['admin', 'teacher'],
+      mustChangePassword: false,
+      theme: 'light',
+      accessibilitySettings: {
+        fontSize: 100,
+        highContrast: false,
+        reducedMotion: false,
+      },
+    },
+    false,
+  );
+}
+
 function mountApp() {
   return mount(App, {
     global: {
@@ -269,5 +289,56 @@ describe('App', () => {
     expect(wrapper.find('.topbar').exists()).toBe(false);
     expect(MockEventSource.instances).toHaveLength(0);
     expect(registerPushMock).not.toHaveBeenCalled();
+  });
+
+  it('permite al administrador cambiar al modo docente con la sesion del servidor', async () => {
+    adminSession();
+    apiMock.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/auth/switch-role') {
+        const role = JSON.parse(String(init?.body)).role as 'admin' | 'teacher';
+        return Promise.resolve({
+          user: {
+            ...auth.user!,
+            role,
+            roles: ['admin', 'teacher'],
+          },
+        });
+      }
+      if (path === '/notifications/unread-count') return Promise.resolve({ count: 0 });
+      return Promise.resolve([]);
+    });
+
+    wrapper = mountApp();
+    await flushPromises();
+
+    const selector = wrapper.get<HTMLSelectElement>('.role-switcher select');
+    expect(selector.findAll('option').map((option) => option.text())).toEqual([
+      'Modo administrador',
+      'Modo docente',
+    ]);
+
+    await selector.setValue('teacher');
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/auth/switch-role', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'teacher' }),
+    });
+    expect(auth.user?.role).toBe('teacher');
+    expect(pushMock).toHaveBeenCalledWith('/teacher');
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    await selector.setValue('admin');
+    await flushPromises();
+
+    expect(auth.user?.role).toBe('admin');
+    expect(pushMock).toHaveBeenCalledWith('/admin');
+    expect(MockEventSource.instances[0].close).toHaveBeenCalledOnce();
+  });
+
+  it('no muestra el selector a cuentas con un solo perfil', () => {
+    wrapper = mountApp();
+
+    expect(wrapper.find('.role-switcher').exists()).toBe(false);
   });
 });
