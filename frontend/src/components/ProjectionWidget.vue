@@ -16,6 +16,7 @@ import { Line } from 'vue-chartjs';
 import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
 import { chartThemePalette } from '../chart-theme';
+import PageLoader from './PageLoader.vue';
 import { resolvedTheme } from '../theme';
 import type { ProjectionData } from '../types';
 
@@ -200,7 +201,14 @@ onMounted(load);
 </script>
 
 <template>
-  <section v-if="!loading && !error && projection" class="projection-widget panel">
+  <PageLoader
+    v-if="loading"
+    compact
+    label="Calculando proyección…"
+    detail="Estamos consultando tus calificaciones y actividades pendientes."
+  />
+
+  <section v-else-if="!error && projection" class="projection-widget panel">
     <!-- Encabezado con el número clave -->
     <div class="projection-header">
       <div>

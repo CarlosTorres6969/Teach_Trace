@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../api';
@@ -84,6 +85,7 @@ async function logout() {
           <label>Confirmar contraseña<input v-model="form.confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
           <p v-if="error" class="alert error">{{ error }}</p>
           <button class="button primary full" :disabled="loading">
+            <LoaderCircleIcon v-if="loading" class="ui-icon icon-spin" aria-hidden="true" />
             {{ loading ? 'Actualizando…' : 'Guardar nueva contraseña' }}
           </button>
         </form>

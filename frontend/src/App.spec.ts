@@ -118,6 +118,15 @@ describe('App', () => {
     expect(wrapper.get('.theme-toggle').attributes('aria-label')).toBe('Activar modo claro');
   });
 
+  it('muestra un indicador mientras se verifica la sesión inicial', () => {
+    auth.user = null;
+    auth.initialized = false;
+    wrapper = mountApp();
+
+    expect(wrapper.get('.app-boot-loader').text()).toContain('Iniciando TeachTrace');
+    expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(false);
+  });
+
   it('revierte el cambio local si no puede persistir la preferencia', async () => {
     let rejectPreference!: (reason: Error) => void;
     apiMock.mockImplementation((path: string) => {

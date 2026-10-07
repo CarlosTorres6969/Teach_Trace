@@ -2,6 +2,7 @@
 import { LoaderCircleIcon } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { api, ApiError } from '../api';
+import PageLoader from './PageLoader.vue';
 
 const stages = [
   { key: 'aiUsage', title: 'Evaluación del uso de IA', description: 'Cómo debe analizar el uso de IA del estudiante.', file: 'uso-de-ia.txt' },
@@ -200,10 +201,11 @@ onBeforeUnmount(() => clearTimeout(keyMessageTimer));
     <span class="eyebrow">Actividades</span>
     <h2 id="ai-settings-title">Comportamiento del motor de IA</h2>
     <p>Define cómo debe comportarse la IA en cada uno de los cinco puntos. Escribe las instrucciones en texto plano o carga un archivo .txt para ese punto.</p>
-    <p v-if="loading" class="ai-progress" role="status" aria-live="polite">
-      <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
-      Cargando configuración…
-    </p>
+    <PageLoader
+      v-if="loading"
+      compact
+      label="Cargando configuración del motor…"
+    />
     <form v-if="!loading && settings" class="panel ai-form ai-key-form" :aria-busy="keySaving" @submit.prevent="saveApiKey">
       <h3>API key del motor de IA</h3>
       <p>Clave actual: <strong>{{ settings.apiKeySource === 'admin' ? 'Configurada desde el panel' : settings.apiKeySource === 'server' ? 'Configurada en el servidor' : 'Sin configurar' }}</strong></p>

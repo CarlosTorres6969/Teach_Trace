@@ -8,6 +8,7 @@ import { homeForRole } from './role-home';
 import { applyTheme, oppositeResolvedTheme, resolvedTheme } from './theme';
 import type { AppNotification, ThemePreference } from './types';
 import { registerPushNotifications } from './usePush';
+import PageLoader from './components/PageLoader.vue';
 
 const router = useRouter();
 const savingTheme = ref(false);
@@ -231,6 +232,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <main v-if="!auth.initialized" class="app-boot-loader">
+    <PageLoader
+      label="Iniciando TeachTrace…"
+      detail="Estamos verificando tu sesión y preparando la plataforma."
+    />
+  </main>
+
   <header v-if="auth.user && !auth.user.mustChangePassword" class="topbar">
     <RouterLink :to="homeForRole(auth.user.role)" class="brand">
       <span class="brand-mark">T</span>
@@ -349,5 +357,5 @@ onBeforeUnmount(() => {
     </div>
   </header>
 
-  <RouterView />
+  <RouterView v-if="auth.initialized" />
 </template>

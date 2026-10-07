@@ -11,6 +11,7 @@ import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { api, ApiError } from '../api';
 import { auth } from '../auth';
 import AdminAiSettings from '../components/AdminAiSettings.vue';
+import PageLoader from '../components/PageLoader.vue';
 
 type AdminTeacher = {
   id: number;
@@ -131,10 +132,12 @@ onBeforeUnmount(() => {
         </span>
       </div>
 
-      <div v-if="loading" class="panel empty-state" role="status" aria-live="polite" aria-busy="true">
-        <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
-        Cargando docentes…
-      </div>
+      <PageLoader
+        v-if="loading"
+        class="empty-state"
+        label="Cargando docentes…"
+        detail="Estamos consultando las cuentas autorizadas."
+      />
 
       <div v-else-if="teachers.length" class="admin-teacher-grid">
         <article v-for="teacher in teachers" :key="teacher.id" class="admin-teacher-card">

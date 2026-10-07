@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
+import PageLoader from '../components/PageLoader.vue';
 import ProjectionWidget from '../components/ProjectionWidget.vue';
 import type { Activity } from '../types';
 
@@ -182,7 +183,11 @@ onMounted(() => loadActivities());
       </div>
     </section>
 
-    <p v-if="loading" class="muted">Cargando actividades…</p>
+    <PageLoader
+      v-if="loading"
+      label="Cargando tus actividades…"
+      detail="Estamos consultando tus entregas, progreso y calificaciones."
+    />
     <p v-else-if="error" class="alert error">{{ error }}</p>
 
     <template v-else>

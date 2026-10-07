@@ -16,6 +16,7 @@ import { Line } from 'vue-chartjs';
 import { accessibilitySettings } from '../accessibility';
 import { api } from '../api';
 import { chartThemePalette } from '../chart-theme';
+import PageLoader from './PageLoader.vue';
 import { resolvedTheme } from '../theme';
 import type { AcademicClass, PerformanceChart } from '../types';
 
@@ -216,7 +217,12 @@ const hasData = computed(
       </div>
     </div>
 
-    <p v-if="loading" class="muted evolution-loading">Cargando gráfico…</p>
+    <PageLoader
+      v-if="loading"
+      compact
+      label="Preparando el gráfico…"
+      detail="Estamos ordenando tus calificaciones cronológicamente."
+    />
     <p v-else-if="error" class="alert error">{{ error }}</p>
     <div v-else-if="hasData && lineChartData" class="evolution-chart-area">
       <Line :data="lineChartData" :options="chartOptions" />

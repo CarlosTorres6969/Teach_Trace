@@ -5,6 +5,7 @@ import readXlsxFile from 'read-excel-file';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
 import { auth } from '../auth';
+import PageLoader from '../components/PageLoader.vue';
 import {
   extractEnrollmentStudents,
   MAX_ENROLLMENT_FILE_SIZE,
@@ -14,6 +15,7 @@ import type { AcademicClass, Activity, Criterion, Rubric } from '../types';
 const classes = ref<AcademicClass[]>([]);
 const activities = ref<Activity[]>([]);
 const rubrics = ref<Rubric[]>([]);
+const loading = ref(true);
 const error = ref('');
 const message = ref('');
 type TeacherSection = 'classes' | 'rubrics';
@@ -135,7 +137,11 @@ async function load() {
       outcomes[activity.id] = (activity.learningOutcomes ?? []).join('\n');
       selectedRubrics[activity.id] = activity.rubric?.id;
     });
-  } catch (cause) { showError(cause); }
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function createClass() {
@@ -456,7 +462,13 @@ onBeforeUnmount(() => {
     <p v-if="message" class="alert success">{{ message }}</p>
     <p v-if="error" class="alert error">{{ error }}</p>
 
-    <template v-if="section === 'classes'">
+    <PageLoader
+      v-if="loading"
+      label="Cargando el panel docente…"
+      detail="Estamos consultando tus clases, actividades y rúbricas."
+    />
+
+    <template v-else-if="section === 'classes'">
       <section class="section-block catalog-section">
         <div class="management-toolbar">
           <div>

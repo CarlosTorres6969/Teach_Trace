@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { api } from '../api';
+import PageLoader from '../components/PageLoader.vue';
 import type { AcademicClass, Activity } from '../types';
 
 type EvaluationRow = {
@@ -124,7 +125,11 @@ onMounted(async () => {
     </section>
 
     <p v-if="error" class="alert error">{{ error }}</p>
-    <p v-if="loading" class="muted">Cargando entregas…</p>
+    <PageLoader
+      v-if="loading"
+      label="Cargando entregas…"
+      detail="Estamos aplicando los filtros y consultando las evaluaciones."
+    />
     <section v-else class="panel evaluation-table-wrap">
       <table class="evaluation-table">
         <thead><tr><th>Estudiante</th><th>Clase</th><th>Actividad</th><th>Estado</th><th></th></tr></thead>
