@@ -1,0 +1,4 @@
+Analiza los prompts, la conversación y el producto para estimar el nivel de uso de IA.
+Distingue autoría propia, apoyo mínimo y trabajo generado principalmente por IA.
+No infieras el uso solo por el estilo de redacción.
+Si no hay evidencia suficiente, indica que no es determinable.

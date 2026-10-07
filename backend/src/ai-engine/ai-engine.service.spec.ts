@@ -1,5 +1,6 @@
 import pdfParse from 'pdf-parse';
 import { AiEngineService } from './ai-engine.service';
+import { AI_STAGES, DEFAULT_STAGE_INSTRUCTIONS } from './ai-stage-instructions';
 
 jest.mock('pdf-parse', () => ({ __esModule: true, default: jest.fn() }));
 
@@ -62,7 +63,7 @@ const successfulResponse = (content: Record<string, unknown>) => new Response(
   { status: 200, headers: { 'content-type': 'application/json' } },
 );
 
-function configuredService(overrides: Record<string, string> = {}, settings?: { getSettings: () => Promise<unknown> }) {
+function configuredService(overrides: Record<string, string> = {}, settings?: { getRuntimeSettings: () => Promise<unknown> }) {
   const values = {
     AI_API_URL: 'https://example.test/v1/chat/completions',
     AI_API_KEY: 'test-key',
@@ -106,20 +107,40 @@ function evidence() {
 describe('AiEngineService', () => {
   const originalFetch = global.fetch;
 
+  it('uses the administrator API key when no server API key is set', async () => {
+    global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
+    const settings = { getRuntimeSettings: async () => ({ enabled: true, effectiveModel: 'admin/model', instructions: 'Reglas.', apiKey: 'test-only-panel-key' }) };
+    const result = await configuredService({ AI_API_KEY: '' }, settings).analyzeEvidence(evidence());
+    expect(result.implemented).toBe(true);
+    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    expect(request.headers.Authorization).toBe('Bearer test-only-panel-key');
+    expect(request.body).not.toContain('test-only-panel-key');
+  });
+
+  it('does not send evidence if the saved key cannot be decrypted', async () => {
+    global.fetch = jest.fn();
+    const settings = { getRuntimeSettings: async () => { throw new Error('invalid ciphertext'); } };
+    expect(await configuredService({}, settings).analyzeEvidence(evidence())).toMatchObject({ implemented: false, reason: expect.stringContaining('API key guardada') });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('uses the administrator model and Markdown instructions in the provider request', async () => {
     global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
-    const settings = { getSettings: async () => ({ enabled: true, effectiveModel: 'admin/model', instructions: '# Política\nContrasta las fuentes.' }) };
+    const settings = { getRuntimeSettings: async () => ({ enabled: true, effectiveModel: 'admin/model', instructions: '# Política\nContrasta las fuentes.', stageInstructions: DEFAULT_STAGE_INSTRUCTIONS }) };
     const result = await configuredService({ AI_MODEL: '' }, settings).analyzeEvidence(evidence());
     expect(result.implemented).toBe(true);
     const request = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
     expect(request.model).toBe('admin/model');
     expect(request.messages[0].content).toContain('# Política\nContrasta las fuentes.');
+    for (const stage of AI_STAGES) {
+      expect(request.messages[0].content).toContain(`COMPORTAMIENTO — ${stage.title}:\n${DEFAULT_STAGE_INSTRUCTIONS[stage.key]}`);
+    }
     expect(request.messages[1].content).toContain('Prioriza decisiones justificadas con evidencia.');
   });
 
   it('does not send evidence to the provider when disabled by the administrator', async () => {
     global.fetch = jest.fn();
-    const settings = { getSettings: async () => ({ enabled: false, effectiveModel: 'admin/model', instructions: 'Política' }) };
+    const settings = { getRuntimeSettings: async () => ({ enabled: false, effectiveModel: 'admin/model', instructions: 'Política' }) };
     expect(await configuredService({}, settings).analyzeEvidence(evidence())).toMatchObject({ implemented: false, reason: expect.stringContaining('desactivó') });
     expect(global.fetch).not.toHaveBeenCalled();
   });

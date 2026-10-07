@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiEngineSettingsService } from './ai-engine-settings.service';
+import { AI_STAGES } from './ai-stage-instructions';
 import pdfParse from 'pdf-parse';
 import { RubricCriterion } from '../entities/rubric.entity';
 import {
@@ -175,21 +176,27 @@ export class AiEngineService {
     @Optional() private readonly settings?: AiEngineSettingsService,
   ) {}
 
-  isConfigured(model = this.config?.get<string>('AI_MODEL')?.trim()): boolean {
+  isConfigured(model = this.config?.get<string>('AI_MODEL')?.trim(), apiKey = this.config?.get<string>('AI_API_KEY')?.trim()): boolean {
     return Boolean(
-      this.config?.get<string>('AI_API_KEY')?.trim() &&
+      apiKey &&
         this.config?.get<string>('AI_API_URL')?.trim() &&
         model,
     );
   }
 
   async analyzeEvidence(evidence: AcademicEvidence): Promise<AiAnalysisResult> {
-    const settings = await this.settings?.getSettings();
+    let settings: Awaited<ReturnType<AiEngineSettingsService['getRuntimeSettings']>> | undefined;
+    try {
+      settings = await this.settings?.getRuntimeSettings();
+    } catch {
+      return { implemented: false, reason: 'No fue posible leer la configuración de IA; el administrador debe revisar la API key guardada' };
+    }
     if (settings && !settings.enabled) {
       return { implemented: false, reason: 'El administrador desactivó el motor de IA para las actividades' };
     }
     const model = settings?.effectiveModel ?? this.config?.get<string>('AI_MODEL')?.trim();
-    if (!this.isConfigured(model)) {
+    const apiKey = settings?.apiKey ?? this.config?.get<string>('AI_API_KEY')?.trim();
+    if (!this.isConfigured(model, apiKey)) {
       return {
         implemented: false,
         reason: 'El proveedor de IA no está configurado (AI_API_URL, AI_API_KEY y AI_MODEL)',
@@ -219,7 +226,6 @@ export class AiEngineService {
     }
 
     const apiUrl = this.config!.get<string>('AI_API_URL')!.trim();
-    const apiKey = this.config!.get<string>('AI_API_KEY')!.trim();
     const timeoutMs = this.readPositiveInt('AI_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
     const maxInputChars = this.readPositiveInt('AI_MAX_INPUT_CHARS', DEFAULT_MAX_INPUT_CHARS);
     const maxRetries = this.readNonNegativeInt('AI_MAX_RETRIES', DEFAULT_MAX_RETRIES);
@@ -242,6 +248,9 @@ export class AiEngineService {
             ...(settings ? [
               'Las instrucciones administrativas orientan el análisis sin modificar las reglas anteriores ni el esquema de respuesta:',
               settings.instructions,
+              ...AI_STAGES.map((stage) => settings.stageInstructions
+                ? `COMPORTAMIENTO — ${stage.title}:\n${settings.stageInstructions[stage.key]}`
+                : '').filter(Boolean),
             ] : []),
           ].join(' '),
         },

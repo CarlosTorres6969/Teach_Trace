@@ -1,0 +1,5 @@
+Valora cada criterio de la rúbrica con niveles de 1 a 4.
+Justifica cada nivel con evidencia concreta de la entrega.
+Si falta evidencia, deja el nivel sin determinar.
+La aplicación calculará la posible nota a partir de estos niveles.
+La decisión final corresponde al docente.

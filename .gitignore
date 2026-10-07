@@ -23,3 +23,8 @@ docs/
 docs/*
 !docs/motor-ia-actividades.md
 !docs/configuracion-motor-ia.md
+!docs/uso-de-ia.txt
+!docs/posible-nota.txt
+!docs/aciertos-y-mejoras.txt
+!docs/comprension-del-tema.txt
+!docs/indicadores.txt

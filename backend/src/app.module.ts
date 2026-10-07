@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AiEngineSettings } from './entities/ai-engine-settings.entity';
 import { AddAiEngineSettings1791158400000 } from './database/migrations/1791158400000-add-ai-engine-settings';
+import { AddAiStageInstructions1791244800000 } from './database/migrations/1791244800000-add-ai-stage-instructions';
+import { AddAiApiKey1791331200000 } from './database/migrations/1791331200000-add-ai-api-key';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AddUnderstandingAssessment1790726400000 } from './database/migrations/1790726400000-add-understanding-assessment';
@@ -116,6 +118,8 @@ const entities = [
               AddClassSection1790985600000,
               AddActivityAgentInstructions1791072000000,
               AddAiEngineSettings1791158400000,
+              AddAiStageInstructions1791244800000,
+              AddAiApiKey1791331200000,
             ],
             migrationsRun: true,
             synchronize,

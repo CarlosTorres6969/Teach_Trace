@@ -17,7 +17,7 @@ describe('AdminDashboard', () => {
     apiMock.mockReset();
     apiMock.mockImplementation(async (path, options = {}) => {
       if (path === '/admin/ai-engine') {
-        return { markdown: '---\nmodel: default\nenabled: true\n---\nEvalúa con evidencia.', effectiveModel: 'server-model', enabled: true, providerConfigured: true } as never;
+        return { model: 'default', instructions: 'Evalúa con evidencia.', stageInstructions: { aiUsage: 'Uso', suggestedGrade: 'Nota', feedback: 'Comentarios', understanding: 'Comprensión', indicators: 'Indicadores' }, effectiveModel: 'server-model', enabled: true, providerConfigured: true } as never;
       }
       if (path === '/admin/teachers' && !options.method) {
         return [{
@@ -52,8 +52,8 @@ describe('AdminDashboard', () => {
 
     expect(wrapper.text()).toContain('Docente existente');
     await wrapper.get('.page-heading .button').trigger('click');
-    await wrapper.get('input[type="text"]').setValue('Nueva Docente');
-    await wrapper.get('input[type="email"]').setValue('nueva.docente@unah.edu.hn');
+    await wrapper.get('.modal-body input[type="text"]').setValue('Nueva Docente');
+    await wrapper.get('.modal-body input[type="email"]').setValue('nueva.docente@unah.edu.hn');
     await wrapper.get('.modal-body').trigger('submit');
     await flushPromises();
 

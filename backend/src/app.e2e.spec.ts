@@ -7,6 +7,8 @@ import { DataSource } from 'typeorm';
 import { configureApp } from './app.setup';
 import { AuthService } from './auth/auth.service';
 import { Activity, ActivityPhase } from './entities/activity.entity';
+import { AiEngineSettings } from './entities/ai-engine-settings.entity';
+import { AiEngineSettingsService } from './ai-engine/ai-engine-settings.service';
 import { AiDeclaration } from './entities/ai-declaration.entity';
 import { AuthSession } from './entities/auth-session.entity';
 import { AcademicClass } from './entities/class.entity';
@@ -59,6 +61,7 @@ describe('TeachTrace API (integración)', () => {
     aiApiUrl: process.env.AI_API_URL,
     aiApiKey: process.env.AI_API_KEY,
     aiModel: process.env.AI_MODEL,
+    vercelAiSyncEnabled: process.env.VERCEL_AI_SYNC_ENABLED,
     vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
     vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
     vapidSubject: process.env.VAPID_SUBJECT,
@@ -140,6 +143,8 @@ describe('TeachTrace API (integración)', () => {
     process.env.DATABASE_SYNCHRONIZE = 'true';
     process.env.DEMO_SEED = 'true';
     process.env.JWT_SECRET = 'clave-exclusiva-para-pruebas-de-integracion';
+    // Las pruebas nunca deben modificar variables ni desplegar el proyecto real de Vercel.
+    process.env.VERCEL_AI_SYNC_ENABLED = 'false';
     process.env.DOCUMENT_STORAGE_PROVIDER = 'filesystem';
     // Las pruebas de integración deben ser deterministas y no enviar correos,
     // llamar proveedores IA ni publicar notificaciones push reales.
@@ -217,6 +222,7 @@ describe('TeachTrace API (integración)', () => {
     restore('AI_API_URL', previousEnvironment.aiApiUrl);
     restore('AI_API_KEY', previousEnvironment.aiApiKey);
     restore('AI_MODEL', previousEnvironment.aiModel);
+    restore('VERCEL_AI_SYNC_ENABLED', previousEnvironment.vercelAiSyncEnabled);
     restore('VAPID_PUBLIC_KEY', previousEnvironment.vapidPublicKey);
     restore('VAPID_PRIVATE_KEY', previousEnvironment.vapidPrivateKey);
     restore('VAPID_SUBJECT', previousEnvironment.vapidSubject);
@@ -1479,6 +1485,96 @@ describe('TeachTrace API (integración)', () => {
       headers: sessionHeaders(student.sessionCookie),
     });
     expect(asStudent.response.status).toBe(403);
+  });
+
+  it('permite cambiar y restaurar la API key solo al administrador sin devolver secretos', async () => {
+    const path = '/api/admin/ai-engine/api-key';
+    const apiKey = 'test-only-api-key-from-admin-panel';
+    for (const method of ['PUT', 'DELETE']) {
+      expect((await request(path, { method })).response.status).toBe(401);
+      for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
+        expect((await request(path, {
+          method,
+          headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+          ...(method === 'PUT' ? { body: JSON.stringify({ apiKey }) } : {}),
+        })).response.status).toBe(403);
+      }
+    }
+    const headers = { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' };
+    const initial = await request('/api/admin/ai-engine', { headers });
+    const original = initial.body as { stageInstructions: Record<string, string>; apiKeySource: string };
+    const saved = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey }) });
+    expect(saved.response.status).toBe(200);
+    expect(saved.body).toMatchObject({ apiKeyConfigured: true, apiKeySource: 'admin', stageInstructions: original.stageInstructions });
+    for (const response of [saved, await request('/api/admin/ai-engine', { headers })]) {
+      expect(JSON.stringify(response.body)).not.toContain(apiKey);
+      expect(response.body).not.toHaveProperty('apiKey');
+      expect(response.body).not.toHaveProperty('encryptedApiKey');
+    }
+    const stored = await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 });
+    expect(stored.encryptedApiKey).toMatch(/^v1\./);
+    expect(stored.encryptedApiKey).not.toContain(apiKey);
+    expect((await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey).toBe(apiKey);
+    for (const value of ['', '  ', 'key\r\nInjected-header', 'x'.repeat(4097)]) {
+      const invalid = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey: value }) });
+      expect(invalid.response.status).toBe(400);
+    }
+    expect((await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey).toBe(apiKey);
+    const restored = await request(path, { method: 'DELETE', headers });
+    expect(restored.response.status).toBe(200);
+    expect(restored.body).toMatchObject({ apiKeySource: original.apiKeySource, stageInstructions: original.stageInstructions });
+    expect((await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 })).encryptedApiKey).toBeNull();
+  });
+
+  it('protege el reintento de sincronización y no expone credenciales de Vercel', async () => {
+    const path = '/api/admin/ai-engine/api-key/sync';
+    expect((await request(path, { method: 'POST' })).response.status).toBe(401);
+    for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
+      expect((await request(path, { method: 'POST', headers: sessionHeaders(cookie) })).response.status).toBe(403);
+    }
+    const headers = { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' };
+    const empty = await request(path, { method: 'POST', headers });
+    expect(empty.response.status).toBe(400);
+    const apiKey = 'test-only-vercel-sync-key';
+    const saved = await request('/api/admin/ai-engine/api-key', { method: 'PUT', headers, body: JSON.stringify({ apiKey }) });
+    expect(saved.response.status).toBe(200);
+    const retried = await request(path, { method: 'POST', headers });
+    expect(retried.response.status).toBe(201);
+    expect(retried.body).toMatchObject({ vercelSyncConfigured: false, vercelSync: { status: 'not_configured' } });
+    expect(JSON.stringify(retried.body)).not.toContain(apiKey);
+    expect(retried.body).not.toHaveProperty('VERCEL_API_TOKEN');
+    expect(retried.body).not.toHaveProperty('VERCEL_AI_DEPLOY_HOOK_URL');
+    await request('/api/admin/ai-engine/api-key', { method: 'DELETE', headers });
+  });
+
+  it('guarda las instrucciones de los cinco puntos solo para administradores', async () => {
+    const path = '/api/admin/ai-engine/instructions';
+    expect((await request(path, { method: 'PUT' })).response.status).toBe(401);
+    for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
+      expect((await request(path, { method: 'PUT', headers: sessionHeaders(cookie) })).response.status).toBe(403);
+    }
+    const headers = { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' };
+    const original = await request('/api/admin/ai-engine', { headers });
+    const previous = original.body as { model: string; enabled: boolean; instructions: string; stageInstructions: Record<string, string> };
+    const input = {
+      model: previous.model,
+      enabled: previous.enabled,
+      instructions: previous.instructions,
+      stageInstructions: { ...previous.stageInstructions, understanding: 'Explica las relaciones entre conceptos con evidencia.' },
+    };
+    const saved = await request(path, { method: 'PUT', headers, body: JSON.stringify(input) });
+    expect(saved.response.status).toBe(200);
+    expect(saved.body).toMatchObject({ stageInstructions: input.stageInstructions });
+    const reloaded = await request('/api/admin/ai-engine', { headers });
+    expect(reloaded.body).toMatchObject({ stageInstructions: input.stageInstructions });
+    for (const stageInstructions of [{ ...input.stageInstructions, feedback: '   ' }, { ...input.stageInstructions, indicators: undefined }, { ...input.stageInstructions, extra: 'No permitido' }]) {
+      const invalid = await request(path, { method: 'PUT', headers, body: JSON.stringify({ ...input, stageInstructions }) });
+      expect(invalid.response.status).toBe(400);
+    }
+    const afterInvalid = await request('/api/admin/ai-engine', { headers });
+    expect(afterInvalid.body).toMatchObject({ stageInstructions: input.stageInstructions });
+    const restored = await request(path, { method: 'PUT', headers, body: JSON.stringify({ ...input, stageInstructions: previous.stageInstructions }) });
+    expect(restored.response.status).toBe(200);
   });
 
   it('protege y persiste la configuración Markdown del motor de IA', async () => {
