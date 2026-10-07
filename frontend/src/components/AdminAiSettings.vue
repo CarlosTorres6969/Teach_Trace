@@ -192,7 +192,7 @@ onMounted(load);
     <form v-if="!loading && settings" class="panel ai-form ai-instructions-form" @submit.prevent="save">
       <p class="ai-status">
         Estado guardado: <strong>{{ settings.enabled ? 'Activado' : 'Desactivado' }}</strong>
-        · Modelo: <strong>{{ settings.effectiveModel || 'Sin configurar' }}</strong>
+        · Modelo: <strong>{{ settings.model }}</strong>
       </p>
       <p v-if="!settings.providerConfigured" class="alert warning">Configura la API key en este panel y la URL del proveedor en el servidor para usar el motor de IA.</p>
       <label>Modelo de IA<input v-model.trim="form.model" type="text" maxlength="200" required :disabled="saving || keySaving" aria-describedby="ai-model-help" /></label>
