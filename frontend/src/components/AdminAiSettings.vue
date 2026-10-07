@@ -40,7 +40,7 @@ const dirty = computed(() => settings.value && (
 ));
 
 function setForm(value: Settings) {
-  form.model = value.model;
+  form.model = 'default';
   form.enabled = value.enabled;
   form.instructions = value.instructions;
   form.stageInstructions = { ...value.stageInstructions };
@@ -190,18 +190,7 @@ onMounted(load);
       <p v-if="keyWarning" class="alert warning" role="status">{{ keyWarning }}</p>
     </form>
     <form v-if="!loading && settings" class="panel ai-form ai-instructions-form" @submit.prevent="save">
-      <p class="ai-status">
-        Estado guardado: <strong>{{ settings.enabled ? 'Activado' : 'Desactivado' }}</strong>
-        · Modelo: <strong>{{ settings.model }}</strong>
-      </p>
       <p v-if="!settings.providerConfigured" class="alert warning">Configura la API key en este panel y la URL del proveedor en el servidor para usar el motor de IA.</p>
-      <label>Modelo de IA<input v-model.trim="form.model" type="text" maxlength="200" required :disabled="saving || keySaving" aria-describedby="ai-model-help" /></label>
-      <small id="ai-model-help">Usa default para el modelo del servidor, o el identificador de un modelo compatible con tu proveedor.</small>
-      <label class="ai-toggle"><input v-model="form.enabled" type="checkbox" :disabled="saving || keySaving" /> Activar análisis de IA para las actividades</label>
-      <details>
-        <summary>Instrucciones generales</summary>
-        <label>Se aplican a todos los puntos<textarea v-model="form.instructions" rows="4" maxlength="19500" :disabled="saving || keySaving" required /></label>
-      </details>
       <fieldset v-for="(stage, index) in stages" :key="stage.key" class="panel ai-stage" :disabled="saving || keySaving" :data-stage="stage.key">
         <legend>{{ index + 1 }}. {{ stage.title }}</legend>
         <p>{{ stage.description }}</p>
@@ -231,11 +220,8 @@ onMounted(load);
 .ai-form label { display: grid; gap: .5rem; }
 .ai-form textarea { width: 100%; min-width: 0; font-family: ui-monospace, monospace; line-height: 1.5; resize: vertical; }
 .ai-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; }
-.ai-status { overflow-wrap: anywhere; }
 .ai-stage { display: grid; gap: 1rem; min-width: 0; }
 .ai-stage legend { padding: 0 .5rem; font-weight: 700; }
-.ai-toggle { display: flex !important; align-items: center; }
-.ai-toggle input { width: auto; }
 .ai-file-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
 .ai-file-actions input { max-width: 100%; }
 summary { cursor: pointer; margin-bottom: .75rem; }

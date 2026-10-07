@@ -18,7 +18,7 @@ describe('AdminAiSettings', () => {
   it('loads the saved policy and applies edits only when saved', async () => {
     const wrapper = mount(AdminAiSettings);
     await flushPromises();
-    expect(wrapper.get('.ai-status').text()).toContain('Modelo: default');
+    expect((wrapper.get('#instructions-aiUsage').element as HTMLTextAreaElement).value).toBe(stageInstructions.aiUsage);
     expect(wrapper.findAll('fieldset')).toHaveLength(5);
     const updated = 'Comprueba las fuentes antes de estimar el uso de IA.';
     await wrapper.get('#instructions-aiUsage').setValue(updated);
@@ -41,7 +41,6 @@ describe('AdminAiSettings', () => {
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toContain('No se pudo guardar');
     expect((wrapper.get('#instructions-understanding').element as HTMLTextAreaElement).value).toBe('Explica los vacíos de comprensión.');
-    expect(wrapper.get('.ai-status').text()).toContain('Modelo: default');
   });
 
   it('imports plain text only into its selected point without saving automatically', async () => {

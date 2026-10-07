@@ -10,7 +10,7 @@ En el panel de administración, la sección **Actividades → Comportamiento del
 
 Los archivos de esta carpeta sirven como ejemplos. No necesitan encabezados, campos de configuración ni sintaxis Markdown. Cada texto admite hasta 5000 caracteres. Cargar un archivo solo cambia el punto seleccionado; pulsa **Guardar instrucciones** para aplicar los cambios.
 
-El modelo y la activación se controlan mediante campos del panel. Las instrucciones generales anteriores se conservan y pueden editarse como texto plano en el apartado **Instrucciones generales**. Las instrucciones de cada punto se envían al motor con su nombre y guían la respuesta correspondiente en el mismo análisis. La posible nota sigue calculándose a partir de los niveles sugeridos por criterio. Las instrucciones de indicadores orientan las justificaciones y comentarios de los criterios aplicables; no crean nuevas métricas numéricas.
+El panel utiliza el modelo `default`, que toma `AI_MODEL` del servidor. La activación y las instrucciones generales se conservan desde la configuración guardada. Las instrucciones de cada punto se envían al motor con su nombre y guían la respuesta correspondiente en el mismo análisis. La posible nota sigue calculándose a partir de los niveles sugeridos por criterio. Las instrucciones de indicadores orientan las justificaciones y comentarios de los criterios aplicables; no crean nuevas métricas numéricas.
 
 La configuración se guarda en la base de datos y solo administradores pueden cambiarla. Afecta a próximos análisis, sin modificar resultados anteriores. La migración `1791244800000-add-ai-stage-instructions` incorpora los cinco textos para PostgreSQL; SQLite usa la sincronización existente.
 
