@@ -3,11 +3,14 @@ import { Repository } from 'typeorm';
 import { AiEngineSettings } from '../entities/ai-engine-settings.entity';
 import { AiEngineSettingsService, DEFAULT_AI_MARKDOWN, parseAiMarkdown } from './ai-engine-settings.service';
 import { DEFAULT_STAGE_INSTRUCTIONS } from './ai-stage-instructions';
+import { AiApiKeyValidatorService, normalizeAiApiKey } from './ai-api-key-validator.service';
+
+const keyValidator = { validate: jest.fn(async (value: string) => normalizeAiApiKey(value)) };
 
 describe('AiEngineSettingsService', () => {
   const repository = { findOneBy: jest.fn(), create: jest.fn((value) => value), save: jest.fn() };
   const config = new ConfigService({ AI_MODEL: 'server-model', AI_API_URL: 'https://example.test', AI_API_KEY: 'secret' });
-  const service = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config);
+  const service = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -68,9 +71,13 @@ describe('AI API key storage', () => {
     save: jest.fn(async (value) => { row = { ...row, ...value }; return row; }),
   };
   const config = new ConfigService({ AI_API_KEY: 'test-only-server-key', AI_API_URL: 'https://example.test', JWT_SECRET: jwtSecret, AI_SETTINGS_ENCRYPTION_KEY: '' });
-  const service = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config);
+  const service = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService);
 
-  beforeEach(() => { row = null; jest.clearAllMocks(); });
+  beforeEach(() => {
+    row = null;
+    jest.clearAllMocks();
+    keyValidator.validate.mockReset().mockImplementation(async (value: string) => normalizeAiApiKey(value));
+  });
 
   it('encrypts the key and only decrypts it for the engine across service instances', async () => {
     const result = await service.saveApiKey(newKey);
@@ -80,7 +87,7 @@ describe('AI API key storage', () => {
     expect(result).not.toHaveProperty('encryptedApiKey');
     expect(row!.encryptedApiKey).toMatch(/^v1\./);
     expect(row!.encryptedApiKey).not.toContain(newKey);
-    const nextInstance = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config);
+    const nextInstance = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService);
     expect((await nextInstance.getRuntimeSettings()).apiKey).toBe(newKey);
     const previousCiphertext = row!.encryptedApiKey;
     await nextInstance.saveApiKey(newKey);
@@ -112,7 +119,7 @@ describe('AI API key storage', () => {
   });
 
   it('requires a server encryption secret and never stores plaintext as a fallback', async () => {
-    const unconfigured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, new ConfigService({ JWT_SECRET: '', AI_SETTINGS_ENCRYPTION_KEY: '' }));
+    const unconfigured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, new ConfigService({ JWT_SECRET: '', AI_SETTINGS_ENCRYPTION_KEY: '' }), keyValidator as unknown as AiApiKeyValidatorService);
     await expect(unconfigured.saveApiKey(newKey)).rejects.toThrow('secreto de cifrado');
     expect(repository.save).not.toHaveBeenCalled();
   });
@@ -131,12 +138,45 @@ describe('AI API key storage', () => {
       return { status: 'redeploy_requested', message: 'Solicitud enviada a Vercel.' };
     });
     const integration = { isConfigured: () => true, synchronize };
-    const configured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, integration as never);
+    const configured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService, integration as never);
     const result = await configured.saveApiKey(newKey);
     expect(result).toMatchObject({ vercelSyncConfigured: true, vercelSync: { status: 'redeploy_requested' } });
     await configured.retryVercelSync();
     expect(synchronize).toHaveBeenCalledTimes(2);
     expect(await configured.getSettings()).not.toHaveProperty('vercelSync');
     expect(JSON.stringify(result)).not.toContain(newKey);
+  });
+
+  it('preserves the existing key and never synchronizes when provider verification fails', async () => {
+    await service.saveApiKey(newKey);
+    const ciphertext = row!.encryptedApiKey;
+    repository.save.mockClear();
+    const integration = { isConfigured: () => true, synchronize: jest.fn() };
+    const configured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService, integration as never);
+    keyValidator.validate.mockRejectedValue(new Error('La API key no es válida'));
+    await expect(configured.saveApiKey('test-only-invalid-replacement')).rejects.toThrow('no es válida');
+    await expect(configured.retryVercelSync()).rejects.toThrow('no es válida');
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(integration.synchronize).not.toHaveBeenCalled();
+    expect(row!.encryptedApiKey).toBe(ciphertext);
+    expect((await configured.getRuntimeSettings()).apiKey).toBe(newKey);
+  });
+
+  it('waits for provider approval before storing or synchronizing a replacement', async () => {
+    await service.saveApiKey(newKey);
+    const ciphertext = row!.encryptedApiKey;
+    repository.save.mockClear();
+    let approve!: (key: string) => void;
+    keyValidator.validate.mockReturnValue(new Promise<string>((resolve) => { approve = resolve; }));
+    const integration = { isConfigured: () => true, synchronize: jest.fn().mockResolvedValue({ status: 'redeploy_requested' }) };
+    const configured = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, config, keyValidator as unknown as AiApiKeyValidatorService, integration as never);
+    const saving = configured.saveApiKey('test-only-replacement-key');
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(integration.synchronize).not.toHaveBeenCalled();
+    expect(row!.encryptedApiKey).toBe(ciphertext);
+    approve('test-only-replacement-key');
+    await saving;
+    expect(integration.synchronize).toHaveBeenCalledWith('test-only-replacement-key');
+    expect((await configured.getRuntimeSettings()).apiKey).toBe('test-only-replacement-key');
   });
 });

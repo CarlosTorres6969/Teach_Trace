@@ -81,6 +81,26 @@ describe('TeachTrace API (integración)', () => {
     return { response, body };
   }
 
+  async function withKeyProvider(run: (provider: jest.Mock) => Promise<void>) {
+    const config = app.get(ConfigService);
+    const previousUrl = config.get<string>('AI_API_URL');
+    config.set('AI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+    const originalFetch = global.fetch;
+    const provider = jest.fn().mockImplementation(async () => new Response(JSON.stringify({ models: [{ name: 'models/test-model' }] })));
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return url === 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1'
+        ? provider(input, init)
+        : originalFetch(input, init);
+    });
+    try {
+      await run(provider);
+    } finally {
+      fetchSpy.mockRestore();
+      config.set('AI_API_URL', previousUrl ?? '');
+    }
+  }
+
   async function request(path: string, init: RequestInit = {}) {
     const result = await requestRaw(path, init);
     // Las pruebas preexistentes crean actividades auxiliares para otros dominios.
@@ -1487,7 +1507,7 @@ describe('TeachTrace API (integración)', () => {
     expect(asStudent.response.status).toBe(403);
   });
 
-  it('permite cambiar y restaurar la API key solo al administrador sin devolver secretos', async () => {
+  it('permite cambiar y restaurar la API key solo al administrador sin devolver secretos', async () => withKeyProvider(async (provider) => {
     const path = '/api/admin/ai-engine/api-key';
     const apiKey = 'test-only-api-key-from-admin-panel';
     for (const method of ['PUT', 'DELETE']) {
@@ -1515,18 +1535,27 @@ describe('TeachTrace API (integración)', () => {
     expect(stored.encryptedApiKey).toMatch(/^v1\./);
     expect(stored.encryptedApiKey).not.toContain(apiKey);
     expect((await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey).toBe(apiKey);
-    for (const value of ['', '  ', 'key\r\nInjected-header', 'x'.repeat(4097)]) {
+    const checksBeforeInvalidFormat = provider.mock.calls.length;
+    for (const value of ['', '  ', 'cualquiercosa', 'key\r\nInjected-header', 'x'.repeat(4097), 123]) {
       const invalid = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey: value }) });
       expect(invalid.response.status).toBe(400);
     }
+    expect(provider).toHaveBeenCalledTimes(checksBeforeInvalidFormat);
+    const rejectedKey = 'test-only-invented-key-long-enough';
+    provider.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: rejectedKey } }), { status: 400 }));
+    const rejected = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey: rejectedKey }) });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body).toMatchObject({ message: expect.stringContaining('no es válida') });
+    expect(JSON.stringify(rejected.body)).not.toContain(rejectedKey);
+    expect((await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 })).encryptedApiKey).toBe(stored.encryptedApiKey);
     expect((await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey).toBe(apiKey);
     const restored = await request(path, { method: 'DELETE', headers });
     expect(restored.response.status).toBe(200);
     expect(restored.body).toMatchObject({ apiKeySource: original.apiKeySource, stageInstructions: original.stageInstructions });
     expect((await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 })).encryptedApiKey).toBeNull();
-  });
+  }));
 
-  it('protege el reintento de sincronización y no expone credenciales de Vercel', async () => {
+  it('protege el reintento de sincronización y no expone credenciales de Vercel', async () => withKeyProvider(async () => {
     const path = '/api/admin/ai-engine/api-key/sync';
     expect((await request(path, { method: 'POST' })).response.status).toBe(401);
     for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
@@ -1545,7 +1574,7 @@ describe('TeachTrace API (integración)', () => {
     expect(retried.body).not.toHaveProperty('VERCEL_API_TOKEN');
     expect(retried.body).not.toHaveProperty('VERCEL_AI_DEPLOY_HOOK_URL');
     await request('/api/admin/ai-engine/api-key', { method: 'DELETE', headers });
-  });
+  }));
 
   it('guarda las instrucciones de los cinco puntos solo para administradores', async () => {
     const path = '/api/admin/ai-engine/instructions';

@@ -20,7 +20,7 @@ En **API key del motor de IA**, escribe la nueva clave y pulsa **Guardar API key
 
 ## Actualización automática de la variable en Vercel
 
-Al guardar la API key, el backend primero la guarda cifrada para aplicarla inmediatamente. Después actualiza `AI_API_KEY` del entorno **Production** del proyecto backend mediante la API oficial de Vercel y solicita un despliegue con su Deploy Hook. El panel distingue entre variable actualizada y despliegue solicitado; no indica que el despliegue terminó cuando todavía está pendiente.
+Al guardar la API key, el backend primero la guarda cifrada para aplicarla inmediatamente. Después actualiza `AI_API_KEY` del entorno **Production** del proyecto backend mediante la API oficial de Vercel y solicita un despliegue con su Deploy Hook. El panel muestra un indicador de carga durante la operación y una confirmación breve de guardado; esa confirmación se refiere a la clave guardada, sin afirmar que el despliegue haya terminado.
 
 Configura una vez estas variables en el proyecto **teach-trace-backend**, sin prefijos `VITE_` y sin ponerlas en el frontend:
 
@@ -34,15 +34,19 @@ VERCEL_AI_DEPLOY_HOOK_URL=<deploy-hook-del-backend>
 
 El proyecto backend debe estar conectado a su repositorio Git. En Vercel, abre **Settings → Git → Deploy Hooks** y crea el hook asociado a la rama de producción. El hook despliega el último commit de esa rama: asegúrate de que sea la rama que publicas en producción. El backend verifica que el hook pertenece al mismo proyecto configurado y solo envía la nueva clave a la API oficial de Vercel. No modifica variables de Preview ni del proyecto frontend. La integración no se ejecuta desde despliegues Preview.
 
-Haz un despliegue inicial para aplicar esta configuración y el código del panel. A partir de entonces, **Guardar API key** actualiza la variable y solicita el despliegue automáticamente. Si falta la configuración, el panel muestra que la clave se guardó solo en la aplicación. Si Vercel falla, muestra qué paso quedó sin confirmar y ofrece **Reintentar sincronización con Vercel**, usando la clave cifrada ya guardada. Cada operación espera hasta diez segundos; no reintenta despliegues por su cuenta tras un timeout.
+Haz un despliegue inicial para aplicar esta configuración y el código del panel. A partir de entonces, **Guardar API key** actualiza la variable y solicita el despliegue automáticamente. Si falta la configuración, el panel explica que la clave se guardó y la actualización automática no está disponible. Si falla la actualización automática, muestra un mensaje de error y ofrece **Reintentar actualización**, usando la clave cifrada ya guardada. El reintento aparece únicamente tras un fallo. Cada operación espera hasta diez segundos; no reintenta despliegues por su cuenta tras un timeout.
 
-El token y el hook permanecen exclusivamente en el servidor y no se devuelven al navegador. Puedes revisar el avance del despliegue en Vercel. El respaldo `AI_API_KEY` del servidor queda actualizado cuando termina el nuevo despliegue; **Usar clave del servidor** utilizará ese valor actualizado, no la clave anterior a la sincronización.
+El token y el hook permanecen exclusivamente en el servidor y no se devuelven al navegador. Puedes revisar el avance del despliegue en Vercel. El respaldo `AI_API_KEY` del servidor queda actualizado cuando termina el nuevo despliegue.
 
 Referencias oficiales: [actualizar variables con upsert](https://vercel.com/docs/rest-api/projects/create-one-or-more-environment-variables), [crear y ejecutar Deploy Hooks](https://vercel.com/docs/deploy-hooks) y [aplicar cambios de variables mediante un nuevo despliegue](https://vercel.com/docs/deployments/managing-deployments).
 
-**Usar clave del servidor** elimina la clave cifrada del panel y vuelve a usar `AI_API_KEY` del despliegue actual. Esta acción no modifica la variable en Vercel. Si tampoco hay clave en el servidor, los nuevos análisis requieren revisión manual.
+El motor utiliza la última clave guardada en el panel. Los errores de esa clave se gestionan como fallos del análisis y requieren revisión manual; no provocan que el motor vuelva automáticamente a una clave anterior. `AI_API_KEY` del servidor se utiliza cuando todavía no hay una clave guardada desde el panel.
 
-El servidor puede definir un secreto estable `AI_SETTINGS_ENCRYPTION_KEY` de al menos 32 caracteres. Si no está definido, se usa `JWT_SECRET` para derivar la clave de cifrado. Si cambia el secreto usado para cifrar, el administrador debe volver a guardar la API key. La URL del proveedor continúa en `AI_API_URL`. Guardar comprueba el formato de la clave; no realiza una llamada al proveedor para verificarla.
+El servidor puede definir un secreto estable `AI_SETTINGS_ENCRYPTION_KEY` de al menos 32 caracteres. Si no está definido, se usa `JWT_SECRET` para derivar la clave de cifrado. Si cambia el secreto usado para cifrar, el administrador debe volver a guardar la API key. La URL del proveedor continúa en `AI_API_URL`.
+
+Antes de guardar una API key, el servidor exige entre 20 y 4096 caracteres imprimibles sin espacios interiores y comprueba que Gemini la reconoce mediante una consulta autenticada a `models.list`, con un límite de diez segundos. Se admiten las claves estándar y las nuevas claves de autorización; el prefijo por sí solo no demuestra su validez. Si la clave es inválida, está revocada, carece de permisos o no puede verificarse, se conserva la clave actual y no se solicita ninguna actualización automática. El reintento también verifica la clave guardada antes de enviarla. El panel muestra un indicador de verificación y un mensaje de error cuando falla.
+
+La comprobación no genera contenido ni garantiza saldo o cuota para futuros análisis. El validador corresponde al proveedor actual (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`); para cambiar de proveedor hay que implementar su comprobación autenticada antes de admitir nuevas claves. No se aceptan respuestas de endpoints públicos como prueba de validez. Referencias: [claves de Gemini](https://ai.google.dev/gemini-api/docs/api-key) y [consulta de modelos](https://ai.google.dev/api/models).
 
 PostgreSQL incorpora la columna cifrada mediante `1791331200000-add-ai-api-key`; SQLite usa la sincronización existente.
 
@@ -67,6 +71,6 @@ Evalúa con evidencia y respeta la rúbrica de la actividad.
 
 Los cambios se aplican al guardar y afectan a próximos análisis, sin modificar evaluaciones anteriores ni llamadas ya iniciadas. La configuración se conserva en la base de datos, incluso en entornos serverless. El límite es de 20000 caracteres.
 
-Solo administradores pueden consultar o cambiar esta configuración. La API key se configura mediante el campo dedicado del panel o `AI_API_KEY` del servidor. La URL sigue en `AI_API_URL`. No incluyas credenciales en los textos de instrucciones. Guardar valida el formato, pero no comprueba la disponibilidad del modelo en el proveedor.
+Solo administradores pueden consultar o cambiar esta configuración. La API key se configura mediante el campo dedicado del panel o `AI_API_KEY` del servidor. La URL sigue en `AI_API_URL`. No incluyas credenciales en los textos de instrucciones. Guardar el archivo Markdown valida su formato, pero no comprueba la disponibilidad del modelo en el proveedor.
 
 PostgreSQL crea la tabla mediante la migración `1791158400000-add-ai-engine-settings`; SQLite utiliza la sincronización de entidades existente.

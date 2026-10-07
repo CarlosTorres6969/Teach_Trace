@@ -8,7 +8,7 @@ import {
   XIcon,
 } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { auth } from '../auth';
 import AdminAiSettings from '../components/AdminAiSettings.vue';
 
@@ -35,8 +35,8 @@ async function loadTeachers() {
   error.value = '';
   try {
     teachers.value = await api<AdminTeacher[]>('/admin/teachers');
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'No se pudieron cargar los docentes';
+  } catch {
+    error.value = 'No se pudieron cargar los docentes. Inténtalo de nuevo.';
   } finally {
     loading.value = false;
   }
@@ -56,6 +56,7 @@ function closeModal() {
 }
 
 async function createTeacher() {
+  if (saving.value) return;
   error.value = '';
   message.value = '';
   warning.value = '';
@@ -72,10 +73,12 @@ async function createTeacher() {
     if (created.invitationEmailSent) {
       message.value = `Docente ${created.name} creado. La contraseña temporal fue enviada por correo.`;
     } else {
-      warning.value = `Docente ${created.name} creado, pero el correo de invitación no pudo enviarse. Revisa la configuración SMTP.`;
+      warning.value = `Docente ${created.name} creado, pero el correo de invitación no pudo enviarse.`;
     }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'No se pudo crear el docente';
+    error.value = cause instanceof ApiError && cause.status === 409
+      ? 'Ya existe una cuenta con ese correo.'
+      : 'No se pudo crear el docente. Inténtalo de nuevo.';
   } finally {
     saving.value = false;
   }
@@ -112,9 +115,9 @@ onBeforeUnmount(() => {
       </button>
     </section>
 
-    <p v-if="message" class="alert success">{{ message }}</p>
-    <p v-if="warning" class="alert warning">{{ warning }}</p>
-    <p v-if="error && !modalOpen" class="alert error">{{ error }}</p>
+    <p v-if="message" class="alert success" role="status">{{ message }}</p>
+    <p v-if="warning" class="alert warning" role="alert">{{ warning }}</p>
+    <p v-if="error && !modalOpen" class="alert error" role="alert">{{ error }}</p>
 
     <section class="section-block">
       <div class="admin-section-heading">
@@ -128,7 +131,7 @@ onBeforeUnmount(() => {
         </span>
       </div>
 
-      <div v-if="loading" class="panel empty-state">
+      <div v-if="loading" class="panel empty-state" role="status" aria-live="polite" aria-busy="true">
         <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
         Cargando docentes…
       </div>
@@ -157,6 +160,9 @@ onBeforeUnmount(() => {
         </article>
       </div>
 
+      <div v-else-if="error" class="panel empty-state">
+        <button class="button secondary" type="button" @click="loadTeachers">Reintentar carga</button>
+      </div>
       <div v-else class="panel empty-state">
         <UsersRoundIcon class="admin-empty-icon" aria-hidden="true" />
         <h3>Aún no hay docentes registrados</h3>
@@ -183,19 +189,19 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
-        <form class="modal-body" @submit.prevent="createTeacher">
+        <form class="modal-body" :aria-busy="saving" @submit.prevent="createTeacher">
           <label>
             Nombre completo
-            <input v-model.trim="form.name" type="text" minlength="2" maxlength="120" autocomplete="name" required />
+            <input v-model.trim="form.name" type="text" minlength="2" maxlength="120" autocomplete="name" :disabled="saving" required />
           </label>
           <label>
             Correo institucional
-            <input v-model.trim="form.email" type="email" maxlength="254" autocomplete="email" required />
+            <input v-model.trim="form.email" type="email" maxlength="254" autocomplete="email" :disabled="saving" required />
           </label>
-          <p v-if="error" class="alert error">{{ error }}</p>
+          <p v-if="error" class="alert error" role="alert">{{ error }}</p>
           <div class="modal-actions">
             <button class="button secondary" type="button" :disabled="saving" @click="closeModal">Cancelar</button>
-            <button class="button primary" type="submit" :disabled="saving">
+            <button class="button primary" type="submit" :disabled="saving" :aria-busy="saving">
               <LoaderCircleIcon v-if="saving" class="ui-icon icon-spin" aria-hidden="true" />
               <UserPlusIcon v-else class="ui-icon" aria-hidden="true" />
               {{ saving ? 'Creando…' : 'Crear docente' }}

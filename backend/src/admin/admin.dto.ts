@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDefined, IsEmail, IsObject, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsBoolean, IsDefined, IsEmail, IsObject, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { API_KEY_FORMAT_MESSAGE } from '../ai-engine/ai-api-key-validator.service';
 
 export class AiStageInstructionsDto {
   @IsString() @MinLength(1) @MaxLength(5000)
@@ -20,9 +21,8 @@ export class AiStageInstructionsDto {
 
 export class UpdateAiApiKeyDto {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
-  @IsString()
-  @MinLength(1)
-  @MaxLength(4096)
+  @IsString({ message: API_KEY_FORMAT_MESSAGE })
+  @Matches(/^[\x21-\x7e]{20,4096}$/, { message: API_KEY_FORMAT_MESSAGE })
   apiKey: string;
 }
 

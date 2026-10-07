@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { api } from '../api';
+import { LoaderCircleIcon } from '@lucide/vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { api, ApiError } from '../api';
 
 const stages = [
   { key: 'aiUsage', title: 'Evaluación del uso de IA', description: 'Cómo debe analizar el uso de IA del estudiante.', file: 'uso-de-ia.txt' },
@@ -30,10 +31,14 @@ const saving = ref(false);
 const error = ref('');
 const message = ref('');
 const apiKey = ref('');
-const keySaving = ref(false);
+const keyOperation = ref<'save' | 'retry' | null>(null);
+const keySaving = computed(() => keyOperation.value !== null);
+const importingStage = ref<StageKey | null>(null);
+const busy = computed(() => saving.value || keySaving.value || importingStage.value !== null);
 const keyError = ref('');
 const keyMessage = ref('');
-const keyWarning = ref('');
+const keyRetryNeeded = ref(false);
+let keyMessageTimer: ReturnType<typeof setTimeout> | undefined;
 const dirty = computed(() => settings.value && (
   form.model !== settings.value.model || form.enabled !== settings.value.enabled || form.instructions !== settings.value.instructions ||
   stages.some((stage) => form.stageInstructions[stage.key] !== settings.value!.stageInstructions[stage.key])
@@ -47,13 +52,14 @@ function setForm(value: Settings) {
 }
 
 async function load() {
+  if (busy.value) return;
   loading.value = true;
   error.value = '';
   try {
     settings.value = await api<Settings>('/admin/ai-engine');
     setForm(settings.value);
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'No se pudo cargar la configuración';
+  } catch {
+    error.value = 'No se pudo cargar la configuración. Inténtalo de nuevo.';
   } finally {
     loading.value = false;
   }
@@ -62,13 +68,15 @@ async function load() {
 async function importFile(event: Event, key: StageKey) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (!file) return;
+  if (!file || busy.value) return;
+  importingStage.value = key;
   error.value = '';
   message.value = '';
   try {
     if (!/\.txt$/i.test(file.name)) throw new Error('Selecciona un archivo .txt de texto plano');
     if (file.size > 20_000) throw new Error('El archivo es demasiado grande');
-    const content = (await file.text()).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+    const text = await file.text().catch(() => { throw new Error('No se pudo leer el archivo. Inténtalo de nuevo.'); });
+    const content = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
     if (!content.trim() || content.includes('\u0000')) throw new Error('El archivo debe contener instrucciones en texto plano');
     if (content.length > 5_000) throw new Error('Cada punto admite hasta 5000 caracteres');
     form.stageInstructions[key] = content;
@@ -77,19 +85,30 @@ async function importFile(event: Event, key: StageKey) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo leer el archivo';
   } finally {
     input.value = '';
+    importingStage.value = null;
   }
 }
 
 function download(stage: typeof stages[number]) {
-  const url = URL.createObjectURL(new Blob([form.stageInstructions[stage.key]], { type: 'text/plain;charset=utf-8' }));
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = stage.file;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (busy.value) return;
+  error.value = '';
+  try {
+    const url = URL.createObjectURL(new Blob([form.stageInstructions[stage.key]], { type: 'text/plain;charset=utf-8' }));
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = stage.file;
+      anchor.click();
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  } catch {
+    error.value = 'No se pudo descargar el archivo. Inténtalo de nuevo.';
+  }
 }
 
 async function save() {
+  if (busy.value) return;
   saving.value = true;
   error.value = '';
   message.value = '';
@@ -98,19 +117,22 @@ async function save() {
       method: 'PUT', body: JSON.stringify(form),
     });
     setForm(settings.value);
-    message.value = 'Comportamiento de los cinco puntos guardado. Se aplicará a los próximos análisis de actividades.';
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la configuración';
+    message.value = 'Instrucciones guardadas correctamente.';
+  } catch {
+    error.value = 'No se pudieron guardar las instrucciones. Inténtalo de nuevo.';
   } finally {
     saving.value = false;
   }
 }
 
 async function saveApiKey() {
-  keySaving.value = true;
-  keyError.value = '';
-  keyMessage.value = '';
-  keyWarning.value = '';
+  if (busy.value || !apiKey.value.trim()) return;
+  clearKeyFeedback();
+  if (!/^[\x21-\x7e]{20,4096}$/.test(apiKey.value.trim())) {
+    keyError.value = 'Escribe una API key de entre 20 y 4096 caracteres, sin espacios ni saltos de línea.';
+    return;
+  }
+  keyOperation.value = 'save';
   try {
     settings.value = await api<Settings>('/admin/ai-engine/api-key', {
       method: 'PUT', body: JSON.stringify({ apiKey: apiKey.value.trim() }),
@@ -118,51 +140,59 @@ async function saveApiKey() {
     apiKey.value = '';
     showSyncResult(settings.value);
   } catch (cause) {
-    keyError.value = cause instanceof Error ? cause.message : 'No se pudo actualizar la API key';
+    keyError.value = cause instanceof ApiError && cause.status === 400
+      ? `${cause.message} No se cambió la clave actual.`
+      : cause instanceof ApiError && cause.status === 503
+        ? 'No se pudo verificar la API key. No se cambió la clave actual; inténtalo de nuevo.'
+        : 'No se pudo completar el guardado de la API key. Inténtalo de nuevo.';
   } finally {
-    keySaving.value = false;
+    keyOperation.value = null;
   }
 }
 
+function clearKeyFeedback() {
+  clearTimeout(keyMessageTimer);
+  keyError.value = '';
+  keyMessage.value = '';
+  keyRetryNeeded.value = false;
+}
+
+function showKeySuccess(text: string) {
+  clearKeyFeedback();
+  keyMessage.value = text;
+  keyMessageTimer = setTimeout(() => { keyMessage.value = ''; }, 4_000);
+}
+
 function showSyncResult(value: Settings) {
-  if (value.vercelSync?.status === 'redeploy_requested') keyMessage.value = value.vercelSync.message;
-  else keyWarning.value = value.vercelSync?.message ?? 'API key guardada en la aplicación. No se pudo confirmar su sincronización con Vercel.';
+  if (value.vercelSync?.status === 'redeploy_requested') {
+    showKeySuccess('API key guardada correctamente.');
+    return;
+  }
+  keyRetryNeeded.value = value.vercelSyncConfigured && value.apiKeySource === 'admin';
+  keyError.value = value.vercelSync?.status === 'not_configured'
+    ? 'La clave se guardó, pero la actualización automática no está disponible. Revisa la configuración del servicio.'
+    : 'La clave se guardó, pero la actualización automática quedó pendiente. Reintenta la actualización.';
 }
 
 async function retryVercelSync() {
-  keySaving.value = true;
-  keyError.value = '';
+  if (busy.value || !keyRetryNeeded.value) return;
+  keyOperation.value = 'retry';
+  clearTimeout(keyMessageTimer);
   keyMessage.value = '';
-  keyWarning.value = '';
   try {
     settings.value = await api<Settings>('/admin/ai-engine/api-key/sync', { method: 'POST' });
     showSyncResult(settings.value);
   } catch (cause) {
-    keyError.value = cause instanceof Error ? cause.message : 'No se pudo sincronizar con Vercel';
+    keyError.value = cause instanceof ApiError && cause.status === 400
+      ? cause.message
+      : 'No se pudo completar la actualización automática. Inténtalo de nuevo.';
   } finally {
-    keySaving.value = false;
-  }
-}
-
-async function restoreServerApiKey() {
-  keySaving.value = true;
-  keyError.value = '';
-  keyMessage.value = '';
-  keyWarning.value = '';
-  try {
-    settings.value = await api<Settings>('/admin/ai-engine/api-key', { method: 'DELETE' });
-    apiKey.value = '';
-    keyMessage.value = settings.value.apiKeyConfigured
-      ? 'Se usará la API key del servidor en los próximos análisis.'
-      : 'Clave del panel retirada. Configura una API key para activar el proveedor de IA.';
-  } catch (cause) {
-    keyError.value = cause instanceof Error ? cause.message : 'No se pudo restaurar la clave del servidor';
-  } finally {
-    keySaving.value = false;
+    keyOperation.value = null;
   }
 }
 
 onMounted(load);
+onBeforeUnmount(() => clearTimeout(keyMessageTimer));
 </script>
 
 <template>
@@ -170,28 +200,35 @@ onMounted(load);
     <span class="eyebrow">Actividades</span>
     <h2 id="ai-settings-title">Comportamiento del motor de IA</h2>
     <p>Define cómo debe comportarse la IA en cada uno de los cinco puntos. Escribe las instrucciones en texto plano o carga un archivo .txt para ese punto.</p>
-    <p v-if="loading" role="status">Cargando configuración…</p>
-    <form v-if="!loading && settings" class="panel ai-form ai-key-form" @submit.prevent="saveApiKey">
+    <p v-if="loading" class="ai-progress" role="status" aria-live="polite">
+      <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
+      Cargando configuración…
+    </p>
+    <form v-if="!loading && settings" class="panel ai-form ai-key-form" :aria-busy="keySaving" @submit.prevent="saveApiKey">
       <h3>API key del motor de IA</h3>
       <p>Clave actual: <strong>{{ settings.apiKeySource === 'admin' ? 'Configurada desde el panel' : settings.apiKeySource === 'server' ? 'Configurada en el servidor' : 'Sin configurar' }}</strong></p>
       <label for="ai-api-key">Nueva API key
-        <input id="ai-api-key" v-model="apiKey" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" maxlength="4096" required :disabled="keySaving || saving" aria-describedby="ai-api-key-help" />
+        <input id="ai-api-key" v-model="apiKey" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" minlength="20" maxlength="4096" required :disabled="busy" aria-describedby="ai-api-key-help" @input="clearKeyFeedback" />
       </label>
-      <small id="ai-api-key-help">La clave guardada permanece oculta. Cambiarla no modifica las instrucciones de los cinco puntos.</small>
-      <p v-if="settings.vercelSyncConfigured">Al guardar, AI_API_KEY se actualizará en Vercel y se solicitará un nuevo despliegue del backend automáticamente.</p>
-      <p v-else class="alert warning">La sincronización automática con Vercel aún necesita configurarse en el servidor. Las claves guardadas aquí se aplican a la aplicación.</p>
+      <small id="ai-api-key-help">Mínimo 20 caracteres. Verificaremos la clave antes de aplicarla. La clave guardada permanece oculta. Cambiarla no modifica las instrucciones de los cinco puntos.</small>
       <div class="ai-actions">
-        <button v-if="settings.apiKeySource === 'admin' && settings.vercelSyncConfigured" class="button secondary" type="button" :disabled="keySaving || saving" @click="retryVercelSync">Reintentar sincronización con Vercel</button>
-        <button v-if="settings.apiKeySource === 'admin'" class="button secondary" type="button" :disabled="keySaving || saving" @click="restoreServerApiKey">Usar clave del servidor</button>
-        <button class="button primary" type="submit" :disabled="keySaving || saving || !apiKey.trim()">{{ keySaving ? 'Guardando…' : 'Guardar API key' }}</button>
+        <button class="button primary" type="submit" :disabled="busy || apiKey.trim().length < 20" :aria-busy="keyOperation === 'save'">
+          <LoaderCircleIcon v-if="keyOperation === 'save'" class="ui-icon icon-spin" aria-hidden="true" />
+          {{ keyOperation === 'save' ? 'Verificando y guardando…' : 'Guardar API key' }}
+        </button>
       </div>
-      <p v-if="keyError" class="alert error" role="alert">{{ keyError }}</p>
-      <p v-if="keyMessage" class="alert success" role="status">{{ keyMessage }}</p>
-      <p v-if="keyWarning" class="alert warning" role="status">{{ keyWarning }}</p>
+      <div v-if="keyError" class="alert error ai-key-error" role="alert">
+        <p>{{ keyError }}</p>
+        <button v-if="keyRetryNeeded" class="button secondary" type="button" :disabled="busy" :aria-busy="keyOperation === 'retry'" @click="retryVercelSync">
+          <LoaderCircleIcon v-if="keyOperation === 'retry'" class="ui-icon icon-spin" aria-hidden="true" />
+          {{ keyOperation === 'retry' ? 'Actualizando…' : 'Reintentar actualización' }}
+        </button>
+      </div>
+      <p v-if="keyMessage" class="alert success" role="status" aria-live="polite">{{ keyMessage }}</p>
     </form>
-    <form v-if="!loading && settings" class="panel ai-form ai-instructions-form" @submit.prevent="save">
+    <form v-if="!loading && settings" class="panel ai-form ai-instructions-form" :aria-busy="saving || importingStage !== null" @submit.prevent="save">
       <p v-if="!settings.providerConfigured" class="alert warning">Configura la API key en este panel y la URL del proveedor en el servidor para usar el motor de IA.</p>
-      <fieldset v-for="(stage, index) in stages" :key="stage.key" class="panel ai-stage" :disabled="saving || keySaving" :data-stage="stage.key">
+      <fieldset v-for="(stage, index) in stages" :key="stage.key" class="panel ai-stage" :disabled="busy" :aria-busy="importingStage === stage.key" :data-stage="stage.key">
         <legend>{{ index + 1 }}. {{ stage.title }}</legend>
         <p>{{ stage.description }}</p>
         <label :for="`instructions-${stage.key}`">Instrucciones de comportamiento</label>
@@ -201,10 +238,17 @@ onMounted(load);
           <label>Cargar instrucciones .txt<input type="file" accept=".txt,text/plain" @change="importFile($event, stage.key)" /></label>
           <button class="button secondary" type="button" @click="download(stage)">Descargar .txt</button>
         </div>
+        <p v-if="importingStage === stage.key" class="ai-progress" role="status" aria-live="polite">
+          <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
+          Cargando archivo…
+        </p>
       </fieldset>
       <p class="muted">Las instrucciones complementan la rúbrica y las indicaciones del docente. La posible nota se calcula a partir de los niveles sugeridos por criterio. Los cambios afectan a futuros análisis.</p>
       <div class="ai-actions">
-        <button class="button primary" type="submit" :disabled="saving || keySaving || !dirty">{{ saving ? 'Guardando…' : 'Guardar instrucciones' }}</button>
+        <button class="button primary" type="submit" :disabled="busy || !dirty" :aria-busy="saving">
+          <LoaderCircleIcon v-if="saving" class="ui-icon icon-spin" aria-hidden="true" />
+          {{ saving ? 'Guardando instrucciones…' : 'Guardar instrucciones' }}
+        </button>
       </div>
     </form>
     <p v-if="error" class="alert error" role="alert">{{ error }}</p>
@@ -220,9 +264,10 @@ onMounted(load);
 .ai-form label { display: grid; gap: .5rem; }
 .ai-form textarea { width: 100%; min-width: 0; font-family: ui-monospace, monospace; line-height: 1.5; resize: vertical; }
 .ai-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; }
+.ai-progress { display: flex; align-items: center; gap: .5rem; }
+.ai-key-error { display: grid; gap: .75rem; }
 .ai-stage { display: grid; gap: 1rem; min-width: 0; }
 .ai-stage legend { padding: 0 .5rem; font-weight: 700; }
 .ai-file-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
 .ai-file-actions input { max-width: 100%; }
-summary { cursor: pointer; margin-bottom: .75rem; }
 </style>

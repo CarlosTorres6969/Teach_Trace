@@ -5,10 +5,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiEngineSettings } from '../entities/ai-engine-settings.entity';
 import { AiEngineSettingsService } from './ai-engine-settings.service';
 import { VercelAiSyncService } from './vercel-ai-sync.service';
+import { AiApiKeyValidatorService } from './ai-api-key-validator.service';
 
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([AiEngineSettings])],
-  providers: [AiEngineService, AiEngineSettingsService, VercelAiSyncService],
+  providers: [AiEngineService, AiEngineSettingsService, AiApiKeyValidatorService, VercelAiSyncService],
   exports: [AiEngineService, AiEngineSettingsService],
 })
 export class AiEngineModule {}

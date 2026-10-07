@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { AiEngineSettings } from '../entities/ai-engine-settings.entity';
 import { AI_STAGES, AiStageInstructions, DEFAULT_STAGE_INSTRUCTIONS } from './ai-stage-instructions';
 import { VercelAiSyncResult, VercelAiSyncService } from './vercel-ai-sync.service';
+import { AiApiKeyValidatorService } from './ai-api-key-validator.service';
 
 export const DEFAULT_AI_MARKDOWN = `---
 model: default
@@ -48,6 +49,7 @@ export class AiEngineSettingsService {
   constructor(
     @InjectRepository(AiEngineSettings) private readonly repository: Repository<AiEngineSettings>,
     private readonly config: ConfigService,
+    private readonly keyValidator: AiApiKeyValidatorService,
     @Optional() private readonly vercelSync?: VercelAiSyncService,
   ) {}
 
@@ -81,22 +83,21 @@ export class AiEngineSettingsService {
   }
 
   async saveApiKey(apiKey: string) {
-    if (typeof apiKey !== 'string' || !/^[\x21-\x7e]{1,4096}$/.test(apiKey.trim())) {
-      throw new BadRequestException('Escribe una API key válida, sin espacios ni saltos de línea, de hasta 4096 caracteres');
-    }
+    const verifiedKey = await this.keyValidator.validate(apiKey);
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.encryptionKey(), iv);
-    const encrypted = Buffer.concat([cipher.update(apiKey.trim(), 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([cipher.update(verifiedKey, 'utf8'), cipher.final()]);
     const encryptedApiKey = ['v1', iv.toString('base64'), cipher.getAuthTag().toString('base64'), encrypted.toString('base64')].join('.');
     await this.writeApiKey(encryptedApiKey);
-    const vercelSync = await this.syncWithVercel(apiKey.trim());
+    const vercelSync = await this.syncWithVercel(verifiedKey);
     return { ...await this.getSettings(), vercelSync };
   }
 
   async retryVercelSync() {
     const saved = await this.repository.findOneBy({ id: 1 });
     if (!saved?.encryptedApiKey) throw new BadRequestException('Primero guarda una API key desde el panel');
-    const vercelSync = await this.syncWithVercel(this.decryptApiKey(saved.encryptedApiKey));
+    const apiKey = await this.keyValidator.validate(this.decryptApiKey(saved.encryptedApiKey));
+    const vercelSync = await this.syncWithVercel(apiKey);
     return { ...await this.getSettings(), vercelSync };
   }
 
