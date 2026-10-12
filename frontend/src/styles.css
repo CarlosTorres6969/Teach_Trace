@@ -269,10 +269,24 @@ input:focus, textarea:focus, select:focus { border-color: var(--green); box-shad
 .individual-enrollment { display: grid; }
 .enrollment-loader { display: flex; align-items: center; justify-content: center; gap: .5rem; margin: 0; padding: .7rem .85rem; color: var(--green); background: var(--green-light); border-radius: 9px 3px 9px 3px; font-size: .82rem; font-weight: 700; text-align: center; }
 .enrollment-loader .ui-icon { width: 1.15rem; height: 1.15rem; }
-.criterion-box { border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; }
-.criterion-box legend { padding: 0 .5rem; font-weight: 700; }
+.rubric-builder { gap: 1.25rem; }
+.rubric-example { padding: .8rem 1rem; border: 1px solid #bcd4f0; border-radius: 10px 3px 10px 3px; background: #f4f8fd; }
+.rubric-example summary { display: flex; align-items: center; gap: .45rem; color: var(--green); }
+.rubric-example > div { display: grid; gap: .35rem; margin-top: .75rem; color: var(--muted); font-size: .88rem; }
+.rubric-builder-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.rubric-builder-heading h3, .rubric-builder-heading p { margin: 0; }
+.rubric-builder-heading > span { flex: 0 0 auto; padding: .25rem .65rem; color: var(--green); background: var(--green-light); border-radius: 999px; font-size: .78rem; font-weight: 800; }
+.criterion-box { min-width: 0; border: 1px solid var(--line); border-radius: 12px 3px 12px 3px; padding: 1rem; }
+.criterion-box legend { width: calc(100% - 1rem); max-width: 100%; padding: 0 .5rem; font-weight: 700; }
+.criterion-legend { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.criterion-remove { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .45rem; border: 0; color: var(--danger); background: transparent; cursor: pointer; font: inherit; font-size: .76rem; font-weight: 700; }
+.criterion-remove:hover { text-decoration: underline; }
+.criterion-remove .ui-icon { width: .9rem; height: .9rem; }
 .criterion-box--error { border-color: var(--danger); background: #fff6f5; }
 .criterion-box--error legend { color: var(--danger); }
+.rubric-builder-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.rubric-builder-actions .button { display: inline-flex; align-items: center; gap: .4rem; }
+.rubric-submit { align-self: flex-start; }
 .char-hint { font-size: .75rem; font-weight: 400; text-align: right; }
 .field-error { font-size: .8rem; font-weight: 600; color: var(--danger); }
 details { border-top: 1px solid var(--line); padding: .8rem 0; }
@@ -441,6 +455,7 @@ html.dark .excel-file-picker:focus-within { background: #1b2b42; }
 html.dark .bulk-enrollment-result { color: #cbe4ff; background: #183751; border-color: #315c82; }
 html.dark .bulk-result-stats { background: rgba(8, 18, 31, .55); }
 html.dark .criterion-box--error { background: #3d2025; }
+html.dark .rubric-example { background: #101b2b; border-color: #315c82; }
 html.dark .notification-checkbox input:disabled + span { background: #35618f; border-color: #78a9dc; }
 
 @media (max-width: 780px) {

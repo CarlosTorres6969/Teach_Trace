@@ -12,7 +12,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - `Enrollment`: matrícula activa de un estudiante; la combinación estudiante–clase es única.
 - `Activity`: actividad obligatoriamente asociada a una clase y clasificada como `baseline` o
   `pilot`; registra su fecha de creación y la primera vista de cada estudiante.
-- `Rubric`: siete dimensiones con descriptores para niveles 1–4.
+- `Rubric`: entre uno y veinte criterios con dimensiones y descriptores para niveles 1–4.
 - `Logbook`: bitácora única por estudiante y actividad.
 - `AiDeclaration`: declaración única por estudiante y actividad, con nivel declarado, nivel
   detectado y alerta de discrepancia.
@@ -41,7 +41,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - El resumen de prompts también exige contenido real, admite hasta 10 000 caracteres y aplica la
   misma normalización en JSON y multipart.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
-- Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
+- Una rúbrica recibida por API debe contener entre uno y veinte criterios, con nombres y dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la
   misma actividad, pero no trasladarse implícitamente ni reutilizarse en dos actividades.
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión

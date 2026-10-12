@@ -299,6 +299,87 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(wrapper.find('.class-activities-dashboard').exists()).toBe(true);
   });
 
+  it('construye la rúbrica progresivamente con ejemplos y ayudas de escritura', async () => {
+    routeMock.query = { section: 'rubrics' };
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
+    expect(wrapper.get('.rubric-example').text()).toContain('Sustenta sus ideas con evidencia');
+    expect(wrapper.get('.rubric-builder > label input').attributes('placeholder')).toContain(
+      'Rúbrica para ensayo',
+    );
+    expect(wrapper.get('.criterion-box input').attributes('placeholder')).toContain(
+      'Sustenta sus ideas',
+    );
+    expect(wrapper.get('.criterion-box textarea').attributes('placeholder')).toContain(
+      'No presenta evidencia',
+    );
+
+    await wrapper.get('.rubric-builder-actions button').trigger('click');
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(2);
+    expect(wrapper.findAll('.criterion-remove')).toHaveLength(2);
+
+    await wrapper.findAll('.criterion-remove')[1].trigger('click');
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
+    expect(wrapper.find('.criterion-remove').exists()).toBe(false);
+  });
+
+  it('envía al backend únicamente los criterios agregados por el docente', async () => {
+    routeMock.query = { section: 'rubrics' };
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.get('.rubric-builder-actions button').trigger('click');
+
+    await wrapper.get('.rubric-builder > label input').setValue('Rúbrica breve');
+    const criterionCards = wrapper.findAll('.criterion-box');
+    for (const [index, card] of criterionCards.entries()) {
+      const inputs = card.findAll('input');
+      await inputs[0].setValue(`Criterio ${index + 1}`);
+      await inputs[1].setValue(`Dimensión ${index + 1}`);
+      for (const [levelIndex, descriptor] of card.findAll('textarea').entries()) {
+        await descriptor.setValue(`Descriptor ${index + 1}.${levelIndex + 1}`);
+      }
+    }
+
+    await wrapper.get('.rubric-builder').trigger('submit');
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/rubrics', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Rúbrica breve',
+        criteria: [
+          {
+            name: 'Criterio 1',
+            dimension: 'Dimensión 1',
+            descriptors: {
+              level1: 'Descriptor 1.1',
+              level2: 'Descriptor 1.2',
+              level3: 'Descriptor 1.3',
+              level4: 'Descriptor 1.4',
+            },
+          },
+          {
+            name: 'Criterio 2',
+            dimension: 'Dimensión 2',
+            descriptors: {
+              level1: 'Descriptor 2.1',
+              level2: 'Descriptor 2.2',
+              level3: 'Descriptor 2.3',
+              level4: 'Descriptor 2.4',
+            },
+          },
+        ],
+      }),
+    });
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
+  });
+
   it('confirma la eliminación, llama la API y retira la actividad de la clase', async () => {
     const wrapper = await mountClassDashboard(1);
     const configureButton = wrapper.get('.class-activities-dashboard')

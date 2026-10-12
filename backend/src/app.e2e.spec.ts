@@ -732,13 +732,16 @@ describe('TeachTrace API (integración)', () => {
       ]),
     }));
 
-    const eightCriteria = { name: 'Ocho dimensiones', criteria: [...criteria(), {
-      name: 'Criterio adicional',
-      dimension: 'Dimensión adicional',
-      descriptors: {
-        level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
-      },
-    }] };
+    const tooManyCriteria = {
+      name: 'Demasiados criterios',
+      criteria: Array.from({ length: 21 }, (_, index) => ({
+        name: `Criterio límite ${index + 1}`,
+        dimension: `Dimensión límite ${index + 1}`,
+        descriptors: {
+          level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
+        },
+      })),
+    };
     const duplicateDimension = { name: 'Dimensión duplicada', criteria: criteria() };
     duplicateDimension.criteria[1].dimension = '  DIMENSIÓN QA 1  ';
     const duplicateCriterion = { name: 'Criterio duplicado', criteria: criteria() };
@@ -764,7 +767,7 @@ describe('TeachTrace API (integración)', () => {
       'Nivel no permitido';
 
     for (const invalidInput of [
-      eightCriteria,
+      tooManyCriteria,
       duplicateDimension,
       duplicateCriterion,
       whitespaceOnly,
@@ -1446,7 +1449,7 @@ describe('TeachTrace API (integración)', () => {
     });
   });
 
-  it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
+  it('ejecuta el flujo base con matrícula, rúbrica, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),
     });
@@ -2125,8 +2128,11 @@ describe('TeachTrace API (integración)', () => {
 
   // ─── HU-07 / HU-08: Gestión de criterios, dimensiones y niveles de rúbrica ───
 
-  function buildCriteria(overrides: Partial<{ dimension: string; level1: string }>[] = []) {
-    return Array.from({ length: 7 }, (_, i) => ({
+  function buildCriteria(
+    overrides: Partial<{ dimension: string; level1: string }>[] = [],
+    total = 7,
+  ) {
+    return Array.from({ length: total }, (_, i) => ({
       name: `Criterio ${i + 1}`,
       dimension: overrides[i]?.dimension ?? `Dimensión ${i + 1}`,
       descriptors: {
@@ -2138,7 +2144,7 @@ describe('TeachTrace API (integración)', () => {
     }));
   }
 
-  it('HU-07/08: crea una rúbrica con exactamente siete criterios y sus cuatro niveles', async () => {
+  it('HU-07/08: crea una rúbrica con la cantidad de criterios elegida y cuatro niveles', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2147,14 +2153,14 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica de prueba HU-07/08',
-        criteria: buildCriteria(),
+        criteria: buildCriteria([], 3),
       }),
     });
 
     expect(response.response.status).toBe(201);
     const rubric = response.body as { id: number; name: string; criteria: unknown[] };
     expect(rubric.name).toBe('Rúbrica de prueba HU-07/08');
-    expect(rubric.criteria).toHaveLength(7);
+    expect(rubric.criteria).toHaveLength(3);
     expect(rubric.id).toBeGreaterThan(0);
   });
 
@@ -2167,7 +2173,7 @@ describe('TeachTrace API (integración)', () => {
     const list = response.body as Array<{ name: string; criteria: unknown[] }>;
     const created = list.find((r) => r.name === 'Rúbrica de prueba HU-07/08');
     expect(created).toBeDefined();
-    expect(created?.criteria).toHaveLength(7);
+    expect(created?.criteria).toHaveLength(3);
   });
 
   it('HU-07/08: la rúbrica incluye los descriptores de los cuatro niveles por criterio', async () => {
@@ -2191,7 +2197,7 @@ describe('TeachTrace API (integración)', () => {
     expect(firstCriterion?.descriptors.level4).toBe('Descriptor nivel 4');
   });
 
-  it('HU-07: rechaza una rúbrica con menos de siete criterios', async () => {
+  it('HU-07: rechaza una rúbrica sin criterios', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2200,14 +2206,14 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica incompleta',
-        criteria: buildCriteria().slice(0, 5),
+        criteria: [],
       }),
     });
 
     expect(response.response.status).toBe(400);
   });
 
-  it('HU-07: rechaza una rúbrica con más de siete criterios', async () => {
+  it('HU-07: rechaza una rúbrica con más de veinte criterios', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2216,10 +2222,7 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica excedida',
-        criteria: [
-          ...buildCriteria(),
-          { name: 'Criterio extra', dimension: 'Dimensión extra', descriptors: { level1: 'A', level2: 'B', level3: 'C', level4: 'D' } },
-        ],
+        criteria: buildCriteria([], 21),
       }),
     });
 

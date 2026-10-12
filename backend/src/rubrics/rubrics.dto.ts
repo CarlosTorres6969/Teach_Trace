@@ -19,6 +19,9 @@ import {
 const trimString = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+export const MIN_RUBRIC_CRITERIA = 1;
+export const MAX_RUBRIC_CRITERIA = 20;
+
 @ValidatorConstraint({ name: 'uniqueLevelDescriptors', async: false })
 class UniqueLevelDescriptorsConstraint implements ValidatorConstraintInterface {
   validate(value: unknown) {
@@ -66,8 +69,8 @@ export class CreateRubricDto {
   name: string;
 
   @IsArray()
-  @ArrayMinSize(7)
-  @ArrayMaxSize(7)
+  @ArrayMinSize(MIN_RUBRIC_CRITERIA)
+  @ArrayMaxSize(MAX_RUBRIC_CRITERIA)
   @ArrayUnique(
     (criterion: RubricCriterionDto) =>
       typeof criterion?.name === 'string'

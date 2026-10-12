@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircleIcon } from '@lucide/vue';
+import { LightbulbIcon, LoaderCircleIcon, PlusIcon, Trash2Icon } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import readXlsxFile from 'read-excel-file';
 import { useRoute } from 'vue-router';
@@ -92,38 +92,73 @@ const selectedClassActivities = computed(() =>
         ),
 );
 
-// Errores de validación inline por criterio (índice → mensaje)
-const criterionErrors = ref<Record<number, string>>({});
-
 // Índice de los niveles para iterar en el template
 const LEVELS = [1, 2, 3, 4] as const;
 const DESCRIPTOR_MAX = 1000;
+const MIN_RUBRIC_CRITERIA = 1;
+const MAX_RUBRIC_CRITERIA = 20;
+const LEVEL_PLACEHOLDERS: Record<(typeof LEVELS)[number], string> = {
+  1: 'Ej. No presenta evidencia suficiente del criterio.',
+  2: 'Ej. Presenta evidencia parcial y requiere mejoras importantes.',
+  3: 'Ej. Cumple el criterio de forma clara, con detalles por mejorar.',
+  4: 'Ej. Cumple el criterio de forma completa, clara y fundamentada.',
+};
 
-// Detecta dimensiones duplicadas y devuelve un mapa índice → error
-const duplicateDimensionErrors = computed<Record<number, string>>(() => {
+function duplicateTextErrors(
+  field: 'name' | 'dimension',
+  label: 'criterio' | 'dimensión',
+): Record<number, string> {
+  const article = label === 'dimensión' ? 'La' : 'El';
   const seen = new Map<string, number>();
   const errors: Record<number, string> = {};
-  criteria.value.forEach((c, i) => {
-    const key = c.dimension.trim().toLowerCase();
+  criteria.value.forEach((criterion, index) => {
+    const value = criterion[field].trim();
+    const key = value.toLowerCase();
     if (!key) return;
     if (seen.has(key)) {
-      errors[i] = `La dimensión "${c.dimension.trim()}" ya está usada en el criterio ${(seen.get(key)! + 1)}.`;
-      errors[seen.get(key)!] ??= `La dimensión "${c.dimension.trim()}" está duplicada.`;
+      const firstIndex = seen.get(key)!;
+      errors[index] = `${article} ${label} "${value}" ya está usado en el criterio ${firstIndex + 1}.`;
+      errors[firstIndex] ??= `${article} ${label} "${value}" está duplicado.`;
     } else {
-      seen.set(key, i);
+      seen.set(key, index);
     }
   });
   return errors;
-});
+}
+
+// Detecta dimensiones duplicadas y devuelve un mapa índice → error
+const duplicateDimensionErrors = computed<Record<number, string>>(() =>
+  duplicateTextErrors('dimension', 'dimensión'),
+);
+const duplicateNameErrors = computed<Record<number, string>>(() =>
+  duplicateTextErrors('name', 'criterio'),
+);
 
 const hasDuplicateDimensions = computed(() => Object.keys(duplicateDimensionErrors.value).length > 0);
+const hasDuplicateNames = computed(() => Object.keys(duplicateNameErrors.value).length > 0);
+const hasRubricDuplicates = computed(() => hasDuplicateDimensions.value || hasDuplicateNames.value);
 
 function emptyCriterion(): Criterion {
   return { name: '', dimension: '', descriptors: { level1: '', level2: '', level3: '', level4: '' } };
 }
 
 function emptyRubric(): Criterion[] {
-  return Array.from({ length: 7 }, () => emptyCriterion());
+  return [emptyCriterion()];
+}
+
+function addCriterion() {
+  if (criteria.value.length >= MAX_RUBRIC_CRITERIA) {
+    error.value = `Una rúbrica puede tener hasta ${MAX_RUBRIC_CRITERIA} criterios.`;
+    return;
+  }
+  error.value = '';
+  criteria.value.push(emptyCriterion());
+}
+
+function removeCriterion(index: number) {
+  if (criteria.value.length <= MIN_RUBRIC_CRITERIA) return;
+  criteria.value.splice(index, 1);
+  error.value = '';
 }
 
 async function load() {
@@ -339,12 +374,11 @@ async function deleteActivity() {
 }
 
 async function createRubric() {
-  // Validación de dimensiones duplicadas en cliente antes de enviar
-  if (hasDuplicateDimensions.value) {
-    error.value = 'Hay dimensiones duplicadas. Cada criterio debe tener una dimensión única.';
+  // Validación de duplicados en cliente antes de enviar
+  if (hasRubricDuplicates.value) {
+    error.value = 'Cada criterio debe tener un nombre y una dimensión únicos.';
     return;
   }
-  criterionErrors.value = {};
   await act('Rúbrica creada', async () => {
     await api('/teacher/rubrics', {
       method: 'POST', body: JSON.stringify({ name: rubricName.value, criteria: criteria.value }),
@@ -512,21 +546,73 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <form class="panel form-stack" @submit.prevent="createRubric">
-        <div><h2>Nueva rúbrica</h2><p class="muted">Completa exactamente las siete dimensiones y sus descriptores para los niveles 1–4. Los nombres, dimensiones y descriptores de cada nivel no pueden repetirse.</p></div>
-        <label>Nombre de la rúbrica<input v-model.trim="rubricName" required maxlength="160" /></label>
+      <form class="panel form-stack rubric-builder" @submit.prevent="createRubric">
+        <div>
+          <h2>Nueva rúbrica</h2>
+          <p class="muted">
+            Agrega únicamente los criterios que necesitas. Cada criterio debe tener una dimensión
+            y cuatro descriptores diferentes, desde el desempeño inicial hasta el avanzado.
+          </p>
+        </div>
+        <details class="rubric-example">
+          <summary><LightbulbIcon class="ui-icon" aria-hidden="true" /> Ver un ejemplo</summary>
+          <div>
+            <strong>Dimensión:</strong> Argumentación
+            <span><strong>Criterio:</strong> Sustenta sus ideas con evidencia pertinente.</span>
+            <span><strong>Nivel 1:</strong> Presenta afirmaciones sin evidencia.</span>
+            <span><strong>Nivel 4:</strong> Integra evidencia confiable y explica cómo respalda sus ideas.</span>
+          </div>
+        </details>
+        <label>
+          Nombre de la rúbrica
+          <input
+            v-model.trim="rubricName"
+            required
+            maxlength="160"
+            placeholder="Ej. Rúbrica para ensayo argumentativo"
+          />
+        </label>
+        <div class="rubric-builder-heading">
+          <div>
+            <h3>Criterios de evaluación</h3>
+            <p class="muted">Completa el primero y agrega más cuando los necesites.</p>
+          </div>
+          <span>{{ criteria.length }} de {{ MAX_RUBRIC_CRITERIA }}</span>
+        </div>
         <fieldset
           v-for="(criterion, index) in criteria"
           :key="index"
           class="criterion-box"
-          :class="{ 'criterion-box--error': duplicateDimensionErrors[index] }"
+          :class="{ 'criterion-box--error': duplicateDimensionErrors[index] || duplicateNameErrors[index] }"
         >
-          <legend>Criterio {{ index + 1 }}</legend>
+          <legend class="criterion-legend">
+            <span>Criterio {{ index + 1 }}</span>
+            <button
+              v-if="criteria.length > MIN_RUBRIC_CRITERIA"
+              class="criterion-remove"
+              type="button"
+              :aria-label="`Eliminar criterio ${index + 1}`"
+              :title="`Eliminar criterio ${index + 1}`"
+              @click="removeCriterion(index)"
+            >
+              <Trash2Icon class="ui-icon" aria-hidden="true" />
+              Eliminar
+            </button>
+          </legend>
           <div class="form-grid">
             <label>
-              Nombre
-              <input v-model.trim="criterion.name" required maxlength="120" />
+              Criterio que se evaluará
+              <input
+                v-model.trim="criterion.name"
+                required
+                maxlength="120"
+                placeholder="Ej. Sustenta sus ideas con evidencia pertinente"
+                :aria-invalid="!!duplicateNameErrors[index]"
+              />
               <span class="char-hint muted">{{ criterion.name.length }}/120</span>
+              <span v-if="duplicateNameErrors[index]" class="field-error" role="alert">
+                {{ duplicateNameErrors[index] }}
+              </span>
             </label>
             <label>
               Dimensión
@@ -534,6 +620,7 @@ onBeforeUnmount(() => {
                 v-model.trim="criterion.dimension"
                 required
                 maxlength="120"
+                placeholder="Ej. Argumentación"
                 :aria-invalid="!!duplicateDimensionErrors[index]"
               />
               <span class="char-hint muted">{{ criterion.dimension.length }}/120</span>
@@ -548,6 +635,7 @@ onBeforeUnmount(() => {
                 rows="2"
                 required
                 :maxlength="DESCRIPTOR_MAX"
+                :placeholder="LEVEL_PLACEHOLDERS[level]"
               />
               <span class="char-hint muted">
                 {{ criterion.descriptors[`level${level}` as keyof typeof criterion.descriptors].length }}/{{ DESCRIPTOR_MAX }}
@@ -555,10 +643,22 @@ onBeforeUnmount(() => {
             </label>
           </div>
         </fieldset>
-        <p v-if="hasDuplicateDimensions" class="alert error" role="alert">
-          Hay dimensiones duplicadas. Revisa los criterios marcados antes de guardar.
+        <div class="rubric-builder-actions">
+          <button
+            class="button secondary"
+            type="button"
+            :disabled="criteria.length >= MAX_RUBRIC_CRITERIA"
+            @click="addCriterion"
+          >
+            <PlusIcon class="ui-icon" aria-hidden="true" />
+            Agregar otro criterio
+          </button>
+          <small class="muted">Puedes agregar hasta {{ MAX_RUBRIC_CRITERIA }} criterios.</small>
+        </div>
+        <p v-if="hasRubricDuplicates" class="alert error" role="alert">
+          Revisa los criterios marcados: los nombres y las dimensiones no pueden repetirse.
         </p>
-        <button class="button primary" :disabled="hasDuplicateDimensions">Crear rúbrica</button>
+        <button class="button primary rubric-submit" :disabled="hasRubricDuplicates">Crear rúbrica</button>
       </form>
       <section class="section-block">
         <div class="section-title"><h2>Rúbricas disponibles</h2><span>{{ rubrics.length }}</span></div>
