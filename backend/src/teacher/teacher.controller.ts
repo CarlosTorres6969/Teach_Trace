@@ -73,6 +73,15 @@ export class TeacherController {
     return this.teacherService.enrollStudents(user.id, classId, input.students);
   }
 
+  @Delete('classes/:classId/enrollments/:studentId')
+  removeStudent(
+    @CurrentUser() user: User,
+    @Param('classId', ParseIntPipe) classId: number,
+    @Param('studentId', ParseIntPipe) studentId: number,
+  ) {
+    return this.teacherService.removeStudent(user.id, classId, studentId);
+  }
+
   @Get('activities')
   listActivities(@CurrentUser() user: User) {
     return this.teacherService.listActivities(user.id);

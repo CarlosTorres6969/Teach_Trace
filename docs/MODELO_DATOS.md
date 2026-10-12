@@ -32,6 +32,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Una actividad no puede existir sin clase.
 - La primera vista de una actividad se conserva una sola vez por estudiante.
 - Una matrícula no puede repetirse para el mismo estudiante y clase.
+- Retirar a un estudiante desactiva su matrícula sin borrar su cuenta ni su evidencia histórica; una matrícula posterior reactiva el mismo registro.
 - Una bitácora, declaración o entrega no puede repetirse para estudiante y actividad.
 - El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
   declaración y exige seleccionar explícitamente un entero entre 1 y 3 antes de crearla.

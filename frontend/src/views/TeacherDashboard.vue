@@ -50,6 +50,7 @@ type TeacherModal =
   | 'class-detail'
   | 'create-activity'
   | 'activity-detail'
+  | 'remove-student'
   | 'delete-activity'
   | null;
 type EnrollmentMode = 'excel' | 'individual';
@@ -63,6 +64,7 @@ type BulkEnrollmentResult = {
 const activeModal = ref<TeacherModal>(null);
 const selectedClassId = ref<number | null>(null);
 const selectedActivityId = ref<number | null>(null);
+const selectedStudentId = ref<number | null>(null);
 const enrollmentMode = ref<EnrollmentMode>('excel');
 const selectedEnrollmentFile = ref<File | null>(null);
 const bulkEnrollmentResult = ref<BulkEnrollmentResult | null>(null);
@@ -72,8 +74,12 @@ const enrollmentBusy = computed(
   () => bulkEnrollmentBusy.value || individualEnrollmentBusy.value,
 );
 const deletingActivity = ref(false);
+const removingStudent = ref(false);
 const selectedClass = computed(
   () => classes.value.find((academicClass) => academicClass.id === selectedClassId.value) ?? null,
+);
+const selectedStudent = computed(
+  () => selectedClass.value?.students.find((student) => student.id === selectedStudentId.value) ?? null,
 );
 const selectedActivity = computed(
   () => activities.value.find((activity) => activity.id === selectedActivityId.value) ?? null,
@@ -373,6 +379,40 @@ async function deleteActivity() {
   }
 }
 
+function requestStudentRemoval(studentId: number) {
+  clearFeedback();
+  selectedStudentId.value = studentId;
+  activeModal.value = 'remove-student';
+}
+
+function cancelStudentRemoval() {
+  clearFeedback();
+  selectedStudentId.value = null;
+  activeModal.value = selectedClass.value ? 'class-detail' : null;
+}
+
+async function removeStudent() {
+  const academicClass = selectedClass.value;
+  const student = selectedStudent.value;
+  if (!academicClass || !student || removingStudent.value) return;
+  clearFeedback();
+  removingStudent.value = true;
+  try {
+    await api(`/teacher/classes/${academicClass.id}/enrollments/${student.id}`, {
+      method: 'DELETE',
+    });
+    const studentName = student.name;
+    await load();
+    selectedStudentId.value = null;
+    activeModal.value = 'class-detail';
+    message.value = `Se retiró a ${studentName} de la clase.`;
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    removingStudent.value = false;
+  }
+}
+
 async function createRubric() {
   // Validación de duplicados en cliente antes de enviar
   if (hasRubricDuplicates.value) {
@@ -448,6 +488,7 @@ function returnToClassDashboard() {
 }
 
 function closeModal() {
+  selectedStudentId.value = null;
   activeModal.value = null;
 }
 
@@ -719,6 +760,8 @@ onBeforeUnmount(() => {
             <div><strong>{{ selectedClass.studentCount }}</strong><span>Estudiantes matriculados</span></div>
             <div><strong>{{ classActivityCount(selectedClass.id) }}</strong><span>Actividades asignadas</span></div>
           </div>
+          <p v-if="error" class="alert error" role="alert">{{ error }}</p>
+          <p v-if="message" class="alert success" role="status">{{ message }}</p>
 
           <section class="modal-section class-activities-dashboard">
             <div class="class-activities-heading">
@@ -782,7 +825,16 @@ onBeforeUnmount(() => {
             <div v-if="selectedClass.students.length" class="roster-list roster-modal-list">
               <div v-for="student in selectedClass.students" :key="student.id">
                 <span class="student-avatar" aria-hidden="true">{{ student.name.charAt(0).toUpperCase() }}</span>
-                <span><strong>{{ student.name }}</strong><small>{{ student.email }}</small></span>
+                <span class="roster-student-info"><strong>{{ student.name }}</strong><small>{{ student.email }}</small></span>
+                <button
+                  class="roster-remove-button"
+                  type="button"
+                  :aria-label="`Retirar a ${student.name} de la clase`"
+                  @click="requestStudentRemoval(student.id)"
+                >
+                  <Trash2Icon class="ui-icon" aria-hidden="true" />
+                  Retirar
+                </button>
               </div>
             </div>
             <p v-else class="empty-inline">Esta clase todavía no tiene estudiantes matriculados.</p>
@@ -811,9 +863,6 @@ onBeforeUnmount(() => {
                 Individual
               </button>
             </div>
-            <p v-if="error" class="alert error">{{ error }}</p>
-            <p v-if="message" class="alert success">{{ message }}</p>
-
             <div v-if="enrollmentMode === 'excel'" class="excel-enrollment">
               <div class="excel-format-note">
                 <strong>Formato del archivo</strong>
@@ -917,6 +966,62 @@ onBeforeUnmount(() => {
               </p>
             </form>
           </section>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="activeModal === 'remove-student' && selectedClass && selectedStudent"
+      class="modal-backdrop"
+      @click.self="cancelStudentRemoval"
+    >
+      <section
+        class="modal-dialog confirmation-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="remove-student-title"
+        aria-describedby="remove-student-description"
+      >
+        <header class="modal-header">
+          <div>
+            <span class="eyebrow">Retirar matrícula</span>
+            <h2 id="remove-student-title">Retirar estudiante</h2>
+          </div>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Cancelar retiro"
+            :disabled="removingStudent"
+            @click="cancelStudentRemoval"
+          >×</button>
+        </header>
+        <div class="modal-body">
+          <p id="remove-student-description">
+            ¿Deseas retirar a <strong>{{ selectedStudent.name }}</strong> de
+            <strong>{{ selectedClass.name }}, sección {{ selectedClass.section }}</strong>?
+          </p>
+          <p class="alert warning">
+            Perderá el acceso a las actividades de esta clase. Su cuenta, otras matrículas y la
+            evidencia académica registrada no se eliminarán.
+          </p>
+          <p v-if="error" class="alert error" role="alert">{{ error }}</p>
+          <div class="modal-actions">
+            <button
+              class="button secondary"
+              type="button"
+              :disabled="removingStudent"
+              @click="cancelStudentRemoval"
+            >Cancelar</button>
+            <button
+              class="button danger remove-student-confirm"
+              type="button"
+              :disabled="removingStudent"
+              @click="removeStudent"
+            >
+              <LoaderCircleIcon v-if="removingStudent" class="ui-icon icon-spin" aria-hidden="true" />
+              {{ removingStudent ? 'Retirando…' : 'Sí, retirar estudiante' }}
+            </button>
+          </div>
         </div>
       </section>
     </div>

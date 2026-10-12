@@ -39,6 +39,10 @@ export class TeacherService {
     return this.classesService.listEnrollments(teacherId, classId);
   }
 
+  removeStudent(teacherId: number, classId: number, studentId: number) {
+    return this.classesService.removeStudent(teacherId, classId, studentId);
+  }
+
   async listActivities(teacherId: number) {
     const activities = await this.activitiesService.listForTeacher(teacherId);
     const activityIds = activities.map((activity) => activity.id);

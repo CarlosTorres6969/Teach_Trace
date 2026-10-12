@@ -575,6 +575,96 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymousAttempt.response.status).toBe(401);
   });
 
+  it('retira y permite rematricular a un estudiante sin borrar su cuenta ni su historial', async () => {
+    const users = dataSource.getRepository(User);
+    const enrollments = dataSource.getRepository(Enrollment);
+    const authService = app.get(AuthService);
+    const removableStudent = await users.save(users.create({
+      email: 'estudiante.retiro@unah.edu.hn',
+      name: 'Estudiante para retiro',
+      passwordHash: await authService.hashPassword('EstudianteRetiro123!'),
+      role: UserRole.STUDENT,
+      active: true,
+    }));
+    const enrollmentEndpoint = `/api/teacher/classes/${classId}/enrollments`;
+    const removeEndpoint = `${enrollmentEndpoint}/${removableStudent.id}`;
+
+    const enrolled = await request(enrollmentEndpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: removableStudent.name,
+        email: removableStudent.email,
+      }),
+    });
+    expect(enrolled.response.status).toBe(201);
+    const originalEnrollment = await enrollments.findOneByOrFail({
+      academicClass: { id: classId },
+      student: { id: removableStudent.id },
+    });
+
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(student.sessionCookie),
+    })).response.status).toBe(403);
+    expect((await request(removeEndpoint, { method: 'DELETE' })).response.status).toBe(401);
+
+    const removed = await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(removed.response.status).toBe(200);
+    expect(removed.body).toMatchObject({
+      removed: true,
+      student: { id: removableStudent.id, email: removableStudent.email },
+    });
+
+    const inactiveEnrollment = await enrollments.findOneByOrFail({ id: originalEnrollment.id });
+    expect(inactiveEnrollment.active).toBe(false);
+    expect(await users.findOneBy({ id: removableStudent.id })).toMatchObject({
+      email: removableStudent.email,
+      active: true,
+    });
+    const classesAfterRemoval = await request('/api/teacher/classes', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const updatedClass = (classesAfterRemoval.body as Array<{
+      id: number;
+      students: Array<{ id: number }>;
+    }>).find((academicClass) => academicClass.id === classId);
+    expect(updatedClass?.students).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: removableStudent.id })]),
+    );
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    })).response.status).toBe(404);
+
+    const reenrolled = await request(enrollmentEndpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: removableStudent.name,
+        email: removableStudent.email,
+      }),
+    });
+    expect(reenrolled.response.status).toBe(201);
+    const reactivatedEnrollment = await enrollments.findOneByOrFail({ id: originalEnrollment.id });
+    expect(reactivatedEnrollment.active).toBe(true);
+
+    // Restaurar el estado inactivo para no afectar las pruebas posteriores.
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    })).response.status).toBe(200);
+  });
+
   it('asocia resultados de aprendizaje con validación, persistencia y permisos', async () => {
     const endpoint = `/api/teacher/activities/${activityId}/learning-outcomes`;
     const update = await request(endpoint, {

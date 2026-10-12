@@ -232,6 +232,61 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(wrapper.text()).toContain('Importación de matrícula completada');
   });
 
+  it('confirma y retira un estudiante de la clase actualizando la matrícula', async () => {
+    const removableClasses: Array<{
+      id: number;
+      code: string;
+      name: string;
+      section: string;
+      period: string;
+      studentCount: number;
+      students: Array<{ id: number; name: string; email: string }>;
+    }> = classes.map((academicClass, index) => ({
+      ...academicClass,
+      studentCount: index === 0 ? 1 : academicClass.studentCount,
+      students: index === 0
+        ? [{ id: 21, name: 'Ana Pérez', email: 'ana.perez@unah.edu.hn' }]
+        : [],
+    }));
+    let resolveRemoval!: (value: unknown) => void;
+    const pendingRemoval = new Promise((resolve) => { resolveRemoval = resolve; });
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes/2/enrollments/21' && options.method === 'DELETE') {
+        return pendingRemoval as never;
+      }
+      if (path === '/teacher/classes') return removableClasses as never;
+      if (path === '/teacher/activities' && !options.method) return currentActivities as never;
+      if (path === '/teacher/rubrics') return [] as never;
+      throw new Error(`Solicitud inesperada: ${path}`);
+    });
+
+    const wrapper = await mountClassDashboard();
+    expect(wrapper.get('.roster-student-info').text()).toContain('Ana Pérez');
+    await wrapper.get('.roster-remove-button').trigger('click');
+
+    const dialog = wrapper.get('[aria-labelledby="remove-student-title"]');
+    expect(dialog.text()).toContain('Ana Pérez');
+    expect(dialog.text()).toContain('evidencia académica registrada no se eliminarán');
+    await dialog.get('.remove-student-confirm').trigger('click');
+    await nextTick();
+
+    expect(dialog.get('.remove-student-confirm').attributes('disabled')).toBeDefined();
+    expect(dialog.get('.remove-student-confirm').text()).toContain('Retirando');
+    expect(dialog.find('.icon-spin').exists()).toBe(true);
+
+    removableClasses[0].studentCount = 0;
+    removableClasses[0].students = [];
+    resolveRemoval({ removed: true });
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/classes/2/enrollments/21', {
+      method: 'DELETE',
+    });
+    expect(wrapper.text()).toContain('Se retiró a Ana Pérez de la clase');
+    expect(wrapper.text()).toContain('Esta clase todavía no tiene estudiantes matriculados');
+    expect(wrapper.find('.roster-remove-button').exists()).toBe(false);
+  });
+
   it('redirige la URL anterior de actividades al catálogo de clases', async () => {
     routeMock.query = { section: 'activities' };
     const wrapper = mount(TeacherDashboard, {

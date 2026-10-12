@@ -8,7 +8,7 @@ El flujo base implementa:
 
 - Autenticación y autorización para administradores, estudiantes y docentes.
 - Alta de cuentas docentes por un administrador, con contraseña temporal enviada por correo.
-- Gestión docente de clases y matrícula con cuentas autorizadas.
+- Gestión docente de clases, matrícula y retiro seguro de estudiantes con cuentas autorizadas.
 - Creación automática de estudiantes con contraseña temporal enviada por correo y cambio obligatorio en el primer acceso.
 - Actividades asociadas a una clase y resultados de aprendizaje, creadas primero como borrador y publicadas explícitamente por el docente después de asociar una rúbrica.
 - Rúbricas configurables de uno a veinte criterios, con cuatro niveles por criterio.
