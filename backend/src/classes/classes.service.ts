@@ -257,6 +257,31 @@ export class ClassesService {
     return enrollments.map((enrollment) => this.enrollmentResponse(enrollment));
   }
 
+  async removeStudent(teacherId: number, classId: number, studentId: number) {
+    await this.ownedClass(teacherId, classId);
+    const enrollment = await this.enrollments.findOne({
+      where: {
+        academicClass: { id: classId },
+        student: { id: studentId },
+        active: true,
+      },
+    });
+    if (!enrollment) {
+      throw new NotFoundException('El estudiante no está matriculado activamente en esta clase');
+    }
+
+    enrollment.active = false;
+    await this.enrollments.save(enrollment);
+    return {
+      removed: true,
+      student: {
+        id: enrollment.student.id,
+        name: enrollment.student.name,
+        email: enrollment.student.email,
+      },
+    };
+  }
+
   async ownedClass(teacherId: number, classId: number) {
     const academicClass = await this.classes.findOne({
       where: { id: classId, teacher: { id: teacherId } },

@@ -12,6 +12,7 @@ export type User = {
   email: string;
   name: string;
   role: Role;
+  roles?: Role[];
   mustChangePassword: boolean;
   theme: ThemePreference;
   accessibilitySettings: AccessibilitySettings;

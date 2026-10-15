@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
+import PageLoader from '../components/PageLoader.vue';
 
 type ValuationItem = {
   id: number;
@@ -61,14 +62,18 @@ onMounted(load);
     <section class="page-heading compact">
       <div>
         <span class="eyebrow">Mis resultados</span>
-        <h1>{{ results?.activity.title ?? 'Cargando…' }}</h1>
+        <h1>{{ results?.activity.title ?? 'Resultados de la actividad' }}</h1>
       </div>
       <RouterLink class="button secondary back-link" :to="`/student/activities/${activityId}`">
         ← Volver
       </RouterLink>
     </section>
 
-    <p v-if="loading" class="muted">Cargando resultados…</p>
+    <PageLoader
+      v-if="loading"
+      label="Cargando tus resultados…"
+      detail="Estamos consultando la evaluación y los comentarios del docente."
+    />
     <p v-else-if="error" class="alert error">{{ error }}</p>
 
     <template v-else-if="results">

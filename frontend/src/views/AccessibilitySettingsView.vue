@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import {
   accessibilitySettings,
@@ -138,6 +139,7 @@ onBeforeUnmount(() => {
             Restaurar valores
           </button>
           <button class="button primary" type="submit" :disabled="saving">
+            <LoaderCircleIcon v-if="saving" class="ui-icon icon-spin" aria-hidden="true" />
             {{ saving ? 'Guardando…' : 'Guardar configuración' }}
           </button>
         </div>

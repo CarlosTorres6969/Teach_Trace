@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { api } from '../api';
@@ -51,7 +52,10 @@ async function requestReset() {
         <form v-else @submit.prevent="requestReset">
           <label>Correo institucional<input v-model.trim="form.email" type="email" autocomplete="email" required /></label>
           <p v-if="error" class="alert error">{{ error }}</p>
-          <button class="button primary full" :disabled="loading">{{ loading ? 'Enviando…' : 'Enviar enlace' }}</button>
+          <button class="button primary full" :disabled="loading">
+            <LoaderCircleIcon v-if="loading" class="ui-icon icon-spin" aria-hidden="true" />
+            {{ loading ? 'Enviando…' : 'Enviar enlace' }}
+          </button>
         </form>
         <RouterLink class="back-link" to="/login">Volver a iniciar sesión</RouterLink>
       </div>

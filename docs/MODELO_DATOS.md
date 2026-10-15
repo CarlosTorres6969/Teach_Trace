@@ -12,7 +12,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - `Enrollment`: matrícula activa de un estudiante; la combinación estudiante–clase es única.
 - `Activity`: actividad obligatoriamente asociada a una clase y clasificada como `baseline` o
   `pilot`; registra su fecha de creación y la primera vista de cada estudiante.
-- `Rubric`: siete dimensiones con descriptores para niveles 1–4.
+- `Rubric`: entre uno y veinte criterios con dimensiones y descriptores para niveles 1–4.
 - `Logbook`: bitácora única por estudiante y actividad.
 - `AiDeclaration`: declaración única por estudiante y actividad, con nivel declarado, nivel
   detectado y alerta de discrepancia.
@@ -32,6 +32,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - Una actividad no puede existir sin clase.
 - La primera vista de una actividad se conserva una sola vez por estudiante.
 - Una matrícula no puede repetirse para el mismo estudiante y clase.
+- Retirar a un estudiante desactiva su matrícula sin borrar su cuenta ni su evidencia histórica; una matrícula posterior reactiva el mismo registro.
 - Una bitácora, declaración o entrega no puede repetirse para estudiante y actividad.
 - El nivel declarado no tiene valor predeterminado: la API devuelve `null` mientras no exista una
   declaración y exige seleccionar explícitamente un entero entre 1 y 3 antes de crearla.
@@ -41,7 +42,7 @@ sincronización automática; las pruebas de integración utilizan una base compl
 - El resumen de prompts también exige contenido real, admite hasta 10 000 caracteres y aplica la
   misma normalización en JSON y multipart.
 - Los valores IA y docente de una valoración están restringidos a 1–4.
-- Una rúbrica recibida por API debe contener exactamente siete dimensiones únicas.
+- Una rúbrica recibida por API debe contener entre uno y veinte criterios, con nombres y dimensiones únicas.
 - Una rúbrica puede estar asociada como máximo a una actividad. Puede sustituirse por otra en la
   misma actividad, pero no trasladarse implícitamente ni reutilizarse en dos actividades.
 - Si el motor externo no está disponible, la entrega y la actividad quedan marcadas para revisión

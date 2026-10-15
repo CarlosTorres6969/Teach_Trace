@@ -20,19 +20,19 @@ describe('JwtAuthGuard', () => {
 
   it('acepta la cookie de una sesión activa', async () => {
     const currentRequest = request();
-    const user = { id: 4, active: true };
+    const user = { id: 4, active: true, role: 'teacher' };
     const session = {
       id: 'session-1',
       user,
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60000),
     };
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'teacher' }) };
     const sessions = { findOne: jest.fn().mockResolvedValue(session) };
     const guard = new JwtAuthGuard(jwt as never, sessions as never, config);
 
     await expect(guard.canActivate(context(currentRequest))).resolves.toBe(true);
-    expect(currentRequest).toMatchObject({ user, session });
+    expect(currentRequest).toMatchObject({ user: { ...user, activeRole: 'teacher' }, session });
   });
 
   it('permite consultar el estado de sesión sin cookie y sin responder 401', async () => {
@@ -58,11 +58,11 @@ describe('JwtAuthGuard', () => {
 
   it('rechaza y limpia la cookie de una sesión expirada', async () => {
     const currentRequest = request();
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'teacher' }) };
     const sessions = {
       findOne: jest.fn().mockResolvedValue({
         id: 'session-1',
-        user: { id: 4, active: true },
+        user: { id: 4, active: true, role: 'teacher' },
         revokedAt: null,
         expiresAt: new Date(Date.now() - 1000),
       }),
@@ -79,11 +79,11 @@ describe('JwtAuthGuard', () => {
     const currentRequest = { ...request(), path: '/api/student/activities' };
     const session = {
       id: 'session-1',
-      user: { id: 4, active: true, mustChangePassword: true },
+      user: { id: 4, active: true, mustChangePassword: true, role: 'student' },
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60000),
     };
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'student' }) };
     const sessions = { findOne: jest.fn().mockResolvedValue(session) };
     const guard = new JwtAuthGuard(jwt as never, sessions as never, config);
 
@@ -94,16 +94,57 @@ describe('JwtAuthGuard', () => {
 
   it('rechaza la sesión si el docente fue desactivado', async () => {
     const currentRequest = request();
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1' }) };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'teacher' }) };
     const sessions = {
       findOne: jest.fn().mockResolvedValue({
         id: 'session-1',
-        user: { id: 4, active: false },
+        user: { id: 4, active: false, role: 'teacher' },
         revokedAt: null,
         expiresAt: new Date(Date.now() + 60000),
       }),
     };
     const guard = new JwtAuthGuard(jwt as never, sessions as never, config);
+
+    await expect(guard.canActivate(context(currentRequest))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(currentRequest.res.clearCookie).toHaveBeenCalled();
+  });
+
+  it('acepta el modo docente firmado para una cuenta administradora', async () => {
+    const currentRequest = request();
+    const user = { id: 4, active: true, role: 'admin' };
+    const session = {
+      id: 'session-1',
+      user,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const jwt = {
+      verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'teacher' }),
+    };
+    const guard = new JwtAuthGuard(jwt as never, {
+      findOne: jest.fn().mockResolvedValue(session),
+    } as never, config);
+
+    await expect(guard.canActivate(context(currentRequest))).resolves.toBe(true);
+    expect(user).toMatchObject({ activeRole: 'teacher' });
+  });
+
+  it('rechaza un modo docente fabricado para una cuenta estudiantil', async () => {
+    const currentRequest = request();
+    const session = {
+      id: 'session-1',
+      user: { id: 4, active: true, role: 'student' },
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const jwt = {
+      verifyAsync: jest.fn().mockResolvedValue({ sub: 4, sid: 'session-1', role: 'teacher' }),
+    };
+    const guard = new JwtAuthGuard(jwt as never, {
+      findOne: jest.fn().mockResolvedValue(session),
+    } as never, config);
 
     await expect(guard.canActivate(context(currentRequest))).rejects.toBeInstanceOf(
       UnauthorizedException,

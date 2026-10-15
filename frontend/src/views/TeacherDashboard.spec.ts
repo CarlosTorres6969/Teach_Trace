@@ -232,6 +232,61 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(wrapper.text()).toContain('Importación de matrícula completada');
   });
 
+  it('confirma y retira un estudiante de la clase actualizando la matrícula', async () => {
+    const removableClasses: Array<{
+      id: number;
+      code: string;
+      name: string;
+      section: string;
+      period: string;
+      studentCount: number;
+      students: Array<{ id: number; name: string; email: string }>;
+    }> = classes.map((academicClass, index) => ({
+      ...academicClass,
+      studentCount: index === 0 ? 1 : academicClass.studentCount,
+      students: index === 0
+        ? [{ id: 21, name: 'Ana Pérez', email: 'ana.perez@unah.edu.hn' }]
+        : [],
+    }));
+    let resolveRemoval!: (value: unknown) => void;
+    const pendingRemoval = new Promise((resolve) => { resolveRemoval = resolve; });
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path === '/teacher/classes/2/enrollments/21' && options.method === 'DELETE') {
+        return pendingRemoval as never;
+      }
+      if (path === '/teacher/classes') return removableClasses as never;
+      if (path === '/teacher/activities' && !options.method) return currentActivities as never;
+      if (path === '/teacher/rubrics') return [] as never;
+      throw new Error(`Solicitud inesperada: ${path}`);
+    });
+
+    const wrapper = await mountClassDashboard();
+    expect(wrapper.get('.roster-student-info').text()).toContain('Ana Pérez');
+    await wrapper.get('.roster-remove-button').trigger('click');
+
+    const dialog = wrapper.get('[aria-labelledby="remove-student-title"]');
+    expect(dialog.text()).toContain('Ana Pérez');
+    expect(dialog.text()).toContain('evidencia académica registrada no se eliminarán');
+    await dialog.get('.remove-student-confirm').trigger('click');
+    await nextTick();
+
+    expect(dialog.get('.remove-student-confirm').attributes('disabled')).toBeDefined();
+    expect(dialog.get('.remove-student-confirm').text()).toContain('Retirando');
+    expect(dialog.find('.icon-spin').exists()).toBe(true);
+
+    removableClasses[0].studentCount = 0;
+    removableClasses[0].students = [];
+    resolveRemoval({ removed: true });
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/classes/2/enrollments/21', {
+      method: 'DELETE',
+    });
+    expect(wrapper.text()).toContain('Se retiró a Ana Pérez de la clase');
+    expect(wrapper.text()).toContain('Esta clase todavía no tiene estudiantes matriculados');
+    expect(wrapper.find('.roster-remove-button').exists()).toBe(false);
+  });
+
   it('redirige la URL anterior de actividades al catálogo de clases', async () => {
     routeMock.query = { section: 'activities' };
     const wrapper = mount(TeacherDashboard, {
@@ -297,6 +352,87 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
       }),
     });
     expect(wrapper.find('.class-activities-dashboard').exists()).toBe(true);
+  });
+
+  it('construye la rúbrica progresivamente con ejemplos y ayudas de escritura', async () => {
+    routeMock.query = { section: 'rubrics' };
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
+    expect(wrapper.get('.rubric-example').text()).toContain('Sustenta sus ideas con evidencia');
+    expect(wrapper.get('.rubric-builder > label input').attributes('placeholder')).toContain(
+      'Rúbrica para ensayo',
+    );
+    expect(wrapper.get('.criterion-box input').attributes('placeholder')).toContain(
+      'Sustenta sus ideas',
+    );
+    expect(wrapper.get('.criterion-box textarea').attributes('placeholder')).toContain(
+      'No presenta evidencia',
+    );
+
+    await wrapper.get('.rubric-builder-actions button').trigger('click');
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(2);
+    expect(wrapper.findAll('.criterion-remove')).toHaveLength(2);
+
+    await wrapper.findAll('.criterion-remove')[1].trigger('click');
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
+    expect(wrapper.find('.criterion-remove').exists()).toBe(false);
+  });
+
+  it('envía al backend únicamente los criterios agregados por el docente', async () => {
+    routeMock.query = { section: 'rubrics' };
+    const wrapper = mount(TeacherDashboard, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.get('.rubric-builder-actions button').trigger('click');
+
+    await wrapper.get('.rubric-builder > label input').setValue('Rúbrica breve');
+    const criterionCards = wrapper.findAll('.criterion-box');
+    for (const [index, card] of criterionCards.entries()) {
+      const inputs = card.findAll('input');
+      await inputs[0].setValue(`Criterio ${index + 1}`);
+      await inputs[1].setValue(`Dimensión ${index + 1}`);
+      for (const [levelIndex, descriptor] of card.findAll('textarea').entries()) {
+        await descriptor.setValue(`Descriptor ${index + 1}.${levelIndex + 1}`);
+      }
+    }
+
+    await wrapper.get('.rubric-builder').trigger('submit');
+    await flushPromises();
+
+    expect(apiMock).toHaveBeenCalledWith('/teacher/rubrics', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Rúbrica breve',
+        criteria: [
+          {
+            name: 'Criterio 1',
+            dimension: 'Dimensión 1',
+            descriptors: {
+              level1: 'Descriptor 1.1',
+              level2: 'Descriptor 1.2',
+              level3: 'Descriptor 1.3',
+              level4: 'Descriptor 1.4',
+            },
+          },
+          {
+            name: 'Criterio 2',
+            dimension: 'Dimensión 2',
+            descriptors: {
+              level1: 'Descriptor 2.1',
+              level2: 'Descriptor 2.2',
+              level3: 'Descriptor 2.3',
+              level4: 'Descriptor 2.4',
+            },
+          },
+        ],
+      }),
+    });
+    expect(wrapper.findAll('.criterion-box')).toHaveLength(1);
   });
 
   it('confirma la eliminación, llama la API y retira la actividad de la clase', async () => {

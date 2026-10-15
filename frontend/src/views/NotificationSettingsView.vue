@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { api } from '../api';
+import PageLoader from '../components/PageLoader.vue';
 import type {
   NotificationChannel,
   NotificationEventType,
@@ -124,7 +126,11 @@ onBeforeUnmount(() => {
       <p>Elige por qué medios quieres recibir cada tipo de aviso.</p>
     </section>
 
-    <p v-if="loading" class="muted">Cargando preferencias…</p>
+    <PageLoader
+      v-if="loading"
+      label="Cargando preferencias…"
+      detail="Estamos recuperando los canales configurados para cada aviso."
+    />
     <p v-else-if="error && !preferences.length" class="alert error">{{ error }}</p>
 
     <form v-else class="panel notification-form" @submit.prevent="savePreferences">
@@ -167,6 +173,7 @@ onBeforeUnmount(() => {
       <p v-if="error" class="alert error">{{ error }}</p>
       <div class="notification-actions">
         <button class="button primary" type="submit" :disabled="saving">
+          <LoaderCircleIcon v-if="saving" class="ui-icon icon-spin" aria-hidden="true" />
           {{ saving ? 'Guardando…' : 'Guardar preferencias' }}
         </button>
       </div>

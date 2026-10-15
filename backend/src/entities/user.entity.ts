@@ -7,6 +7,12 @@ export enum UserRole {
   TEACHER = 'teacher',
 }
 
+export function availableUserRoles(user: Pick<User, 'role'>): UserRole[] {
+  return user.role === UserRole.ADMIN
+    ? [UserRole.ADMIN, UserRole.TEACHER]
+    : [user.role];
+}
+
 export enum UserTheme {
   LIGHT = 'light',
   DARK = 'dark',
@@ -41,6 +47,9 @@ export class User {
 
   @Column({ type: 'simple-enum', enum: UserRole })
   role: UserRole;
+
+  /** Rol seleccionado para la petición actual; proviene del JWT y nunca se persiste. */
+  activeRole?: UserRole;
 
   @Column({ default: true })
   active: boolean;

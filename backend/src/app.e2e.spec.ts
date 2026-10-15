@@ -36,7 +36,7 @@ jest.setTimeout(180000);
 
 type LoginResponse = {
   sessionCookie: string;
-  user: { id: number; role: UserRole };
+  user: { id: number; role: UserRole; roles?: UserRole[] };
 };
 
 describe('TeachTrace API (integración)', () => {
@@ -347,6 +347,63 @@ describe('TeachTrace API (integración)', () => {
     });
   });
 
+  it('permite al administrador alternar de forma segura entre administrador y docente', async () => {
+    expect(admin.user).toMatchObject({
+      role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN, UserRole.TEACHER],
+    });
+
+    const teacherMode = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(admin.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.TEACHER }),
+    });
+
+    expect(teacherMode.response.status).toBe(201);
+    expect(teacherMode.body).toMatchObject({
+      user: {
+        id: admin.user.id,
+        role: UserRole.TEACHER,
+        roles: [UserRole.ADMIN, UserRole.TEACHER],
+      },
+    });
+    const teacherModeCookie = readSessionCookie(teacherMode.response);
+
+    const teacherAccess = await request('/api/teacher/classes', {
+      headers: sessionHeaders(teacherModeCookie),
+    });
+    expect(teacherAccess.response.status).toBe(200);
+
+    const adminAccessWhileTeacher = await request('/api/admin/teachers', {
+      headers: sessionHeaders(teacherModeCookie),
+    });
+    expect(adminAccessWhileTeacher.response.status).toBe(403);
+
+    const adminMode = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacherModeCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.ADMIN }),
+    });
+    expect(adminMode.response.status).toBe(201);
+    expect(adminMode.body).toMatchObject({ user: { role: UserRole.ADMIN } });
+
+    const teacherEscalation = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: UserRole.ADMIN }),
+    });
+    expect(teacherEscalation.response.status).toBe(403);
+  });
+
   it('rechaza el inicio de sesión de un docente inactivo', async () => {
     const users = dataSource.getRepository(User);
     const authService = app.get(AuthService);
@@ -518,6 +575,96 @@ describe('TeachTrace API (integración)', () => {
     expect(anonymousAttempt.response.status).toBe(401);
   });
 
+  it('retira y permite rematricular a un estudiante sin borrar su cuenta ni su historial', async () => {
+    const users = dataSource.getRepository(User);
+    const enrollments = dataSource.getRepository(Enrollment);
+    const authService = app.get(AuthService);
+    const removableStudent = await users.save(users.create({
+      email: 'estudiante.retiro@unah.edu.hn',
+      name: 'Estudiante para retiro',
+      passwordHash: await authService.hashPassword('EstudianteRetiro123!'),
+      role: UserRole.STUDENT,
+      active: true,
+    }));
+    const enrollmentEndpoint = `/api/teacher/classes/${classId}/enrollments`;
+    const removeEndpoint = `${enrollmentEndpoint}/${removableStudent.id}`;
+
+    const enrolled = await request(enrollmentEndpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: removableStudent.name,
+        email: removableStudent.email,
+      }),
+    });
+    expect(enrolled.response.status).toBe(201);
+    const originalEnrollment = await enrollments.findOneByOrFail({
+      academicClass: { id: classId },
+      student: { id: removableStudent.id },
+    });
+
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(student.sessionCookie),
+    })).response.status).toBe(403);
+    expect((await request(removeEndpoint, { method: 'DELETE' })).response.status).toBe(401);
+
+    const removed = await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    expect(removed.response.status).toBe(200);
+    expect(removed.body).toMatchObject({
+      removed: true,
+      student: { id: removableStudent.id, email: removableStudent.email },
+    });
+
+    const inactiveEnrollment = await enrollments.findOneByOrFail({ id: originalEnrollment.id });
+    expect(inactiveEnrollment.active).toBe(false);
+    expect(await users.findOneBy({ id: removableStudent.id })).toMatchObject({
+      email: removableStudent.email,
+      active: true,
+    });
+    const classesAfterRemoval = await request('/api/teacher/classes', {
+      headers: sessionHeaders(teacher.sessionCookie),
+    });
+    const updatedClass = (classesAfterRemoval.body as Array<{
+      id: number;
+      students: Array<{ id: number }>;
+    }>).find((academicClass) => academicClass.id === classId);
+    expect(updatedClass?.students).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: removableStudent.id })]),
+    );
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    })).response.status).toBe(404);
+
+    const reenrolled = await request(enrollmentEndpoint, {
+      method: 'POST',
+      headers: {
+        ...sessionHeaders(teacher.sessionCookie),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: removableStudent.name,
+        email: removableStudent.email,
+      }),
+    });
+    expect(reenrolled.response.status).toBe(201);
+    const reactivatedEnrollment = await enrollments.findOneByOrFail({ id: originalEnrollment.id });
+    expect(reactivatedEnrollment.active).toBe(true);
+
+    // Restaurar el estado inactivo para no afectar las pruebas posteriores.
+    expect((await request(removeEndpoint, {
+      method: 'DELETE',
+      headers: sessionHeaders(teacher.sessionCookie),
+    })).response.status).toBe(200);
+  });
+
   it('asocia resultados de aprendizaje con validación, persistencia y permisos', async () => {
     const endpoint = `/api/teacher/activities/${activityId}/learning-outcomes`;
     const update = await request(endpoint, {
@@ -675,13 +822,16 @@ describe('TeachTrace API (integración)', () => {
       ]),
     }));
 
-    const eightCriteria = { name: 'Ocho dimensiones', criteria: [...criteria(), {
-      name: 'Criterio adicional',
-      dimension: 'Dimensión adicional',
-      descriptors: {
-        level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
-      },
-    }] };
+    const tooManyCriteria = {
+      name: 'Demasiados criterios',
+      criteria: Array.from({ length: 21 }, (_, index) => ({
+        name: `Criterio límite ${index + 1}`,
+        dimension: `Dimensión límite ${index + 1}`,
+        descriptors: {
+          level1: 'Inicial', level2: 'Básico', level3: 'Competente', level4: 'Avanzado',
+        },
+      })),
+    };
     const duplicateDimension = { name: 'Dimensión duplicada', criteria: criteria() };
     duplicateDimension.criteria[1].dimension = '  DIMENSIÓN QA 1  ';
     const duplicateCriterion = { name: 'Criterio duplicado', criteria: criteria() };
@@ -707,7 +857,7 @@ describe('TeachTrace API (integración)', () => {
       'Nivel no permitido';
 
     for (const invalidInput of [
-      eightCriteria,
+      tooManyCriteria,
       duplicateDimension,
       duplicateCriterion,
       whitespaceOnly,
@@ -1389,7 +1539,7 @@ describe('TeachTrace API (integración)', () => {
     });
   });
 
-  it('ejecuta el flujo base con matrícula, siete dimensiones, bitácora, declaración y archivo', async () => {
+  it('ejecuta el flujo base con matrícula, rúbrica, bitácora, declaración y archivo', async () => {
     const teacherActivities = await request('/api/teacher/activities', {
       headers: sessionHeaders(teacher.sessionCookie),
     });
@@ -2078,8 +2228,11 @@ describe('TeachTrace API (integración)', () => {
 
   // ─── HU-07 / HU-08: Gestión de criterios, dimensiones y niveles de rúbrica ───
 
-  function buildCriteria(overrides: Partial<{ dimension: string; level1: string }>[] = []) {
-    return Array.from({ length: 7 }, (_, i) => ({
+  function buildCriteria(
+    overrides: Partial<{ dimension: string; level1: string }>[] = [],
+    total = 7,
+  ) {
+    return Array.from({ length: total }, (_, i) => ({
       name: `Criterio ${i + 1}`,
       dimension: overrides[i]?.dimension ?? `Dimensión ${i + 1}`,
       descriptors: {
@@ -2091,7 +2244,7 @@ describe('TeachTrace API (integración)', () => {
     }));
   }
 
-  it('HU-07/08: crea una rúbrica con exactamente siete criterios y sus cuatro niveles', async () => {
+  it('HU-07/08: crea una rúbrica con la cantidad de criterios elegida y cuatro niveles', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2100,14 +2253,14 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica de prueba HU-07/08',
-        criteria: buildCriteria(),
+        criteria: buildCriteria([], 3),
       }),
     });
 
     expect(response.response.status).toBe(201);
     const rubric = response.body as { id: number; name: string; criteria: unknown[] };
     expect(rubric.name).toBe('Rúbrica de prueba HU-07/08');
-    expect(rubric.criteria).toHaveLength(7);
+    expect(rubric.criteria).toHaveLength(3);
     expect(rubric.id).toBeGreaterThan(0);
   });
 
@@ -2120,7 +2273,7 @@ describe('TeachTrace API (integración)', () => {
     const list = response.body as Array<{ name: string; criteria: unknown[] }>;
     const created = list.find((r) => r.name === 'Rúbrica de prueba HU-07/08');
     expect(created).toBeDefined();
-    expect(created?.criteria).toHaveLength(7);
+    expect(created?.criteria).toHaveLength(3);
   });
 
   it('HU-07/08: la rúbrica incluye los descriptores de los cuatro niveles por criterio', async () => {
@@ -2144,7 +2297,7 @@ describe('TeachTrace API (integración)', () => {
     expect(firstCriterion?.descriptors.level4).toBe('Descriptor nivel 4');
   });
 
-  it('HU-07: rechaza una rúbrica con menos de siete criterios', async () => {
+  it('HU-07: rechaza una rúbrica sin criterios', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2153,14 +2306,14 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica incompleta',
-        criteria: buildCriteria().slice(0, 5),
+        criteria: [],
       }),
     });
 
     expect(response.response.status).toBe(400);
   });
 
-  it('HU-07: rechaza una rúbrica con más de siete criterios', async () => {
+  it('HU-07: rechaza una rúbrica con más de veinte criterios', async () => {
     const response = await request('/api/teacher/rubrics', {
       method: 'POST',
       headers: {
@@ -2169,10 +2322,7 @@ describe('TeachTrace API (integración)', () => {
       },
       body: JSON.stringify({
         name: 'Rúbrica excedida',
-        criteria: [
-          ...buildCriteria(),
-          { name: 'Criterio extra', dimension: 'Dimensión extra', descriptors: { level1: 'A', level2: 'B', level3: 'C', level4: 'D' } },
-        ],
+        criteria: buildCriteria([], 21),
       }),
     });
 

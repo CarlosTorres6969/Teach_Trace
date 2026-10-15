@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../api';
@@ -61,6 +62,7 @@ async function login() {
           <RouterLink class="back-link login-forgot-link" to="/forgot-password">¿Olvidaste tu contraseña?</RouterLink>
           <p v-if="error" class="alert error">{{ error }}</p>
           <button class="button primary full" :disabled="loading">
+            <LoaderCircleIcon v-if="loading" class="ui-icon icon-spin" aria-hidden="true" />
             {{ loading ? 'Ingresando…' : 'Ingresar al sistema' }}
           </button>
         </form>

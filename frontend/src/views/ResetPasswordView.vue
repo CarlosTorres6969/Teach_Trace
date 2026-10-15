@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LoaderCircleIcon } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
@@ -55,7 +56,10 @@ async function resetPassword() {
           <label>Nueva contraseña<input v-model="form.password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
           <label>Confirmar contraseña<input v-model="form.confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
           <p v-if="error" class="alert error">{{ error }}</p>
-          <button class="button primary full" :disabled="loading">{{ loading ? 'Actualizando…' : 'Cambiar contraseña' }}</button>
+          <button class="button primary full" :disabled="loading">
+            <LoaderCircleIcon v-if="loading" class="ui-icon icon-spin" aria-hidden="true" />
+            {{ loading ? 'Actualizando…' : 'Cambiar contraseña' }}
+          </button>
         </form>
         <RouterLink class="back-link" to="/login">Volver a iniciar sesión</RouterLink>
       </div>

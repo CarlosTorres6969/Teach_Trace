@@ -14,6 +14,7 @@ import {
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
+import PageLoader from '../components/PageLoader.vue';
 
 type SubmissionSummary = {
   id: number;
@@ -134,6 +135,8 @@ const submissions = ref<SubmissionSummary[]>([]);
 const selected = ref<SubmissionDetail | null>(null);
 const error = ref('');
 const message = ref('');
+const loading = ref(true);
+const detailLoading = ref(false);
 
 // Estado de edición de valoraciones
 const editingValues = ref<Record<number, { teacherValue: number; teacherComment: string }>>({});
@@ -149,10 +152,14 @@ async function load() {
     submissions.value = await api(`/teacher/activities/${activityId}/submissions`);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudieron cargar las entregas';
+  } finally {
+    loading.value = false;
   }
 }
 
 async function openSubmission(id: number, preserveMessage = false) {
+  if (detailLoading.value) return;
+  detailLoading.value = true;
   error.value = '';
   if (!preserveMessage) message.value = '';
   try {
@@ -211,6 +218,8 @@ async function openSubmission(id: number, preserveMessage = false) {
     }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo abrir la entrega';
+  } finally {
+    detailLoading.value = false;
   }
 }
 
@@ -394,13 +403,20 @@ onMounted(load);
     <p v-if="error" class="alert error">{{ error }}</p>
     <p v-if="message" class="alert success">{{ message }}</p>
 
-    <section class="split-view">
+    <PageLoader
+      v-if="loading"
+      label="Cargando entregas…"
+      detail="Estamos consultando los productos enviados para esta actividad."
+    />
+
+    <section v-else class="split-view">
       <!-- Lista de entregas -->
       <div class="submission-list panel">
         <button
           v-for="item in submissions"
           :key="item.id"
           :class="{ selected: selected?.id === item.id }"
+          :disabled="detailLoading"
           @click="openSubmission(item.id)"
         >
           <strong>{{ item.student.name }}</strong>
@@ -414,7 +430,14 @@ onMounted(load);
       </div>
 
       <!-- Detalle de entrega -->
-      <article v-if="selected" class="panel evidence">
+      <PageLoader
+        v-if="detailLoading"
+        compact
+        label="Abriendo la entrega…"
+        detail="Estamos recuperando la evidencia y sus valoraciones."
+      />
+
+      <article v-else-if="selected" class="panel evidence">
         <span class="eyebrow">{{ selected.activity.title }}</span>
         <h2>{{ selected.student.name }}</h2>
         <p v-if="selected.manualReviewRequired" class="alert error">Esta entrega requiere revisión manual.</p>

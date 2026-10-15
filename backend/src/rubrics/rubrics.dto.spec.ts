@@ -18,7 +18,7 @@ function criterion(index: number) {
 function rubricInput() {
   return {
     name: 'Rúbrica del piloto',
-    criteria: Array.from({ length: 7 }, (_, index) => criterion(index + 1)),
+    criteria: Array.from({ length: 3 }, (_, index) => criterion(index + 1)),
   };
 }
 
@@ -27,13 +27,15 @@ function cloneInput() {
 }
 
 describe('CreateRubricDto', () => {
-  it('acepta exactamente siete dimensiones con cuatro niveles', async () => {
-    const dto = plainToInstance(CreateRubricDto, rubricInput());
+  it.each([1, 3, 7, 20])('acepta una rúbrica con %i criterio(s) y cuatro niveles', async (total) => {
+    const input = rubricInput();
+    input.criteria = Array.from({ length: total }, (_, index) => criterion(index + 1));
+    const dto = plainToInstance(CreateRubricDto, input);
 
     expect(await validate(dto)).toHaveLength(0);
   });
 
-  it.each([6, 8])('rechaza una rúbrica con %i dimensiones', async (total) => {
+  it.each([0, 21])('rechaza una rúbrica con %i criterios', async (total) => {
     const input = rubricInput();
     input.criteria = Array.from({ length: total }, (_, index) => criterion(index + 1));
     const dto = plainToInstance(CreateRubricDto, input);

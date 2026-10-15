@@ -21,6 +21,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto } from './login.dto';
 import { ConfirmPasswordResetDto, RequestPasswordResetDto } from './password-reset.dto';
 import { SESSION_COOKIE_NAME, sessionCookieOptions } from './security.config';
+import { SwitchRoleDto } from './switch-role.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -83,6 +84,26 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   session(@CurrentUser() user?: User) {
     return { user: user ? this.authService.safeUser(user) : null };
+  }
+
+  @Post('switch-role')
+  @UseGuards(JwtAuthGuard)
+  async switchRole(
+    @CurrentUser() user: User,
+    @Req() request: Request & { session: AuthSession },
+    @Body() input: SwitchRoleDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { accessToken, ...session } = await this.authService.switchRole(
+      user,
+      request.session,
+      input.role,
+    );
+    response.cookie(SESSION_COOKIE_NAME, accessToken, {
+      ...sessionCookieOptions(this.config),
+      expires: session.expiresAt,
+    });
+    return session;
   }
 
   @Post('logout')

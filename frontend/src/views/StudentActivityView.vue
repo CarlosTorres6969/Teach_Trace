@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
 import { api } from '../api';
+import PageLoader from '../components/PageLoader.vue';
 import {
   MAX_CONVERSATION_FILE_SIZE,
   parseConversationText,
@@ -746,7 +747,11 @@ onMounted(() => {
   <main class="page narrow">
     <RouterLink to="/student" class="back-link">← Mis actividades</RouterLink>
     <section class="page-heading compact"><div><span class="eyebrow">Actividad</span><h1>{{ title }}</h1></div></section>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <PageLoader
+      v-if="loading"
+      label="Preparando la actividad…"
+      detail="Estamos recuperando tu bitácora y el avance guardado."
+    />
     <template v-else>
       <p v-if="message" class="alert success">{{ message }}</p>
       <p v-if="error" class="alert error">{{ error }}</p>

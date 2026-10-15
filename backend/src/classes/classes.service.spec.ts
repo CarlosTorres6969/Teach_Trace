@@ -379,4 +379,65 @@ describe('ClassesService', () => {
       expect.objectContaining({ code: 'IS-911' }),
     );
   });
+
+  it('retira al estudiante desactivando únicamente su matrícula', async () => {
+    const academicClass = { id: 10, teacher: { id: 3 } };
+    const student = {
+      id: 9,
+      name: 'Estudiante retirado',
+      email: 'retirado@unah.edu.hn',
+    };
+    const enrollment = {
+      id: 23,
+      student,
+      academicClass,
+      active: true,
+      enrolledAt: new Date(),
+    };
+    const classes = { findOne: jest.fn().mockResolvedValue(academicClass) };
+    const enrollments = {
+      findOne: jest.fn().mockResolvedValue(enrollment),
+      save: jest.fn(async (value) => value),
+    };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.removeStudent(3, 10, 9);
+
+    expect(enrollments.findOne).toHaveBeenCalledWith({
+      where: {
+        academicClass: { id: 10 },
+        student: { id: 9 },
+        active: true,
+      },
+    });
+    expect(enrollment.active).toBe(false);
+    expect(enrollments.save).toHaveBeenCalledWith(enrollment);
+    expect(result).toEqual({ removed: true, student });
+  });
+
+  it('rechaza retirar a un estudiante sin matrícula activa', async () => {
+    const classes = { findOne: jest.fn().mockResolvedValue({ id: 10, teacher: { id: 3 } }) };
+    const enrollments = {
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(),
+    };
+    const service = new ClassesService(
+      classes as never,
+      enrollments as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.removeStudent(3, 10, 9)).rejects.toThrow(
+      'El estudiante no está matriculado activamente en esta clase',
+    );
+    expect(enrollments.save).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { auth } from '../auth';
 import EvolutionChart from '../components/EvolutionChart.vue';
+import PageLoader from '../components/PageLoader.vue';
 import type { Activity } from '../types';
 
 type ActivityItem = Activity & { dueDate: string };
@@ -41,7 +42,11 @@ onMounted(async () => {
       <RouterLink class="button secondary" to="/student">← Panel</RouterLink>
     </section>
 
-    <p v-if="loading" class="muted">Cargando…</p>
+    <PageLoader
+      v-if="loading"
+      label="Cargando tu perfil académico…"
+      detail="Estamos preparando tus clases y datos de rendimiento."
+    />
     <p v-else-if="error" class="alert error">{{ error }}</p>
 
     <template v-else>

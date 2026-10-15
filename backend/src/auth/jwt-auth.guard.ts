@@ -5,9 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
+import { availableUserRoles, UserRole } from '../entities/user.entity';
 import { SESSION_COOKIE_NAME, sessionCookieOptions } from './security.config';
 
-type AccessTokenPayload = { sub: number; sid: string; role: string };
+type AccessTokenPayload = { sub: number; sid: string; role: UserRole };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -40,6 +41,10 @@ export class JwtAuthGuard implements CanActivate {
       ) {
         throw new UnauthorizedException('La sesión expiró o fue cerrada');
       }
+      if (!availableUserRoles(session.user).includes(payload.role)) {
+        throw new UnauthorizedException('El perfil activo no es válido para esta cuenta');
+      }
+      session.user.activeRole = payload.role;
       request.user = session.user;
       request.session = session;
       if (session.user.mustChangePassword && !this.isTemporaryPasswordRoute(request.path)) {

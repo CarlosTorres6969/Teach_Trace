@@ -8,7 +8,7 @@
 | Flujo de clases | Creación de clases y matrícula de estudiantes mediante correo autorizado. |
 | HU-05 | Formulario y API para crear actividades dentro de una clase, con fecha y tipo. |
 | HU-06 | Asociación de 1 a 20 resultados de aprendizaje, uno por línea y con un máximo de 500 caracteres cada uno. |
-| HU-07, HU-08 | Creación obligatoria de siete dimensiones y descriptores para niveles 1–4. |
+| HU-07, HU-08 | Creación progresiva de uno a veinte criterios con dimensiones y descriptores para niveles 1–4. |
 | HU-09 | Asociación exclusiva de una rúbrica existente con una actividad, con sustitución e idempotencia controladas. |
 | HU-10 a HU-14 | Consulta y actualización de ideas, prompts, validaciones, decisiones y reflexión final. |
 | HU-15 a HU-18 | Declaración de herramienta, nivel 1–3, propósito y prompts, guardada junto al producto. |
@@ -39,7 +39,7 @@
 
 1. Inicia sesión, crea una clase y matricula estudiantes autorizados.
 2. Crea una actividad dentro de la clase y define sus resultados de aprendizaje.
-3. Crea una rúbrica de siete dimensiones y cuatro niveles.
+3. Crea una rúbrica agregando los criterios necesarios, cada uno con una dimensión y cuatro niveles.
 4. Asocia la rúbrica con la actividad.
 5. Consulta las entregas, descarga archivos y revisa toda la evidencia del estudiante.
 6. Participa en los foros, destaca hilos, resuelve dudas y modera publicaciones.
@@ -85,8 +85,8 @@
 
 Las pruebas incluyen unidades por dominio y una aplicación NestJS real sobre SQLite en memoria.
 La integración verifica autenticación, cookies de sesión, limitación de intentos, cuentas inactivas,
-sesiones expiradas, roles, aislamiento entre estudiantes, matrícula, rúbrica de
-siete dimensiones, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
+sesiones expiradas, roles, aislamiento entre estudiantes, matrícula, rúbricas de
+cantidad variable, bitácora, entrega multipart, descarga autorizada, restricciones de base de datos,
 declaraciones de IA inválidas, selección y persistencia de los tres niveles declarados, propósito y
 resumen de prompts normalizados en declaración y entrega, bloqueo de cambios aislados tras la
 entrega, separación entre valor IA y docente, referencia de línea base y degradación a revisión
