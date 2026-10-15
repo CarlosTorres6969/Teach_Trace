@@ -189,6 +189,95 @@ describe('AdminAiSettings', () => {
     expect(wrapper.get('.ai-key-form').attributes('aria-busy')).toBe('false');
   });
 
+  it('only fetches the active key when requested, hides it, and fetches a fresh key when revealed again', async () => {
+    const wrapper = mountSettings();
+    await flushPromises();
+    const input = wrapper.get('#ai-active-api-key');
+    const button = wrapper.get('.ai-reveal-key');
+    expect(input.attributes('readonly')).toBeDefined();
+    expect(input.attributes('type')).toBe('password');
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const pending = deferred();
+    apiMock.mockReturnValue(pending.promise);
+    await button.trigger('click');
+    expect(button.text()).toContain('Cargando clave');
+    expect(button.find('.icon-spin').exists()).toBe(true);
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.ai-key-form button[type="submit"]').attributes('disabled')).toBeDefined();
+    await button.trigger('click');
+    expect(apiMock).toHaveBeenCalledTimes(2);
+    pending.resolve({ apiKey: 'test-only-current-secret' });
+    await flushPromises();
+    expect(apiMock).toHaveBeenLastCalledWith('/admin/ai-engine/api-key', { cache: 'no-store', signal: expect.any(AbortSignal) });
+    expect(input.attributes('type')).toBe('text');
+    expect((input.element as HTMLInputElement).value).toBe('test-only-current-secret');
+    expect(button.text()).toBe('Ocultar');
+    expect(button.attributes('aria-expanded')).toBe('true');
+    await button.trigger('click');
+    expect(input.attributes('type')).toBe('password');
+    expect((input.element as HTMLInputElement).value).not.toContain('test-only-current-secret');
+    expect(apiMock).toHaveBeenCalledTimes(2);
+    apiMock.mockResolvedValue({ apiKey: 'test-only-new-current-secret' });
+    await button.trigger('click');
+    await flushPromises();
+    expect(apiMock).toHaveBeenCalledTimes(3);
+    expect((input.element as HTMLInputElement).value).toBe('test-only-new-current-secret');
+    expect((wrapper.get('#ai-api-key').element as HTMLInputElement).value).toBe('');
+  });
+
+  it('keeps the key hidden and reports reveal failures without exposing technical details', async () => {
+    const wrapper = mountSettings();
+    await flushPromises();
+    apiMock.mockRejectedValue(new Error('Private infrastructure failure'));
+    await wrapper.get('.ai-reveal-key').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudo mostrar la API key en uso');
+    expect(wrapper.text()).not.toContain('Private infrastructure failure');
+    expect(wrapper.get('#ai-active-api-key').attributes('type')).toBe('password');
+    expect(wrapper.get('.ai-reveal-key').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('.ai-reveal-key .icon-spin').exists()).toBe(false);
+  });
+
+  it('clears the revealed old key before saving a replacement', async () => {
+    const wrapper = mountSettings();
+    await flushPromises();
+    apiMock.mockResolvedValue({ apiKey: 'test-only-old-secret' });
+    await wrapper.get('.ai-reveal-key').trigger('click');
+    await flushPromises();
+    expect((wrapper.get('#ai-active-api-key').element as HTMLInputElement).value).toBe('test-only-old-secret');
+    await wrapper.get('#ai-api-key').setValue('test-only-admin-panel-key');
+    apiMock.mockResolvedValue(successfulKeyUpdate);
+    await wrapper.get('.ai-key-form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('#ai-active-api-key').attributes('type')).toBe('password');
+    expect((wrapper.get('#ai-active-api-key').element as HTMLInputElement).value).not.toContain('test-only-old-secret');
+    expect((wrapper.get('#ai-api-key').element as HTMLInputElement).value).toBe('');
+  });
+
+  it('cancels an outstanding reveal when leaving the page', async () => {
+    const wrapper = mountSettings();
+    await flushPromises();
+    const pending = deferred();
+    apiMock.mockReturnValue(pending.promise);
+    await wrapper.get('.ai-reveal-key').trigger('click');
+    const options = apiMock.mock.calls.at(-1)![1]!;
+    expect(options.signal!.aborted).toBe(false);
+    wrapper.unmount();
+    expect(options.signal!.aborted).toBe(true);
+    pending.resolve({ apiKey: 'test-only-late-secret' });
+    await flushPromises();
+  });
+
+  it('does not offer reveal when there is no configured key', async () => {
+    apiMock.mockResolvedValue({ ...settings, apiKeyConfigured: false, apiKeySource: 'none', providerConfigured: false });
+    const wrapper = mountSettings();
+    await flushPromises();
+    expect(wrapper.find('.ai-reveal-key').exists()).toBe(false);
+    expect(wrapper.find('#ai-active-api-key').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Sin configurar');
+    expect(apiMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['cualquiercosa', 'a'.repeat(19), 'a'.repeat(20) + ' space', 'é'.repeat(30)])('rejects malformed keys locally without changing the current key', async (value) => {
     const wrapper = mountSettings();
     await flushPromises();

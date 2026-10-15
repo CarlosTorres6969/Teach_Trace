@@ -124,6 +124,54 @@ describe('AiEngineService', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('detects a legacy short admin key before sending evidence and preserves it for an explicit replacement', async () => {
+    global.fetch = jest.fn();
+    const runtime = { enabled: true, effectiveModel: 'test-model', instructions: 'Reglas.', apiKeySource: 'admin', apiKey: 'badkey' };
+    const settings = { getRuntimeSettings: async () => runtime };
+    const result = await configuredService({}, settings).analyzeEvidence(evidence());
+    expect(result).toEqual({ implemented: false, reason: expect.stringContaining('actualizarla desde el panel') });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(runtime.apiKey).toBe('badkey');
+  });
+
+  it.each([
+    { error: { code: 400, message: 'API key not valid. Please pass a valid API key.' } },
+    [{ error: { code: 400, details: [{ reason: 'API_KEY_INVALID' }] } }],
+    { error: { code: 400, details: [{ reason: 'API_KEY_EXPIRED' }] } },
+    { error: { code: 'invalid_api_key', message: 'Private provider error' } },
+  ])('identifies rejected credentials without retries, exposing provider details, or using the server key', async (payload) => {
+    const apiKey = 'test-only-invalid-admin-key';
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 400 }));
+    const settings = { getRuntimeSettings: async () => ({ enabled: true, effectiveModel: 'test-model', instructions: 'Reglas.', apiKeySource: 'admin', apiKey }) };
+    const result = await configuredService({ AI_MAX_RETRIES: '4' }, settings).analyzeEvidence(evidence());
+    expect(result).toEqual({ implemented: false, reason: expect.stringContaining('La API key del motor de IA no es válida') });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][1].headers.Authorization).toBe(`Bearer ${apiKey}`);
+    expect(JSON.stringify(result)).not.toContain(apiKey);
+    expect(JSON.stringify(result)).not.toContain('Private provider error');
+  });
+
+  it.each([401, 403])('explains authentication and permission failures (HTTP %i) without retrying', async (status) => {
+    global.fetch = jest.fn().mockResolvedValue(new Response('Private provider error with test-key', { status }));
+    const result = await configuredService({ AI_MAX_RETRIES: '4' }).analyzeEvidence(evidence());
+    expect(result).toEqual({ implemented: false, reason: expect.stringContaining(status === 401 ? 'API key del motor de IA no es válida' : 'permisos y restricciones') });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result)).not.toContain('Private provider error');
+    expect(JSON.stringify(result)).not.toContain('test-key');
+  });
+
+  it.each([
+    JSON.stringify({ error: { code: 400, message: 'Unsupported schema containing private academic evidence and test-key' } }),
+    '<html>Private provider error: test-key</html>',
+  ])('keeps unknown HTTP 400 failures separate from invalid credentials and hides their bodies', async (body) => {
+    global.fetch = jest.fn().mockResolvedValue(new Response(body, { status: 400 }));
+    const result = await configuredService({ AI_MAX_RETRIES: '4' }).analyzeEvidence(evidence());
+    expect(result).toEqual({ implemented: false, reason: 'El proveedor de IA respondió HTTP 400' });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result)).not.toContain('test-key');
+    expect(JSON.stringify(result)).not.toContain('private academic evidence');
+  });
+
   it('uses the administrator model and Markdown instructions in the provider request', async () => {
     global.fetch = jest.fn().mockResolvedValue(successfulResponse(providerResult()));
     const settings = { getRuntimeSettings: async () => ({ enabled: true, effectiveModel: 'admin/model', instructions: '# Política\nContrasta las fuentes.', stageInstructions: DEFAULT_STAGE_INSTRUCTIONS }) };

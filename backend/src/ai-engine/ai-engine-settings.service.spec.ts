@@ -79,7 +79,7 @@ describe('AI API key storage', () => {
     keyValidator.validate.mockReset().mockImplementation(async (value: string) => normalizeAiApiKey(value));
   });
 
-  it('encrypts the key and only decrypts it for the engine across service instances', async () => {
+  it('encrypts the key and decrypts it across service instances without including it in settings responses', async () => {
     const result = await service.saveApiKey(newKey);
     expect(result).toMatchObject({ apiKeyConfigured: true, apiKeySource: 'admin', providerConfigured: true });
     expect(JSON.stringify(result)).not.toContain(newKey);
@@ -92,6 +92,25 @@ describe('AI API key storage', () => {
     const previousCiphertext = row!.encryptedApiKey;
     await nextInstance.saveApiKey(newKey);
     expect(row!.encryptedApiKey).not.toBe(previousCiphertext);
+  });
+
+  it('reveals exactly the selected key without persisting data or including instructions', async () => {
+    expect(await service.getActiveApiKey()).toEqual({ apiKey: 'test-only-server-key' });
+    expect(repository.save).not.toHaveBeenCalled();
+    await service.saveApiKey(newKey);
+    const ciphertext = row!.encryptedApiKey;
+    repository.save.mockClear();
+    expect(await service.getActiveApiKey()).toEqual({ apiKey: (await service.getRuntimeSettings()).apiKey });
+    expect(await service.getActiveApiKey()).toEqual({ apiKey: newKey });
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(row!.encryptedApiKey).toBe(ciphertext);
+    expect(await service.getSettings()).not.toHaveProperty('apiKey');
+  });
+
+  it('returns an empty key when no credential is configured', async () => {
+    const empty = new AiEngineSettingsService(repository as unknown as Repository<AiEngineSettings>, new ConfigService({ AI_API_KEY: '' }), keyValidator as unknown as AiApiKeyValidatorService);
+    expect(await empty.getActiveApiKey()).toEqual({ apiKey: '' });
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it('rotates the key without altering instructions and can restore the server key', async () => {
@@ -128,6 +147,7 @@ describe('AI API key storage', () => {
     await service.saveApiKey(newKey);
     row!.encryptedApiKey = row!.encryptedApiKey!.slice(0, -4) + 'AAAA';
     await expect(service.getRuntimeSettings()).rejects.toThrow('vuelve a guardarla');
+    await expect(service.getActiveApiKey()).rejects.toThrow('vuelve a guardarla');
     expect(JSON.stringify(await service.getSettings())).not.toContain(newKey);
   });
 

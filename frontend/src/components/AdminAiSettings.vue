@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircleIcon } from '@lucide/vue';
+import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { api, ApiError } from '../api';
 
@@ -31,10 +31,14 @@ const saving = ref(false);
 const error = ref('');
 const message = ref('');
 const apiKey = ref('');
+const activeApiKey = ref('');
+const keyRevealing = ref(false);
+const revealError = ref('');
+let revealController: AbortController | undefined;
 const keyOperation = ref<'save' | 'retry' | null>(null);
 const keySaving = computed(() => keyOperation.value !== null);
 const importingStage = ref<StageKey | null>(null);
-const busy = computed(() => saving.value || keySaving.value || importingStage.value !== null);
+const busy = computed(() => saving.value || keySaving.value || keyRevealing.value || importingStage.value !== null);
 const keyError = ref('');
 const keyMessage = ref('');
 const keyRetryNeeded = ref(false);
@@ -53,6 +57,7 @@ function setForm(value: Settings) {
 
 async function load() {
   if (busy.value) return;
+  hideActiveApiKey();
   loading.value = true;
   error.value = '';
   try {
@@ -132,6 +137,7 @@ async function saveApiKey() {
     keyError.value = 'Escribe una API key de entre 20 y 4096 caracteres, sin espacios ni saltos de línea.';
     return;
   }
+  hideActiveApiKey();
   keyOperation.value = 'save';
   try {
     settings.value = await api<Settings>('/admin/ai-engine/api-key', {
@@ -147,6 +153,38 @@ async function saveApiKey() {
         : 'No se pudo completar el guardado de la API key. Inténtalo de nuevo.';
   } finally {
     keyOperation.value = null;
+  }
+}
+
+function hideActiveApiKey() {
+  revealController?.abort();
+  activeApiKey.value = '';
+  revealError.value = '';
+}
+
+async function toggleActiveApiKey() {
+  if (busy.value) return;
+  if (activeApiKey.value) {
+    hideActiveApiKey();
+    return;
+  }
+  revealError.value = '';
+  keyRevealing.value = true;
+  const controller = new AbortController();
+  revealController = controller;
+  try {
+    const value = await api<{ apiKey: string }>('/admin/ai-engine/api-key', { cache: 'no-store', signal: controller.signal });
+    if (controller.signal.aborted) return;
+    if (typeof value.apiKey !== 'string' || !value.apiKey) {
+      revealError.value = 'No hay una API key configurada.';
+      return;
+    }
+    activeApiKey.value = value.apiKey;
+  } catch {
+    if (!controller.signal.aborted) revealError.value = 'No se pudo mostrar la API key en uso. Inténtalo de nuevo.';
+  } finally {
+    if (revealController === controller) revealController = undefined;
+    keyRevealing.value = false;
   }
 }
 
@@ -192,7 +230,10 @@ async function retryVercelSync() {
 }
 
 onMounted(load);
-onBeforeUnmount(() => clearTimeout(keyMessageTimer));
+onBeforeUnmount(() => {
+  clearTimeout(keyMessageTimer);
+  hideActiveApiKey();
+});
 </script>
 
 <template>
@@ -204,13 +245,25 @@ onBeforeUnmount(() => clearTimeout(keyMessageTimer));
       <LoaderCircleIcon class="ui-icon icon-spin" aria-hidden="true" />
       Cargando configuración…
     </p>
-    <form v-if="!loading && settings" class="panel ai-form ai-key-form" :aria-busy="keySaving" @submit.prevent="saveApiKey">
+    <form v-if="!loading && settings" class="panel ai-form ai-key-form" :aria-busy="keySaving || keyRevealing" @submit.prevent="saveApiKey">
       <h3>API key del motor de IA</h3>
       <p>Clave actual: <strong>{{ settings.apiKeySource === 'admin' ? 'Configurada desde el panel' : settings.apiKeySource === 'server' ? 'Configurada en el servidor' : 'Sin configurar' }}</strong></p>
+      <div v-if="settings.apiKeyConfigured" class="ai-current-key">
+        <label for="ai-active-api-key">API key en uso
+          <input id="ai-active-api-key" :value="activeApiKey || '••••••••••••••••'" :type="activeApiKey ? 'text' : 'password'" readonly autocomplete="off" spellcheck="false" autocapitalize="off" />
+        </label>
+        <button class="button secondary ai-reveal-key" type="button" :disabled="busy" :aria-busy="keyRevealing" :aria-expanded="Boolean(activeApiKey)" :aria-label="activeApiKey ? 'Ocultar API key en uso' : 'Mostrar API key en uso'" aria-controls="ai-active-api-key" @click="toggleActiveApiKey">
+          <LoaderCircleIcon v-if="keyRevealing" class="ui-icon icon-spin" aria-hidden="true" />
+          <EyeOffIcon v-else-if="activeApiKey" class="ui-icon" aria-hidden="true" />
+          <EyeIcon v-else class="ui-icon" aria-hidden="true" />
+          {{ keyRevealing ? 'Cargando clave…' : activeApiKey ? 'Ocultar' : 'Mostrar' }}
+        </button>
+      </div>
+      <p v-if="revealError" class="alert error" role="alert">{{ revealError }}</p>
       <label for="ai-api-key">Nueva API key
         <input id="ai-api-key" v-model="apiKey" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" minlength="20" maxlength="4096" required :disabled="busy" aria-describedby="ai-api-key-help" @input="clearKeyFeedback" />
       </label>
-      <small id="ai-api-key-help">Mínimo 20 caracteres. Verificaremos la clave antes de aplicarla. La clave guardada permanece oculta. Cambiarla no modifica las instrucciones de los cinco puntos.</small>
+      <small id="ai-api-key-help">Mínimo 20 caracteres. Verificaremos la clave antes de aplicarla. Puedes consultar la clave actual con Mostrar. Cambiarla no modifica las instrucciones de los cinco puntos.</small>
       <div class="ai-actions">
         <button class="button primary" type="submit" :disabled="busy || apiKey.trim().length < 20" :aria-busy="keyOperation === 'save'">
           <LoaderCircleIcon v-if="keyOperation === 'save'" class="ui-icon icon-spin" aria-hidden="true" />
@@ -266,6 +319,8 @@ onBeforeUnmount(() => clearTimeout(keyMessageTimer));
 .ai-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; }
 .ai-progress { display: flex; align-items: center; gap: .5rem; }
 .ai-key-error { display: grid; gap: .75rem; }
+.ai-current-key { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; }
+.ai-current-key label { flex: 1 1 16rem; min-width: 0; }
 .ai-stage { display: grid; gap: 1rem; min-width: 0; }
 .ai-stage legend { padding: 0 .5rem; font-weight: 700; }
 .ai-file-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }

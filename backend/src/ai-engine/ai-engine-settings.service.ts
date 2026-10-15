@@ -78,8 +78,18 @@ export class AiEngineSettingsService {
     const saved = await this.repository.findOneBy({ id: 1 });
     return {
       ...this.publicSettings(saved),
-      apiKey: saved?.encryptedApiKey ? this.decryptApiKey(saved.encryptedApiKey) : this.config.get<string>('AI_API_KEY')?.trim() ?? '',
+      apiKey: this.resolveApiKey(saved),
     };
+  }
+
+  // Solo se expone mediante la ruta de consulta explícita protegida para administradores.
+  async getActiveApiKey() {
+    const saved = await this.repository.findOneBy({ id: 1 });
+    return { apiKey: this.resolveApiKey(saved) };
+  }
+
+  private resolveApiKey(saved: AiEngineSettings | null) {
+    return saved?.encryptedApiKey ? this.decryptApiKey(saved.encryptedApiKey) : this.config.get<string>('AI_API_KEY')?.trim() ?? '';
   }
 
   async saveApiKey(apiKey: string) {

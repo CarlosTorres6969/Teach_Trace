@@ -1510,7 +1510,7 @@ describe('TeachTrace API (integración)', () => {
   it('permite cambiar y restaurar la API key solo al administrador sin devolver secretos', async () => withKeyProvider(async (provider) => {
     const path = '/api/admin/ai-engine/api-key';
     const apiKey = 'test-only-api-key-from-admin-panel';
-    for (const method of ['PUT', 'DELETE']) {
+    for (const method of ['GET', 'PUT', 'DELETE']) {
       expect((await request(path, { method })).response.status).toBe(401);
       for (const cookie of [teacher.sessionCookie, student.sessionCookie]) {
         expect((await request(path, {
@@ -1523,6 +1523,10 @@ describe('TeachTrace API (integración)', () => {
     const headers = { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' };
     const initial = await request('/api/admin/ai-engine', { headers });
     const original = initial.body as { stageInstructions: Record<string, string>; apiKeySource: string };
+    const initialKey = await request(path, { headers });
+    expect(initialKey.response.status).toBe(200);
+    expect(initialKey.body).toEqual({ apiKey: (await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey });
+    expect(initialKey.response.headers.get('Cache-Control')).toBe('no-store');
     const saved = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey }) });
     expect(saved.response.status).toBe(200);
     expect(saved.body).toMatchObject({ apiKeyConfigured: true, apiKeySource: 'admin', stageInstructions: original.stageInstructions });
@@ -1535,6 +1539,11 @@ describe('TeachTrace API (integración)', () => {
     expect(stored.encryptedApiKey).toMatch(/^v1\./);
     expect(stored.encryptedApiKey).not.toContain(apiKey);
     expect((await app.get(AiEngineSettingsService).getRuntimeSettings()).apiKey).toBe(apiKey);
+    const revealed = await request(path, { headers });
+    expect(revealed.response.status).toBe(200);
+    expect(revealed.response.headers.get('Cache-Control')).toBe('no-store');
+    expect(revealed.body).toEqual({ apiKey });
+    expect((await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 })).encryptedApiKey).toBe(stored.encryptedApiKey);
     const checksBeforeInvalidFormat = provider.mock.calls.length;
     for (const value of ['', '  ', 'cualquiercosa', 'key\r\nInjected-header', 'x'.repeat(4097), 123]) {
       const invalid = await request(path, { method: 'PUT', headers, body: JSON.stringify({ apiKey: value }) });
@@ -1553,6 +1562,7 @@ describe('TeachTrace API (integración)', () => {
     expect(restored.response.status).toBe(200);
     expect(restored.body).toMatchObject({ apiKeySource: original.apiKeySource, stageInstructions: original.stageInstructions });
     expect((await dataSource.getRepository(AiEngineSettings).findOneByOrFail({ id: 1 })).encryptedApiKey).toBeNull();
+    expect((await request(path, { headers })).body).toEqual(initialKey.body);
   }));
 
   it('protege el reintento de sincronización y no expone credenciales de Vercel', async () => withKeyProvider(async () => {

@@ -16,7 +16,9 @@ La configuración se guarda en la base de datos y solo administradores pueden ca
 
 ## Cambiar la API key desde el panel
 
-En **API key del motor de IA**, escribe la nueva clave y pulsa **Guardar API key**. Se guarda cifrada con AES-256-GCM en la base de datos y se utiliza en próximos análisis, con prioridad sobre `AI_API_KEY` del servidor. El campo se vacía al guardar y las respuestas de la API nunca incluyen la clave ni su contenido cifrado. La actualización es independiente de los cinco textos de instrucciones.
+En **API key del motor de IA**, escribe la nueva clave y pulsa **Guardar API key**. Se guarda cifrada con AES-256-GCM en la base de datos y se utiliza en próximos análisis, con prioridad sobre `AI_API_KEY` del servidor. El campo de nueva clave se vacía al guardar. Las respuestas de configuración y guardado no incluyen la clave ni su contenido cifrado. La actualización es independiente de los cinco textos de instrucciones.
+
+El campo **API key en uso** permite a los administradores consultar la clave que selecciona el motor. Empieza oculto; **Mostrar** consulta la clave completa mediante `GET /api/admin/ai-engine/api-key`, protegido por sesión y rol de administrador y con `Cache-Control: no-store`. Usa la misma selección que el motor, incluida la clave del servidor cuando no hay una guardada desde el panel. **Ocultar**, guardar una nueva clave o salir de la página elimina la clave revelada del estado del componente. No se persiste en el almacenamiento del navegador ni se carga automáticamente con la configuración general.
 
 ## Actualización automática de la variable en Vercel
 
@@ -47,6 +49,8 @@ El servidor puede definir un secreto estable `AI_SETTINGS_ENCRYPTION_KEY` de al 
 Antes de guardar una API key, el servidor exige entre 20 y 4096 caracteres imprimibles sin espacios interiores y comprueba que Gemini la reconoce mediante una consulta autenticada a `models.list`, con un límite de diez segundos. Se admiten las claves estándar y las nuevas claves de autorización; el prefijo por sí solo no demuestra su validez. Si la clave es inválida, está revocada, carece de permisos o no puede verificarse, se conserva la clave actual y no se solicita ninguna actualización automática. El reintento también verifica la clave guardada antes de enviarla. El panel muestra un indicador de verificación y un mensaje de error cuando falla.
 
 La comprobación no genera contenido ni garantiza saldo o cuota para futuros análisis. El validador corresponde al proveedor actual (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`); para cambiar de proveedor hay que implementar su comprobación autenticada antes de admitir nuevas claves. No se aceptan respuestas de endpoints públicos como prueba de validez. Referencias: [claves de Gemini](https://ai.google.dev/gemini-api/docs/api-key) y [consulta de modelos](https://ai.google.dev/api/models).
+
+Si una clave se guardó antes de incorporar estas validaciones, el motor también comprueba su formato antes de enviar evidencia. Una clave guardada demasiado corta requiere que el administrador ingrese una clave válida en el panel. Si el proveedor devuelve `API_KEY_INVALID`, `API_KEY_EXPIRED` o HTTP 401, se muestra esa indicación de actualización; HTTP 403 indica que deben revisarse permisos y restricciones. Estas respuestas no se reintentan ni provocan el uso de otra clave. Los detalles originales del error no se exponen, ya que pueden contener credenciales o evidencia.
 
 PostgreSQL incorpora la columna cifrada mediante `1791331200000-add-ai-api-key`; SQLite usa la sincronización existente.
 

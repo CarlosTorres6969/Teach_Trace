@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiEngineSettingsService } from './ai-engine-settings.service';
+import { normalizeAiApiKey } from './ai-api-key-validator.service';
 import { AI_STAGES } from './ai-stage-instructions';
 import pdfParse from 'pdf-parse';
 import { RubricCriterion } from '../entities/rubric.entity';
@@ -76,6 +77,7 @@ const DEFAULT_MAX_INPUT_CHARS = 100_000;
 const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
 const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const INVALID_API_KEY_REASON = 'La API key del motor de IA no es válida. El administrador debe actualizarla desde el panel.';
 
 const ANALYSIS_SCHEMA = {
   type: 'object',
@@ -202,6 +204,13 @@ export class AiEngineService {
         reason: 'El proveedor de IA no está configurado (AI_API_URL, AI_API_KEY y AI_MODEL)',
       };
     }
+    if (settings?.apiKeySource === 'admin') {
+      try {
+        normalizeAiApiKey(apiKey!);
+      } catch {
+        return { implemented: false, reason: INVALID_API_KEY_REASON };
+      }
+    }
     if (!evidence.rubric.length) {
       return { implemented: false, reason: 'La actividad no tiene una rúbrica asociada' };
     }
@@ -299,7 +308,7 @@ export class AiEngineService {
           return this.normalizeResult(parsed, evidence);
         }
 
-        lastFailure = `El proveedor de IA respondió HTTP ${response.status}`;
+        lastFailure = await this.providerFailureReason(response);
         this.logger.warn(`${lastFailure} (intento ${attempt + 1}/${maxRetries + 1})`);
         if (!TRANSIENT_HTTP_STATUSES.has(response.status) || attempt === maxRetries) {
           return { implemented: false, reason: lastFailure };
@@ -317,6 +326,34 @@ export class AiEngineService {
       }
     }
     return { implemented: false, reason: lastFailure };
+  }
+
+  private async providerFailureReason(response: Response): Promise<string> {
+    if (response.status === 401) return INVALID_API_KEY_REASON;
+    if (response.status === 403) {
+      return 'La API key no tiene permiso para usar el motor de IA. El administrador debe revisar sus permisos y restricciones.';
+    }
+    if (response.status === 400) {
+      const payload: unknown = await response.json().catch(() => null);
+      const candidates = Array.isArray(payload) ? payload : [payload];
+      for (const candidate of candidates) {
+        if (!candidate || typeof candidate !== 'object' || !('error' in candidate)) continue;
+        const error: unknown = candidate.error;
+        if (!error || typeof error !== 'object') continue;
+        const code = 'code' in error ? error.code : undefined;
+        const message = 'message' in error ? error.message : undefined;
+        const details = 'details' in error && Array.isArray(error.details) ? error.details : [];
+        if (code === 'invalid_api_key' ||
+            (typeof message === 'string' && /^API key (?:not valid|expired)(?:[.\s]|$)/i.test(message)) ||
+            details.some((detail: unknown) => detail && typeof detail === 'object' && 'reason' in detail &&
+              ['API_KEY_INVALID', 'API_KEY_EXPIRED'].includes(String(detail.reason)))) {
+          return INVALID_API_KEY_REASON;
+        }
+      }
+    }
+    // Los errores del proveedor pueden incluir credenciales o evidencia académica.
+    // Solo se devuelven mensajes propios; nunca se registran sus cuerpos de error.
+    return `El proveedor de IA respondió HTTP ${response.status}`;
   }
 
   private async extractDocumentText(document: { mimeType: string; content: Buffer }) {

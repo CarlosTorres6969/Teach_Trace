@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -34,6 +34,12 @@ export class AdminController {
   @Put('ai-engine/api-key')
   saveAiApiKey(@Body() input: UpdateAiApiKeyDto) {
     return this.aiSettings.saveApiKey(input.apiKey);
+  }
+
+  @Get('ai-engine/api-key')
+  @Header('Cache-Control', 'no-store')
+  getActiveAiApiKey() {
+    return this.aiSettings.getActiveApiKey();
   }
 
   @Delete('ai-engine/api-key')
