@@ -771,6 +771,7 @@ html.high-contrast .activities-nav-badge {
 .valuation-close-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: .5rem; border-top: 1px solid var(--line); margin-top: .5rem; }
 .valuation-close-hint { flex: 1; margin: 0; font-size: .85rem; }
 .valuation-empty-hint { text-align: center; }
+.valuation-save-toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 45; width: min(420px, calc(100% - 2rem)); margin: 0; box-shadow: 0 12px 35px rgba(12,35,64,.22); }
 html.dark .valuation-editor--confirmed { background: #0d1f35; border-color: #3a6a9e; }
 html.dark .valuation-ai-hint { background: #101b2b; }
 

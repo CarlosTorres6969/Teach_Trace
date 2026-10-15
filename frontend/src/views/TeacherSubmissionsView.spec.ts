@@ -235,10 +235,9 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
 
   it('actualiza la decisión porcentual después de confirmar el criterio docente', async () => {
     const baseImplementation = apiMock.getMockImplementation();
-    let confirmed = false;
+    let detailRequests = 0;
     apiMock.mockImplementation((path: string, options?: { method?: string }) => {
       if (path === '/teacher/submissions/7/valuations/21' && options?.method === 'PUT') {
-        confirmed = true;
         return Promise.resolve({
           id: 21,
           criterion: 'Argumentación',
@@ -251,18 +250,19 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
         });
       }
       if (path === '/teacher/submissions/7') {
+        detailRequests += 1;
         return Promise.resolve(baseImplementation?.(path)).then((detail) => ({
           ...(detail as Record<string, unknown>),
-          teacherGradePercentage: confirmed ? 100 : null,
+          teacherGradePercentage: null,
           valuations: [{
             id: 21,
             criterion: 'Argumentación',
             dimension: 'Análisis',
             aiValue: 3,
             aiExplanation: 'Evidencia suficiente.',
-            teacherValue: confirmed ? 4 : null,
+            teacherValue: null,
             teacherComment: '',
-            confirmed,
+            confirmed: false,
           }],
         }));
       }
@@ -280,11 +280,16 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     expect(wrapper.text()).toContain('Decisión docente confirmadaPendiente');
     expect(wrapper.find('.valuation-grid').exists()).toBe(true);
     expect(wrapper.get('.valuation-editor button .ui-icon').element.tagName.toLowerCase()).toBe('svg');
+    const confirmButton = wrapper.get('.valuation-editor button');
     await wrapper.get('.valuation-editor select').setValue('4');
-    await wrapper.get('.valuation-editor button').trigger('click');
+    await confirmButton.trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    expect(detailRequests).toBe(1);
+    expect(wrapper.get('.valuation-editor button').element).toBe(confirmButton.element);
+    expect(wrapper.text()).toContain('Evidencia suficiente.');
+    expect(wrapper.get('.valuation-save-toast').text()).toContain('Criterio "Argumentación" guardado');
     expect(apiMock).toHaveBeenCalledWith(
       '/teacher/submissions/7/valuations/21',
       expect.objectContaining({ method: 'PUT' }),

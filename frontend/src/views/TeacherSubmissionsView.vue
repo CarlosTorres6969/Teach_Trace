@@ -11,7 +11,7 @@ import {
   SaveIcon,
   SparklesIcon,
 } from '@lucide/vue';
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
 import PageLoader from '../components/PageLoader.vue';
@@ -135,6 +135,7 @@ const submissions = ref<SubmissionSummary[]>([]);
 const selected = ref<SubmissionDetail | null>(null);
 const error = ref('');
 const message = ref('');
+const valuationMessage = ref('');
 const loading = ref(true);
 const detailLoading = ref(false);
 
@@ -146,6 +147,16 @@ const savingFeedback = ref(false);
 const feedbackDraft = ref('');
 const startingEvaluation = ref(false);
 const startingAiEvaluation = ref(false);
+let valuationMessageTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showValuationMessage(messageText: string) {
+  valuationMessage.value = messageText;
+  if (valuationMessageTimer) clearTimeout(valuationMessageTimer);
+  valuationMessageTimer = setTimeout(() => {
+    valuationMessage.value = '';
+    valuationMessageTimer = null;
+  }, 3500);
+}
 
 async function load() {
   try {
@@ -305,12 +316,13 @@ async function downloadConversation() {
 
 async function saveValuation(valuationId: number) {
   if (!selected.value) return;
+  const submissionId = selected.value.id;
   savingValuation.value[valuationId] = true;
   error.value = '';
   try {
     const edit = editingValues.value[valuationId];
     const updated = await api<ValuationItem>(
-      `/teacher/submissions/${selected.value.id}/valuations/${valuationId}`,
+      `/teacher/submissions/${submissionId}/valuations/${valuationId}`,
       {
         method: 'PUT',
         body: JSON.stringify({
@@ -319,16 +331,43 @@ async function saveValuation(valuationId: number) {
         }),
       },
     );
-    // Actualizar la valoración en la lista local
+    // Mantener el panel y el scroll: actualizar solo el criterio confirmado.
+    if (selected.value?.id !== submissionId) return;
     const idx = selected.value.valuations.findIndex((v) => v.id === valuationId);
-    if (idx >= 0) selected.value.valuations[idx] = updated;
-    message.value = `Criterio "${updated.criterion}" guardado.`;
-    await openSubmission(selected.value.id, true);
+    if (idx >= 0) {
+      Object.assign(selected.value.valuations[idx], updated);
+      editingValues.value[valuationId] = {
+        teacherValue: updated.teacherValue ?? edit.teacherValue,
+        teacherComment: updated.teacherComment ?? '',
+      };
+    }
+    selected.value.teacherGradePercentage = percentageFromConfirmedValuations(
+      selected.value.valuations,
+    );
+    showValuationMessage(`Criterio "${updated.criterion}" guardado.`);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la valoración';
   } finally {
     savingValuation.value[valuationId] = false;
   }
+}
+
+function percentageFromConfirmedValuations(valuations: ValuationItem[]): number | null {
+  const levels = valuations.map((valuation) =>
+    valuation.confirmed ? valuation.teacherValue : null,
+  );
+  if (
+    !levels.length ||
+    levels.some((level) =>
+      level === null || !Number.isInteger(level) || level < 1 || level > 4,
+    )
+  ) {
+    return null;
+  }
+
+  const averageLevel = (levels as number[]).reduce((sum, level) => sum + level, 0) /
+    levels.length;
+  return Math.round((((averageLevel - 1) / 3) * 100) * 100) / 100;
 }
 
 async function closeEvaluation() {
@@ -367,6 +406,9 @@ const allConfirmed = () =>
   (selected.value?.valuations?.every((v) => v.confirmed) ?? false);
 
 onMounted(load);
+onBeforeUnmount(() => {
+  if (valuationMessageTimer) clearTimeout(valuationMessageTimer);
+});
 </script>
 
 <template>
@@ -402,6 +444,12 @@ onMounted(load);
 
     <p v-if="error" class="alert error">{{ error }}</p>
     <p v-if="message" class="alert success">{{ message }}</p>
+    <p
+      v-if="valuationMessage"
+      class="alert success valuation-save-toast"
+      role="status"
+      aria-live="polite"
+    >{{ valuationMessage }}</p>
 
     <PageLoader
       v-if="loading"
