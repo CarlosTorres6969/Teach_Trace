@@ -28,3 +28,5 @@ docs/*
 !docs/aciertos-y-mejoras.txt
 !docs/comprension-del-tema.txt
 !docs/indicadores.txt
+!docs/manual-de-usuario-teachtrace.md
+.local-backups/

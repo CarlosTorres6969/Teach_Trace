@@ -20,6 +20,12 @@ El flujo base implementa:
 - Accesibilidad global con texto ampliable, contraste AAA y movimiento reducido.
 - Dashboard estudiantil filtrado con progreso, alertas de vencimiento y actividades nuevas.
 
+## Manual de usuario
+
+El [manual de usuario de TeachTrace](docs/manual-de-usuario-teachtrace.md) reúne los recorridos
+de administradores, docentes y estudiantes, con instrucciones de operación, estados, límites,
+formatos de archivos y solución de problemas.
+
 ## Inicio rápido
 
 Antes de iniciar, copie `.env.example` como `.env` y sustituya `JWT_SECRET` por un valor aleatorio
