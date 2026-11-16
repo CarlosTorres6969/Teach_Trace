@@ -66,6 +66,12 @@ export class CreateActivityDto {
   weight?: number;
 }
 
+export class UpdateActivityDueDateDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha de entrega debe tener formato AAAA-MM-DD' })
+  @IsDateString({ strict: true }, { message: 'La fecha de entrega debe ser una fecha válida' })
+  dueDate: string;
+}
+
 export class UpdateLearningOutcomesDto {
   @Transform(({ value }: { value: unknown }) =>
     Array.isArray(value)

@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { CreateActivityDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
+import { CreateActivityDto, UpdateActivityDueDateDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -90,6 +90,15 @@ export class TeacherController {
   @Post('activities')
   createActivity(@CurrentUser() user: User, @Body() input: CreateActivityDto) {
     return this.teacherService.createActivity(user, input);
+  }
+
+  @Put('activities/:activityId/due-date')
+  updateDueDate(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+    @Body() input: UpdateActivityDueDateDto,
+  ) {
+    return this.teacherService.updateDueDate(user.id, activityId, input);
   }
 
   @Put('activities/:activityId/learning-outcomes')

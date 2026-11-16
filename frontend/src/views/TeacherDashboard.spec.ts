@@ -308,6 +308,51 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(dashboard.text()).not.toContain('Aplicación con Vue');
   });
 
+  it('modifica la fecha de una actividad publicada y conserva sus entregas y estado', async () => {
+    currentActivities[1].published = true;
+    const wrapper = await mountClassDashboard(1);
+    await wrapper.get('.class-activities-dashboard .catalog-actions button').trigger('click');
+    const form = wrapper.get('form[aria-labelledby="edit-activity-title"]');
+    expect((form.get('input').element as HTMLInputElement).value).toBe('2026-10-10');
+    expect(form.get('button').attributes('disabled')).toBeDefined();
+
+    let resolveUpdate!: (value: { id: number; dueDate: string }) => void;
+    const pendingUpdate = new Promise<{ id: number; dueDate: string }>((resolve) => { resolveUpdate = resolve; });
+    apiMock.mockImplementationOnce(() => pendingUpdate as never);
+    await form.get('input').setValue('2026-11-30');
+    await form.trigger('submit');
+    await nextTick();
+    expect(form.get('button').text()).toContain('Guardando');
+    expect(form.get('button').attributes('disabled')).toBeDefined();
+    expect(form.get('input').attributes('disabled')).toBeDefined();
+    expect(apiMock).toHaveBeenLastCalledWith('/teacher/activities/11/due-date', {
+      method: 'PUT', body: JSON.stringify({ dueDate: '2026-11-30' }),
+    });
+
+    resolveUpdate({ id: 11, dueDate: '2026-11-30' });
+    await flushPromises();
+    expect(wrapper.get('.modal-header').text()).toContain('Fecha de entrega: 2026-11-30');
+    expect(wrapper.text()).toContain('Fecha de entrega actualizada');
+    expect(wrapper.text()).toContain('publicada y visible');
+    await wrapper.get('[aria-label="Volver a la clase"]').trigger('click');
+    expect(wrapper.get('.class-activities-dashboard').text()).toContain('2026-11-30');
+    expect(wrapper.get('.class-activities-dashboard').text()).toContain('1 entrega');
+  });
+
+  it('mantiene la fecha original y permite reintentar si falla el guardado', async () => {
+    const wrapper = await mountClassDashboard(1);
+    await wrapper.get('.class-activities-dashboard .catalog-actions button').trigger('click');
+    const form = wrapper.get('form[aria-labelledby="edit-activity-title"]');
+    await form.get('input').setValue('2026-11-30');
+    apiMock.mockRejectedValueOnce(new Error('No fue posible guardar la fecha'));
+    await form.trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('.modal-header').text()).toContain('2026-10-10');
+    expect(wrapper.get('.modal-body').text()).toContain('No fue posible guardar la fecha');
+    expect(form.get('button').attributes('disabled')).toBeUndefined();
+    expect((form.get('input').element as HTMLInputElement).value).toBe('2026-11-30');
+  });
+
   it('crea la actividad desde su clase con rúbrica e instrucciones, sin fase', async () => {
     const availableRubric = {
       id: 7,

@@ -20,6 +20,7 @@ import {
   CreateActivityDto,
   MAX_LEARNING_OUTCOMES,
   MAX_LEARNING_OUTCOME_LENGTH,
+  UpdateActivityDueDateDto,
   UpdateLearningOutcomesDto,
 } from './activities.dto';
 
@@ -126,6 +127,16 @@ export class ActivitiesService {
       activity.rubric = rubric;
       return activity;
     });
+  }
+
+  async updateDueDate(teacherId: number, activityId: number, input: UpdateActivityDueDateDto) {
+    await this.ownedActivity(teacherId, activityId);
+    const result = await this.activities.update(
+      { id: activityId, teacher: { id: teacherId } },
+      { dueDate: input.dueDate },
+    );
+    if (!result.affected) throw new NotFoundException('La actividad no existe o no pertenece al docente');
+    return { id: activityId, dueDate: input.dueDate };
   }
 
   async updateLearningOutcomes(

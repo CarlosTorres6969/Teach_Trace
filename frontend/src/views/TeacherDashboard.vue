@@ -74,6 +74,8 @@ const enrollmentBusy = computed(
   () => bulkEnrollmentBusy.value || individualEnrollmentBusy.value,
 );
 const deletingActivity = ref(false);
+const editedDueDate = ref('');
+const savingDueDate = ref(false);
 const removingStudent = ref(false);
 const selectedClass = computed(
   () => classes.value.find((academicClass) => academicClass.id === selectedClassId.value) ?? null,
@@ -306,6 +308,28 @@ async function createActivity() {
   }
 }
 
+async function saveDueDate() {
+  const activity = selectedActivity.value;
+  const dueDate = editedDueDate.value;
+  if (!activity || !dueDate || savingDueDate.value || dueDate === activity.dueDate) return;
+  clearFeedback();
+  savingDueDate.value = true;
+  try {
+    const updated = await api<{ id: number; dueDate: string }>(
+      `/teacher/activities/${activity.id}/due-date`,
+      { method: 'PUT', body: JSON.stringify({ dueDate }) },
+    );
+    activities.value = activities.value.map((item) =>
+      item.id === updated.id ? { ...item, dueDate: updated.dueDate } : item,
+    );
+    message.value = 'Fecha de entrega actualizada';
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    savingDueDate.value = false;
+  }
+}
+
 async function saveOutcomes(activityId: number) {
   await act('Resultados de aprendizaje actualizados', async () => {
     const learningOutcomes = (outcomes[activityId] ?? '')
@@ -477,6 +501,7 @@ function openRubrics() {
 function openActivityDetail(activityId: number) {
   clearFeedback();
   selectedActivityId.value = activityId;
+  editedDueDate.value = selectedActivity.value?.dueDate ?? '';
   const classId = activities.value.find((activity) => activity.id === activityId)?.academicClass?.id;
   if (classId) selectedClassId.value = classId;
   activeModal.value = 'activity-detail';
@@ -1100,6 +1125,20 @@ onBeforeUnmount(() => {
               ? 'La actividad está publicada y visible para los estudiantes.'
               : 'La actividad está en borrador. Asocia una rúbrica antes de publicarla.' }}
           </p>
+
+          <form class="modal-section" aria-labelledby="edit-activity-title" :aria-busy="savingDueDate" @submit.prevent="saveDueDate">
+            <div>
+              <h3 id="edit-activity-title">Modificar actividad</h3>
+              <p id="edit-due-date-help" class="muted">Puedes cambiar la fecha de entrega incluso si la actividad ya está publicada.</p>
+            </div>
+            <label>Fecha de entrega
+              <input v-model="editedDueDate" type="date" aria-describedby="edit-due-date-help" :disabled="savingDueDate" required />
+            </label>
+            <button class="button secondary" :disabled="savingDueDate || !editedDueDate || editedDueDate === selectedActivity.dueDate">
+              <LoaderCircleIcon v-if="savingDueDate" class="ui-icon icon-spin" aria-hidden="true" />
+              {{ savingDueDate ? 'Guardando…' : 'Guardar fecha de entrega' }}
+            </button>
+          </form>
 
           <section class="modal-section">
             <div>

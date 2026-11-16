@@ -665,6 +665,81 @@ describe('TeachTrace API (integración)', () => {
     })).response.status).toBe(200);
   });
 
+  it('modifica la fecha en borrador y publicada, la muestra al estudiante y protege permisos y evidencia', async () => {
+    const created = await requestRaw('/api/teacher/activities', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Actividad con fecha editable', classId, dueDate: '2028-02-20', activityType: 'Proyecto' }),
+    });
+    expect(created.response.status).toBe(201);
+    const id = (created.body as { id: number }).id;
+    const endpoint = `/api/teacher/activities/${id}/due-date`;
+    const update = (body: unknown, cookie = teacher.sessionCookie) => request(endpoint, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect((await update({ dueDate: '2028-02-29' })).response.status).toBe(200);
+    expect(await dataSource.getRepository(Activity).findOneByOrFail({ id })).toMatchObject({
+      dueDate: '2028-02-29', published: false,
+    });
+
+    const rubric = await request('/api/teacher/rubrics', {
+      method: 'POST',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Rúbrica de fecha editable', criteria: buildCriteria() }),
+    });
+    expect(rubric.response.status).toBe(201);
+    expect((await request(`/api/teacher/activities/${id}/rubric`, {
+      method: 'PUT',
+      headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rubricId: (rubric.body as { id: number }).id }),
+    })).response.status).toBe(200);
+    expect((await request(`/api/teacher/activities/${id}/publish`, {
+      method: 'PUT', headers: sessionHeaders(teacher.sessionCookie),
+    })).response.status).toBe(200);
+    await prepareRequiredEvidence(id);
+    const logbookBefore = await dataSource.getRepository(Logbook).findOneByOrFail({
+      student: { id: student.user.id }, activity: { id },
+    });
+    const saved = await update({ dueDate: '2028-03-01' });
+    expect(saved.response.status).toBe(200);
+    expect(saved.body).toEqual({ id, dueDate: '2028-03-01' });
+    expect(await dataSource.getRepository(Activity).findOneByOrFail({ id })).toMatchObject({
+      title: 'Actividad con fecha editable', dueDate: '2028-03-01', published: true,
+    });
+    const logbookAfter = await dataSource.getRepository(Logbook).findOneByOrFail({ id: logbookBefore.id });
+    expect(logbookAfter.initialIdeas).toBe(logbookBefore.initialIdeas);
+    expect(logbookAfter.updatedAt).toEqual(logbookBefore.updatedAt);
+    for (const [path, cookie] of [
+      ['/api/teacher/activities', teacher.sessionCookie],
+      ['/api/student/activities?filter=all', student.sessionCookie],
+    ]) {
+      const listed = await request(path, { headers: sessionHeaders(cookie) });
+      expect(listed.response.status).toBe(200);
+      expect((listed.body as Array<{ id: number; dueDate: string }>).find((item) => item.id === id))
+        .toMatchObject({ dueDate: '2028-03-01' });
+    }
+
+    for (const body of [{}, { dueDate: null }, { dueDate: '' }, { dueDate: '2026-02-29' },
+      { dueDate: '2028-02-30' }, { dueDate: '2028-13-01' }, { dueDate: '2028-03-01T12:00:00Z' },
+      { dueDate: '2028-03-02', published: false }]) {
+      expect((await update(body)).response.status).toBe(400);
+    }
+    expect((await update({ dueDate: '2028-03-02' }, student.sessionCookie)).response.status).toBe(403);
+    expect((await update({ dueDate: '2028-03-02' }, '')).response.status).toBe(401);
+    const adminAsTeacher = await request('/api/auth/switch-role', {
+      method: 'POST',
+      headers: { ...sessionHeaders(admin.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: UserRole.TEACHER }),
+    });
+    expect(adminAsTeacher.response.status).toBe(201);
+    expect((await update({ dueDate: '2028-03-02' }, readSessionCookie(adminAsTeacher.response))).response.status).toBe(404);
+    expect(await dataSource.getRepository(Activity).findOneByOrFail({ id })).toMatchObject({
+      dueDate: '2028-03-01', published: true,
+    });
+  });
+
   it('asocia resultados de aprendizaje con validación, persistencia y permisos', async () => {
     const endpoint = `/api/teacher/activities/${activityId}/learning-outcomes`;
     const update = await request(endpoint, {
