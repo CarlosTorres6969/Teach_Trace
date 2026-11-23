@@ -72,6 +72,33 @@ export class UpdateActivityDueDateDto {
   dueDate: string;
 }
 
+export class UpdateActivityTitleDto {
+  @Transform(trimString)
+  @IsString()
+  @Matches(/\S/u, { message: 'El nombre de la actividad debe contener texto' })
+  @MaxLength(160)
+  title: string;
+}
+
+export class PrepareTeacherContextUploadDto {
+  @IsString()
+  @MaxLength(255)
+  @Matches(/\.(pdf|docx)$/i, { message: 'Selecciona un PDF o Word (.docx)' })
+  fileName: string;
+
+  @IsInt()
+  @Min(5)
+  @Max(10 * 1024 * 1024, { message: 'El documento no puede superar 10 MB' })
+  fileSize: number;
+}
+
+export class SaveTeacherContextDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  uploadToken?: string;
+}
+
 export class UpdateLearningOutcomesDto {
   @Transform(({ value }: { value: unknown }) =>
     Array.isArray(value)

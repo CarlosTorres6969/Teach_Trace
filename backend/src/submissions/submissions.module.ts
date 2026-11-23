@@ -10,7 +10,7 @@ import { Submission } from '../entities/submission.entity';
 import { Valuation } from '../entities/valuation.entity';
 import { SubmissionsController } from './submissions.controller';
 import { SubmissionsService } from './submissions.service';
-import { DocumentRepositoryService } from './document-repository.service';
+import { DocumentStorageModule } from '../documents/document-storage.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -21,9 +21,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AiEngineModule,
     AuthModule,
     NotificationsModule,
+    DocumentStorageModule,
   ],
   controllers: [SubmissionsController],
-  providers: [SubmissionsService, DocumentRepositoryService],
+  providers: [SubmissionsService],
   exports: [SubmissionsService],
 })
 export class SubmissionsModule {}

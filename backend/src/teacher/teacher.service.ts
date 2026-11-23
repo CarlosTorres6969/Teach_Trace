@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ActivitiesService } from '../activities/activities.service';
-import { CreateActivityDto, UpdateActivityDueDateDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
+import { CreateActivityDto, UpdateActivityDueDateDto, UpdateActivityTitleDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
 import { ClassesService } from '../classes/classes.service';
 import { CreateClassDto, EnrollmentStudentDto } from '../classes/classes.dto';
 import { Activity } from '../entities/activity.entity';
@@ -66,6 +66,10 @@ export class TeacherService {
 
   updateDueDate(teacherId: number, activityId: number, input: UpdateActivityDueDateDto) {
     return this.activitiesService.updateDueDate(teacherId, activityId, input);
+  }
+
+  updateTitle(teacherId: number, activityId: number, input: UpdateActivityTitleDto) {
+    return this.activitiesService.updateTitle(teacherId, activityId, input);
   }
 
   async updateLearningOutcomes(teacherId: number, activityId: number, input: UpdateLearningOutcomesDto) {

@@ -20,6 +20,14 @@ export type ActivityView = {
   viewedAt: string;
 };
 
+export type TeacherContextDocument = {
+  fileName: string;
+  mimeType: string;
+  size: number;
+  storageKey: string;
+  text: string;
+};
+
 @Entity('activities')
 export class Activity {
   @PrimaryGeneratedColumn()
@@ -39,6 +47,10 @@ export class Activity {
 
   @Column({ type: 'text', default: '' })
   agentInstructions: string;
+
+  // Private teacher material: never loaded by ordinary/student queries.
+  @Column({ type: 'simple-json', nullable: true, select: false })
+  teacherContextDocument: TeacherContextDocument | null;
 
   @Column({ type: 'simple-enum', enum: ActivityPhase, default: ActivityPhase.PILOT })
   evaluationPhase: ActivityPhase;

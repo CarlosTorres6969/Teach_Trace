@@ -76,6 +76,7 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
       if (path === '/teacher/classes') return classes as never;
       if (path === '/teacher/activities' && !options.method) return currentActivities as never;
       if (path === '/teacher/rubrics') return [] as never;
+      if (path.endsWith('/teacher-context') && !options.method) return { document: null } as never;
       if (path === '/teacher/activities/11' && options.method === 'DELETE') {
         currentActivities = currentActivities.filter((activity) => activity.id !== 11);
         return { id: 11, deleted: true } as never;
@@ -306,6 +307,77 @@ describe('TeacherDashboard - organización y eliminación de actividades', () =>
     expect(dashboard.text()).toContain('Plan de pruebas');
     expect(dashboard.text()).toContain('2 entregas');
     expect(dashboard.text()).not.toContain('Aplicación con Vue');
+  });
+
+  it('renombra la actividad publicada y conserva la fecha y el número de entregas', async () => {
+    currentActivities[1].published = true;
+    const wrapper = await mountClassDashboard(1);
+    await wrapper.get('.class-activities-dashboard .catalog-actions button').trigger('click');
+    await flushPromises();
+    const form = wrapper.get('form[aria-labelledby="edit-activity-name-title"]');
+    expect(form.get('button').attributes('disabled')).toBeDefined();
+    await form.get('input').setValue('  Aplicación web corregida  ');
+    apiMock.mockResolvedValueOnce({ id: 11, title: 'Aplicación web corregida' } as never);
+    await form.trigger('submit');
+    await flushPromises();
+    expect(apiMock).toHaveBeenLastCalledWith('/teacher/activities/11/title', { method: 'PUT', body: JSON.stringify({ title: 'Aplicación web corregida' }) });
+    expect(wrapper.get('.modal-header').text()).toContain('Aplicación web corregida');
+    expect(wrapper.get('.modal-header').text()).toContain('2026-10-10');
+    expect(wrapper.text()).toContain('publicada y visible');
+    await wrapper.get('[aria-label="Volver a la clase"]').trigger('click');
+    expect(wrapper.get('.class-activities-dashboard').text()).toContain('Aplicación web corregida');
+    expect(wrapper.get('.class-activities-dashboard').text()).toContain('1 entrega');
+  });
+
+  it('adjunta Word como contexto privado sin enviar cambios de actividad', async () => {
+    const base = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path.endsWith('/teacher-context/upload')) return { mode: 'multipart', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' } as never;
+      if (path.endsWith('/teacher-context') && options.method === 'PUT') return { document: { fileName: 'definicion.docx', size: 1000, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' } } as never;
+      return base(path, options);
+    });
+    const wrapper = await mountClassDashboard(1);
+    await wrapper.get('.class-activities-dashboard .catalog-actions button').trigger('click');
+    await flushPromises();
+    const section = wrapper.get('[aria-labelledby="teacher-context-title"]');
+    expect(section.text()).toContain('los estudiantes no tienen acceso');
+    expect(section.text()).toContain('PDF o Word');
+    const input = section.get('input[type="file"]');
+    const file = new File(['Word'], 'definicion.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] });
+    await input.trigger('change');
+    await section.findAll('button').find((button) => button.text() === 'Guardar contexto')!.trigger('click');
+    await flushPromises();
+    const saved = apiMock.mock.calls.find(([path, options]) => path.endsWith('/teacher-context') && options?.method === 'PUT');
+    expect(saved?.[1]?.body).toBeInstanceOf(FormData);
+    expect((saved![1]!.body as FormData).get('file')).toBe(file);
+    expect(section.text()).toContain('definicion.docx');
+    expect(wrapper.text()).toContain('Contexto privado guardado');
+    expect(wrapper.get('.modal-header').text()).toContain('2026-10-10');
+  });
+
+  it('conserva el documento anterior si falla el reemplazo', async () => {
+    const base = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path, options = {}) => {
+      if (path.endsWith('/teacher-context/upload')) return { mode: 'multipart', mimeType: 'application/pdf' } as never;
+      if (path.endsWith('/teacher-context')) {
+        if (options.method === 'PUT') throw new Error('El documento está dañado');
+        return { document: { fileName: 'contexto-anterior.pdf', size: 1000, mimeType: 'application/pdf' } } as never;
+      }
+      return base(path, options);
+    });
+    const wrapper = await mountClassDashboard(1);
+    await wrapper.get('.class-activities-dashboard .catalog-actions button').trigger('click');
+    await flushPromises();
+    const section = wrapper.get('[aria-labelledby="teacher-context-title"]');
+    const input = section.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['%PDF-'], 'nuevo.pdf', { type: 'application/pdf' })] });
+    await input.trigger('change');
+    await section.findAll('button').find((button) => button.text() === 'Reemplazar contexto')!.trigger('click');
+    await flushPromises();
+    expect(section.text()).toContain('contexto-anterior.pdf');
+    expect(wrapper.get('.modal-body').text()).toContain('El documento está dañado');
+    expect(section.findAll('button').find((button) => button.text() === 'Reemplazar contexto')!.attributes('disabled')).toBeUndefined();
   });
 
   it('modifica la fecha de una actividad publicada y conserva sus entregas y estado', async () => {

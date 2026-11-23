@@ -3,7 +3,8 @@ import { LightbulbIcon, LoaderCircleIcon, PlusIcon, Trash2Icon } from '@lucide/v
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import readXlsxFile from 'read-excel-file';
 import { useRoute } from 'vue-router';
-import { api } from '../api';
+import { api, apiBlob } from '../api';
+import { prepareTeacherContextFile } from '../teacher-context-upload';
 import { auth } from '../auth';
 import PageLoader from '../components/PageLoader.vue';
 import {
@@ -76,6 +77,15 @@ const enrollmentBusy = computed(
 const deletingActivity = ref(false);
 const editedDueDate = ref('');
 const savingDueDate = ref(false);
+const editedTitle = ref('');
+const savingTitle = ref(false);
+type ContextDocument = { fileName: string; mimeType: string; size: number };
+const contextDocument = ref<ContextDocument | null>(null);
+const loadingContext = ref(false);
+const contextBusy = ref(false);
+const contextLoaded = ref(false);
+const selectedContextFile = ref<File | null>(null);
+const contextInputVersion = ref(0);
 const removingStudent = ref(false);
 const selectedClass = computed(
   () => classes.value.find((academicClass) => academicClass.id === selectedClassId.value) ?? null,
@@ -308,6 +318,124 @@ async function createActivity() {
   }
 }
 
+async function saveTitle() {
+  const activity = selectedActivity.value;
+  const title = editedTitle.value.trim();
+  if (!activity || !title || title === activity.title || savingTitle.value) return;
+  clearFeedback();
+  savingTitle.value = true;
+  try {
+    const updated = await api<{ id: number; title: string }>(`/teacher/activities/${activity.id}/title`, {
+      method: 'PUT', body: JSON.stringify({ title }),
+    });
+    activities.value = activities.value.map((item) => item.id === updated.id ? { ...item, title: updated.title } : item);
+    editedTitle.value = updated.title;
+    message.value = 'Nombre de la actividad actualizado';
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    savingTitle.value = false;
+  }
+}
+
+async function loadTeacherContext(activityId: number) {
+  loadingContext.value = true;
+  contextLoaded.value = false;
+  try {
+    const result = await api<{ document: ContextDocument | null }>(`/teacher/activities/${activityId}/teacher-context`);
+    if (selectedActivityId.value === activityId) {
+      contextDocument.value = result.document;
+      contextLoaded.value = true;
+    }
+  } catch (cause) {
+    if (selectedActivityId.value === activityId) showError(cause);
+  } finally {
+    if (selectedActivityId.value === activityId) loadingContext.value = false;
+  }
+}
+
+function selectContextFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  clearFeedback();
+  selectedContextFile.value = null;
+  if (!file) return;
+  if (!/\.(pdf|docx)$/i.test(file.name)) {
+    error.value = 'Selecciona un PDF o Word (.docx).';
+    input.value = '';
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    error.value = 'El documento no puede superar 10 MB.';
+    input.value = '';
+    return;
+  }
+  selectedContextFile.value = file;
+}
+
+async function saveTeacherContext() {
+  const activityId = selectedActivityId.value;
+  const file = selectedContextFile.value;
+  if (!activityId || !file || contextBusy.value) return;
+  contextBusy.value = true;
+  clearFeedback();
+  try {
+    const form = await prepareTeacherContextFile(activityId, file);
+    const result = await api<{ document: ContextDocument }>(`/teacher/activities/${activityId}/teacher-context`, { method: 'PUT', body: form });
+    if (selectedActivityId.value === activityId) {
+      contextDocument.value = result.document;
+      contextLoaded.value = true;
+      selectedContextFile.value = null;
+      contextInputVersion.value++;
+      message.value = 'Contexto privado guardado para las próximas evaluaciones de IA';
+    }
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    contextBusy.value = false;
+  }
+}
+
+async function removeTeacherContext() {
+  const activityId = selectedActivityId.value;
+  if (!activityId || contextBusy.value) return;
+  contextBusy.value = true;
+  clearFeedback();
+  try {
+    await api(`/teacher/activities/${activityId}/teacher-context`, { method: 'DELETE' });
+    if (selectedActivityId.value === activityId) {
+      contextDocument.value = null;
+      selectedContextFile.value = null;
+      contextInputVersion.value++;
+      message.value = 'Contexto privado retirado de la actividad';
+    }
+  } catch (cause) {
+    showError(cause);
+  } finally {
+    contextBusy.value = false;
+  }
+}
+
+async function downloadTeacherContext() {
+  const activityId = selectedActivityId.value;
+  const documentName = contextDocument.value?.fileName;
+  if (!activityId || !documentName) return;
+  try {
+    const path = `/teacher/activities/${activityId}/teacher-context`;
+    const result = await api<{ url: string | null }>(`${path}/download`);
+    const url = result.url ?? URL.createObjectURL(await apiBlob(`${path}/file`));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.rel = 'noreferrer';
+    anchor.referrerPolicy = 'no-referrer';
+    anchor.download = documentName;
+    anchor.click();
+    if (!result.url) URL.revokeObjectURL(url);
+  } catch (cause) {
+    showError(cause);
+  }
+}
+
 async function saveDueDate() {
   const activity = selectedActivity.value;
   const dueDate = editedDueDate.value;
@@ -502,9 +630,14 @@ function openActivityDetail(activityId: number) {
   clearFeedback();
   selectedActivityId.value = activityId;
   editedDueDate.value = selectedActivity.value?.dueDate ?? '';
+  editedTitle.value = selectedActivity.value?.title ?? '';
+  contextDocument.value = null;
+  selectedContextFile.value = null;
+  contextInputVersion.value++;
   const classId = activities.value.find((activity) => activity.id === activityId)?.academicClass?.id;
   if (classId) selectedClassId.value = classId;
   activeModal.value = 'activity-detail';
+  void loadTeacherContext(activityId);
 }
 
 function returnToClassDashboard() {
@@ -1126,6 +1259,16 @@ onBeforeUnmount(() => {
               : 'La actividad está en borrador. Asocia una rúbrica antes de publicarla.' }}
           </p>
 
+          <form class="modal-section" aria-labelledby="edit-activity-name-title" :aria-busy="savingTitle" @submit.prevent="saveTitle">
+            <h3 id="edit-activity-name-title">Nombre de la actividad</h3>
+            <label>Nombre
+              <input v-model="editedTitle" type="text" maxlength="160" required :disabled="savingTitle" />
+            </label>
+            <button class="button secondary" :disabled="savingTitle || !editedTitle.trim() || editedTitle.trim() === selectedActivity.title">
+              {{ savingTitle ? 'Guardando…' : 'Guardar nombre' }}
+            </button>
+          </form>
+
           <form class="modal-section" aria-labelledby="edit-activity-title" :aria-busy="savingDueDate" @submit.prevent="saveDueDate">
             <div>
               <h3 id="edit-activity-title">Modificar actividad</h3>
@@ -1139,6 +1282,29 @@ onBeforeUnmount(() => {
               {{ savingDueDate ? 'Guardando…' : 'Guardar fecha de entrega' }}
             </button>
           </form>
+
+          <section class="modal-section" aria-labelledby="teacher-context-title" :aria-busy="contextBusy || loadingContext">
+            <div>
+              <h3 id="teacher-context-title">Contexto privado para la IA</h3>
+              <p class="muted">Adjunta la definición de la tarea en PDF o Word (.docx), hasta 10 MB. Solo el docente puede ver y descargar este documento; los estudiantes no tienen acceso. Se usará en las próximas evaluaciones de IA.</p>
+            </div>
+            <p v-if="loadingContext" class="muted">Cargando documento…</p>
+            <button v-else-if="!contextLoaded" type="button" class="button secondary" @click="loadTeacherContext(selectedActivity.id)">Reintentar</button>
+            <template v-else>
+              <p v-if="contextDocument"><strong>{{ contextDocument.fileName }}</strong> · {{ formatFileSize(contextDocument.size) }}</p>
+              <p v-else class="muted">Sin documento de contexto.</p>
+              <div v-if="contextDocument" class="association-row">
+                <button type="button" class="button secondary" :disabled="contextBusy" @click="downloadTeacherContext">Descargar contexto</button>
+                <button type="button" class="button secondary" :disabled="contextBusy" @click="removeTeacherContext">Retirar contexto</button>
+              </div>
+              <label>Documento de contexto
+                <input :key="contextInputVersion" class="teacher-context-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" :disabled="contextBusy" @change="selectContextFile" />
+              </label>
+              <button type="button" class="button secondary" :disabled="contextBusy || !selectedContextFile" @click="saveTeacherContext">
+                {{ contextBusy ? 'Guardando…' : contextDocument ? 'Reemplazar contexto' : 'Guardar contexto' }}
+              </button>
+            </template>
+          </section>
 
           <section class="modal-section">
             <div>

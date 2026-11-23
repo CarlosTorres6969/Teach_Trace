@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource, In, Not, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
+import { TeacherContextService } from '../activities/teacher-context.service';
 import { AiConversationsService } from '../ai-conversations/ai-conversations.service';
 import { AiAnalysisResult, AiEngineService } from '../ai-engine/ai-engine.service';
 import { normalizeAiDeclarationText } from '../ai-declarations/update-ai-declaration.dto';
@@ -60,6 +61,7 @@ export class SubmissionsService {
     @Optional() private readonly aiConversations?: AiConversationsService,
     @Optional() private readonly notificationsService?: NotificationsService,
     @Optional() private readonly uploadTokens?: JwtService,
+    @Optional() private readonly teacherContext?: TeacherContextService,
   ) {}
 
   async prepareUpload(student: User, activityId: number, input: PrepareSubmissionUploadDto) {
@@ -593,6 +595,9 @@ export class SubmissionsService {
 
   async evaluateActivity(teacherId: number, activityId: number) {
     const activity = await this.activitiesService.ownedActivity(teacherId, activityId, true);
+    const teacherContextText = this.teacherContext
+      ? await this.teacherContext.textForEvaluation(teacherId, activityId)
+      : '';
     const submissions = (await this.submissions.find({ where: { activity: { id: activityId } } }))
       .filter((submission) =>
         submission.status !== SubmissionStatus.NOT_SUBMITTED &&
@@ -659,6 +664,7 @@ export class SubmissionsService {
             subject: activity.subject,
             activityType: activity.activityType,
             agentInstructions: activity.agentInstructions,
+            ...(teacherContextText ? { teacherContextText } : {}),
           },
           logbook: logbook
             ? {

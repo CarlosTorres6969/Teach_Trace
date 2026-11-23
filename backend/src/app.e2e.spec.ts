@@ -32,6 +32,7 @@ import { Notification, NotificationType } from './entities/notification.entity';
 import { PushSubscriptionEntity } from './entities/push-subscription.entity';
 import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
 import { DocumentRepositoryService } from './submissions/document-repository.service';
+import JSZip = require('jszip');
 
 jest.setTimeout(180000);
 
@@ -738,6 +739,91 @@ describe('TeachTrace API (integración)', () => {
     expect((await update({ dueDate: '2028-03-02' }, readSessionCookie(adminAsTeacher.response))).response.status).toBe(404);
     expect(await dataSource.getRepository(Activity).findOneByOrFail({ id })).toMatchObject({
       dueDate: '2028-03-01', published: true,
+    });
+  });
+
+  it('renombra actividades y guarda Word privado sin exponerlo al estudiante ni alterar su evidencia', async () => {
+    const created = await request('/api/teacher/activities', {
+      method: 'POST', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Actividad original con contexto', classId, dueDate: '2028-05-20', activityType: 'Proyecto' }),
+    });
+    expect(created.response.status).toBe(201);
+    const id = (created.body as { id: number }).id;
+    await prepareRequiredEvidence(id);
+    const delivered = await request(`/api/student/activities/${id}/submission`, {
+      method: 'PUT', headers: sessionHeaders(student.sessionCookie), body: buildSubmitForm(),
+    });
+    expect(delivered.response.status).toBe(200);
+    const submissionBefore = await dataSource.getRepository(Submission).findOneOrFail({ where: { student: { id: student.user.id }, activity: { id } } });
+    const titlePath = `/api/teacher/activities/${id}/title`;
+    const renamed = await request(titlePath, {
+      method: 'PUT', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '  Actividad con nombre corregido  ' }),
+    });
+    expect(renamed.response.status).toBe(200);
+    expect(renamed.body).toEqual({ id, title: 'Actividad con nombre corregido' });
+    for (const body of [{ title: '   ' }, { title: 'a'.repeat(161) }, { title: 'Intento', published: false }]) {
+      expect((await request(titlePath, { method: 'PUT', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).response.status).toBe(400);
+    }
+    expect((await request(titlePath, { method: 'PUT', headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Cambio estudiante' }) })).response.status).toBe(403);
+
+    const secret = 'CONTEXTO_PRIVADO_QA_NO_VISIBLE_EN_ESTUDIANTES';
+    const fileName = 'definicion-privada-del-docente.docx';
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.file('_rels/.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.file('word/document.xml', `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${secret}</w:t></w:r></w:p></w:body></w:document>`);
+    const word = await zip.generateAsync({ type: 'nodebuffer' });
+    const contextPath = `/api/teacher/activities/${id}/teacher-context`;
+    const authorization = await request(`${contextPath}/upload`, {
+      method: 'POST', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, fileSize: word.length }),
+    });
+    expect(authorization.response.status).toBe(201);
+    expect(authorization.body).toMatchObject({ mode: 'multipart' });
+    const form = new FormData();
+    form.set('file', new Blob([Uint8Array.from(word)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), fileName);
+    const saved = await request(contextPath, { method: 'PUT', headers: sessionHeaders(teacher.sessionCookie), body: form });
+    expect(saved.response.status).toBe(200);
+    expect(saved.body).toMatchObject({ document: { fileName, size: word.length } });
+    expect(JSON.stringify(saved.body)).not.toContain(secret);
+    const privateActivity = await dataSource.getRepository(Activity).findOneOrFail({ where: { id }, select: { id: true, teacherContextDocument: true } });
+    expect(privateActivity.teacherContextDocument?.text).toBe(secret);
+    const users = dataSource.getRepository(User);
+    const otherEmail = 'otro.docente.contexto@unah.edu.hn';
+    await users.save(users.create({ email: otherEmail, name: 'Otro docente de contexto', passwordHash: await app.get(AuthService).hashPassword('OtroDocenteContexto123!'), role: UserRole.TEACHER, active: true }));
+    const otherLogin = await request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: otherEmail, password: 'OtroDocenteContexto123!' }) });
+    const otherCookie = readSessionCookie(otherLogin.response);
+    for (const path of [contextPath, `${contextPath}/download`, `${contextPath}/file`]) {
+      expect((await request(path, { headers: sessionHeaders(otherCookie) })).response.status).toBe(404);
+    }
+    expect((await request(titlePath, { method: 'PUT', headers: { ...sessionHeaders(otherCookie), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Cambio ajeno' }) })).response.status).toBe(404);
+    const defaultActivity = await dataSource.getRepository(Activity).findOneByOrFail({ id });
+    expect(defaultActivity.teacherContextDocument).toBeUndefined();
+    expect(defaultActivity).toMatchObject({ title: 'Actividad con nombre corregido', published: true, dueDate: '2028-05-20' });
+    for (const [suffix, method] of [['', 'GET'], ['', 'PUT'], ['', 'DELETE'], ['/upload', 'POST'], ['/download', 'GET'], ['/file', 'GET']]) {
+      const denied = await request(`${contextPath}${suffix}`, { method, headers: sessionHeaders(student.sessionCookie) });
+      expect(denied.response.status).toBe(403);
+    }
+    for (const path of ['/api/student/activities?filter=all', `/api/student/activities/${id}/logbook`, `/api/student/activities/${id}/submission-status`, `/api/student/activities/${id}/ai-declaration`, `/api/student/activities/${id}/ai-conversation`]) {
+      const result = await request(path, { headers: sessionHeaders(student.sessionCookie) });
+      expect(result.response.status).toBe(200);
+      for (const privateValue of [secret, fileName, 'teacherContextDocument', 'teacher-context/']) {
+        expect(JSON.stringify(result.body)).not.toContain(privateValue);
+      }
+    }
+    const logbook = await request(`/api/student/activities/${id}/logbook`, { headers: sessionHeaders(student.sessionCookie) });
+    expect(logbook.body).toMatchObject({ activity: { title: 'Actividad con nombre corregido' } });
+    const download = await request(`${contextPath}/file`, { headers: sessionHeaders(teacher.sessionCookie) });
+    expect(download.response.status).toBe(200);
+    expect(download.response.headers.get('content-disposition')).toContain(fileName);
+    expect((await request(contextPath, { method: 'DELETE', headers: sessionHeaders(teacher.sessionCookie) })).response.status).toBe(200);
+    expect((await request(contextPath, { headers: sessionHeaders(teacher.sessionCookie) })).body).toEqual({ document: null });
+    const submissionAfter = await dataSource.getRepository(Submission).findOneByOrFail({ id: submissionBefore.id });
+    expect(submissionAfter).toMatchObject({
+      status: submissionBefore.status, evaluationStatus: submissionBefore.evaluationStatus,
+      submittedAt: submissionBefore.submittedAt, fileStorageKey: submissionBefore.fileStorageKey,
+      aiStrengths: submissionBefore.aiStrengths, feedback: submissionBefore.feedback,
     });
   });
 

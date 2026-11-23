@@ -75,6 +75,20 @@ El backend es un solo proceso NestJS, separado internamente por dominios:
 
 ## Archivos de entregas en Azure Blob Storage
 
+Desde **Mis clases → Gestionar clase → Configurar actividad**, el docente propietario puede
+cambiar el nombre de una actividad y guardar su nueva fecha por separado. Estas operaciones
+conservan las entregas, las evaluaciones, la rúbrica y el estado de publicación.
+
+La sección **Contexto privado para la IA** permite adjuntar, reemplazar, descargar o retirar un
+PDF o Word (`.docx`) de hasta 10 MB con la definición de la tarea. El documento debe contener
+texto extraíble; se admiten hasta 100 000 caracteres. Solo el docente propietario puede acceder
+al archivo o a sus metadatos. Los estudiantes no reciben su nombre, su contenido ni enlaces.
+El texto se utiliza como referencia privada en las próximas evaluaciones de IA, junto con la
+rúbrica y las instrucciones del docente; no vuelve a evaluar entregas automáticamente.
+
+El contexto se guarda en una columna opcional excluida de las consultas ordinarias de TypeORM.
+La migración de PostgreSQL agrega únicamente esa columna, sin modificar los datos académicos.
+
 Los PDF adjuntos pueden guardarse en un contenedor privado de Azure Blob Storage. Configure en
 `.env` el proveedor y las credenciales de la cuenta de almacenamiento:
 

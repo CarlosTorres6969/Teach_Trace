@@ -262,7 +262,7 @@ describe('SubmissionsService', () => {
     expect(notAnalyzed.aiSuggestedGradePercentage).toBeNull();
   });
 
-  it('envía al motor los criterios de la rúbrica asociada', async () => {
+  it('envía al motor la rúbrica y el contexto privado del docente propietario', async () => {
     const criteria = [
       {
         name: 'Argumentación',
@@ -302,6 +302,7 @@ describe('SubmissionsService', () => {
     const aiEngine = {
       analyzeEvidence: jest.fn().mockResolvedValue({ implemented: false, reason: 'Stub' }),
     };
+    const teacherContext = { textForEvaluation: jest.fn().mockResolvedValue('Definición privada de la tarea') };
     const service = new SubmissionsService(
       submissions as never,
       { findOne: jest.fn().mockResolvedValue(null) } as never,
@@ -310,6 +311,7 @@ describe('SubmissionsService', () => {
       {} as never,
       activitiesService as never,
       aiEngine as never,
+      undefined, undefined, undefined, undefined, teacherContext as never,
     );
 
     await service.evaluateActivity(3, 4);
@@ -321,6 +323,7 @@ describe('SubmissionsService', () => {
           title: activity.title,
           subject: activity.subject,
           activityType: activity.activityType,
+          teacherContextText: 'Definición privada de la tarea',
         },
         rubric: criteria,
         learningOutcomes: activity.learningOutcomes,

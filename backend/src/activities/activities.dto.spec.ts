@@ -4,7 +4,27 @@ import {
   MAX_LEARNING_OUTCOMES,
   MAX_LEARNING_OUTCOME_LENGTH,
   UpdateLearningOutcomesDto,
+  UpdateActivityTitleDto,
+  PrepareTeacherContextUploadDto,
 } from './activities.dto';
+
+describe('Edición del nombre y documento privado', () => {
+  it.each(['', '   ', 'a'.repeat(161), null])('rechaza un nombre inválido', async (title) => {
+    expect(await validate(plainToInstance(UpdateActivityTitleDto, { title }))).not.toHaveLength(0);
+  });
+  it('normaliza el nombre sin aceptar campos ajenos', async () => {
+    const input = plainToInstance(UpdateActivityTitleDto, { title: '  Nuevo nombre  ' });
+    expect(await validate(input)).toHaveLength(0);
+    expect(input.title).toBe('Nuevo nombre');
+    expect(await validate(plainToInstance(UpdateActivityTitleDto, { title: 'Nombre', published: false }), { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(0);
+  });
+  it.each(['pdf', 'docx'])('acepta documentos .%s de 10 MB', async (extension) => {
+    expect(await validate(plainToInstance(PrepareTeacherContextUploadDto, { fileName: `tarea.${extension}`, fileSize: 10 * 1024 * 1024 }))).toHaveLength(0);
+  });
+  it.each([{ fileName: 'tarea.doc', fileSize: 100 }, { fileName: 'tarea.pdf', fileSize: 10 * 1024 * 1024 + 1 }])('rechaza formatos o tamaños no permitidos', async (input) => {
+    expect(await validate(plainToInstance(PrepareTeacherContextUploadDto, input))).not.toHaveLength(0);
+  });
+});
 
 describe('UpdateLearningOutcomesDto', () => {
   async function errors(learningOutcomes: unknown) {

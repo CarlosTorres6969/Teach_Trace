@@ -128,6 +128,10 @@ export class DocumentRepositoryService implements OnModuleInit {
   }
 
   async verifyUpload(storageKey: string, scope: string, expectedSize: number) {
+    return this.verifyDocumentUpload(storageKey, scope, expectedSize, 'application/pdf');
+  }
+
+  async verifyDocumentUpload(storageKey: string, scope: string, expectedSize: number, mimeType: string) {
     const reference = this.parseStorageKey(storageKey);
     if (!this.azureContainer || reference.provider !== 'azure' || !reference.key.startsWith(`${scope}/`)) {
       throw new BadRequestException('La referencia del archivo no pertenece a esta entrega');
@@ -139,14 +143,17 @@ export class DocumentRepositoryService implements OnModuleInit {
       if (size > MAX_SUBMISSION_FILE_SIZE) {
         throw new PayloadTooLargeException('El archivo de la entrega no puede superar 10 MB');
       }
-      if (size < 5 || size !== expectedSize || properties.contentType !== 'application/pdf') {
-        throw new BadRequestException('El archivo subido no coincide con el PDF seleccionado');
+      if (size < 5 || size !== expectedSize || properties.contentType !== mimeType) {
+        throw new BadRequestException('El archivo subido no coincide con el documento seleccionado');
       }
       const signature = await blob.downloadToBuffer(0, 5, {
         conditions: { ifMatch: properties.etag },
       });
-      if (signature.toString('ascii') !== '%PDF-') {
-        throw new BadRequestException('El archivo de la entrega debe ser un PDF');
+      const valid = mimeType === 'application/pdf'
+        ? signature.toString('ascii') === '%PDF-'
+        : signature.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      if (!valid) {
+        throw new BadRequestException('El contenido del documento no corresponde con su formato');
       }
       return { key: storageKey, size };
     } catch (error) {

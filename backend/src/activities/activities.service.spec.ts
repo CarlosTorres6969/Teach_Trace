@@ -4,6 +4,25 @@ import { Rubric } from '../entities/rubric.entity';
 import { ActivitiesService } from './activities.service';
 
 describe('ActivitiesService', () => {
+  it('cambia solo el nombre de una actividad propia, sin guardar ni modificar otros campos', async () => {
+    const activities = {
+      findOne: jest.fn().mockResolvedValue({ id: 8, title: 'Anterior', published: true }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      save: jest.fn(),
+    };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+    expect(await service.updateTitle(2, 8, { title: '  Nombre corregido  ' })).toEqual({ id: 8, title: 'Nombre corregido' });
+    expect(activities.update).toHaveBeenCalledWith({ id: 8, teacher: { id: 2 } }, { title: 'Nombre corregido' });
+    expect(activities.save).not.toHaveBeenCalled();
+  });
+
+  it('rechaza cambiar el nombre de la actividad de otro docente', async () => {
+    const activities = { findOne: jest.fn().mockResolvedValue(null), update: jest.fn() };
+    const service = new ActivitiesService(activities as never, {} as never, {} as never);
+    await expect(service.updateTitle(99, 8, { title: 'Cambio ajeno' })).rejects.toBeInstanceOf(NotFoundException);
+    expect(activities.update).not.toHaveBeenCalled();
+  });
+
   it('lista únicamente actividades de matrículas activas', async () => {
     const enrollments = {
       find: jest.fn().mockResolvedValue([{ academicClass: { id: 5 } }]),

@@ -10,9 +10,14 @@ import {
   Query,
   Res,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { CreateActivityDto, UpdateActivityDueDateDto, UpdateLearningOutcomesDto } from '../activities/activities.dto';
+import { CreateActivityDto, UpdateActivityDueDateDto, UpdateActivityTitleDto, UpdateLearningOutcomesDto, PrepareTeacherContextUploadDto, SaveTeacherContextDto } from '../activities/activities.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { TeacherContextService } from '../activities/teacher-context.service';
+import type { UploadedAcademicFile } from '../submissions/submissions.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -35,6 +40,7 @@ export class TeacherController {
     private readonly teacherService: TeacherService,
     private readonly submissionsService: SubmissionsService,
     private readonly teacherValuationsService: TeacherValuationsService,
+    private readonly teacherContext: TeacherContextService,
   ) {}
 
   @Get('classes')
@@ -90,6 +96,49 @@ export class TeacherController {
   @Post('activities')
   createActivity(@CurrentUser() user: User, @Body() input: CreateActivityDto) {
     return this.teacherService.createActivity(user, input);
+  }
+
+  @Put('activities/:activityId/title')
+  updateTitle(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+    @Body() input: UpdateActivityTitleDto,
+  ) {
+    return this.teacherService.updateTitle(user.id, activityId, input);
+  }
+
+  @Get('activities/:activityId/teacher-context')
+  getTeacherContext(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number) {
+    return this.teacherContext.get(user.id, activityId);
+  }
+
+  @Post('activities/:activityId/teacher-context/upload')
+  prepareTeacherContext(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number, @Body() input: PrepareTeacherContextUploadDto) {
+    return this.teacherContext.prepareUpload(user.id, activityId, input);
+  }
+
+  @Put('activities/:activityId/teacher-context')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 + 1 } }))
+  saveTeacherContext(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number, @Body() input: SaveTeacherContextDto, @UploadedFile() file?: UploadedAcademicFile) {
+    return this.teacherContext.save(user.id, activityId, input, file);
+  }
+
+  @Delete('activities/:activityId/teacher-context')
+  removeTeacherContext(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number) {
+    return this.teacherContext.remove(user.id, activityId);
+  }
+
+  @Get('activities/:activityId/teacher-context/download')
+  downloadTeacherContext(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number) {
+    return this.teacherContext.download(user.id, activityId);
+  }
+
+  @Get('activities/:activityId/teacher-context/file')
+  async teacherContextFile(@CurrentUser() user: User, @Param('activityId', ParseIntPipe) activityId: number, @Res() response: Response) {
+    const file = await this.teacherContext.readFile(user.id, activityId);
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    response.send(file.content);
   }
 
   @Put('activities/:activityId/due-date')

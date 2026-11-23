@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
 import { ClassesService } from '../classes/classes.service';
-import { Activity, ActivityPhase } from '../entities/activity.entity';
+import { Activity, ActivityPhase, TeacherContextDocument } from '../entities/activity.entity';
 import { AiConversation } from '../entities/ai-conversation.entity';
 import { AiDeclaration } from '../entities/ai-declaration.entity';
 import { Enrollment } from '../entities/enrollment.entity';
@@ -21,6 +21,7 @@ import {
   MAX_LEARNING_OUTCOMES,
   MAX_LEARNING_OUTCOME_LENGTH,
   UpdateActivityDueDateDto,
+  UpdateActivityTitleDto,
   UpdateLearningOutcomesDto,
 } from './activities.dto';
 
@@ -127,6 +128,31 @@ export class ActivitiesService {
       activity.rubric = rubric;
       return activity;
     });
+  }
+
+  async updateTitle(teacherId: number, activityId: number, input: UpdateActivityTitleDto) {
+    await this.ownedActivity(teacherId, activityId);
+    const title = input.title.trim();
+    const result = await this.activities.update({ id: activityId, teacher: { id: teacherId } }, { title });
+    if (!result.affected) throw new NotFoundException('La actividad no existe o no pertenece al docente');
+    return { id: activityId, title };
+  }
+
+  async getTeacherContext(teacherId: number, activityId: number) {
+    const activity = await this.activities.findOne({
+      where: { id: activityId, teacher: { id: teacherId } },
+      select: { id: true, teacherContextDocument: true },
+      loadEagerRelations: false,
+    });
+    if (!activity) throw new NotFoundException('La actividad no existe o no pertenece al docente');
+    return activity.teacherContextDocument ?? null;
+  }
+
+  async setTeacherContext(teacherId: number, activityId: number, document: TeacherContextDocument | null) {
+    const result = await this.activities.update(
+      { id: activityId, teacher: { id: teacherId } }, { teacherContextDocument: document },
+    );
+    if (!result.affected) throw new NotFoundException('La actividad no existe o no pertenece al docente');
   }
 
   async updateDueDate(teacherId: number, activityId: number, input: UpdateActivityDueDateDto) {
