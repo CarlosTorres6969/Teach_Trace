@@ -9,7 +9,8 @@
     "db:verify:postgres": "npm run build && node dist/database/verify-postgres.js",
     "db:enable-rls": "node scripts/apply-rls.cjs",
     "test": "jest --runInBand",
-    "verify:azure-storage": "node scripts/verify-azure-storage.cjs"
+    "verify:azure-storage": "node scripts/verify-azure-storage.cjs",
+    "storage:cors": "node scripts/configure-document-storage-cors.cjs"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.33.0",

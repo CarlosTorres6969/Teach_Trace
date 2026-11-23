@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
 import { api } from '../api';
+import { attachSubmissionFile } from '../submission-upload';
 import PageLoader from '../components/PageLoader.vue';
 import {
   MAX_CONVERSATION_FILE_SIZE,
@@ -643,7 +644,6 @@ async function submitEvidence() {
   form.set('usageLevel', String(usageLevel));
   form.set('purpose', purpose);
   form.set('promptSummary', promptSummary);
-  if (selectedFile.value) form.set('file', selectedFile.value);
   try {
     const logbookSaved = await saveLogbookProgress('Bitácora guardada');
     if (!logbookSaved) return;
@@ -652,6 +652,7 @@ async function submitEvidence() {
       error.value = 'No fue posible guardar la conversación con IA.';
       return;
     }
+    if (selectedFile.value) await attachSubmissionFile(activityId, selectedFile.value, form);
     const result = await api<Record<string, string | null>>(
       `/student/activities/${activityId}/submission`,
       { method: 'PUT', body: form },

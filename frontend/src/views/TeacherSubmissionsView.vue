@@ -389,6 +389,17 @@ async function closeEvaluation() {
 async function downloadFile() {
   if (!selected.value?.fileName) return;
   try {
+    const download = await api<{ url: string | null }>(
+      `/teacher/submissions/${selected.value.id}/file-download`,
+    );
+    if (download.url) {
+      const anchor = document.createElement('a');
+      anchor.href = download.url;
+      anchor.rel = 'noreferrer';
+      anchor.referrerPolicy = 'no-referrer';
+      anchor.click();
+      return;
+    }
     const blob = await apiBlob(`/teacher/submissions/${selected.value.id}/file`);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');

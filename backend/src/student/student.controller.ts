@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   ParseIntPipe,
+  Post,
   Put,
   Query,
   UploadedFile,
@@ -21,6 +22,7 @@ import { StudentService } from './student.service';
 import { UpdateLogbookDto } from '../logbooks/update-logbook.dto';
 import { UpdateAiDeclarationDto } from '../ai-declarations/update-ai-declaration.dto';
 import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
+import { PrepareSubmissionUploadDto } from '../submissions/prepare-submission-upload.dto';
 import { UploadedAcademicFile } from '../submissions/submissions.service';
 import { PerformanceChartQueryDto } from './performance-chart-query.dto';
 
@@ -91,6 +93,15 @@ export class StudentController {
     @Body() input: UpdateAiDeclarationDto,
   ) {
     return this.studentService.updateAiDeclaration(user, activityId, input);
+  }
+
+  @Post('activities/:activityId/submission-upload')
+  prepareSubmissionUpload(
+    @CurrentUser() user: User,
+    @Param('activityId', ParseIntPipe) activityId: number,
+    @Body() input: PrepareSubmissionUploadDto,
+  ) {
+    return this.studentService.prepareSubmissionUpload(user, activityId, input);
   }
 
   @Put('activities/:activityId/submission')

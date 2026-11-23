@@ -131,6 +131,40 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     });
   });
 
+  it('descarga desde Azure sin pasar el PDF grande por la API', async () => {
+    const baseImplementation = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/teacher/submissions/7/file-download') {
+        return { url: 'https://storage.example/trabajo.pdf?read-only' };
+      }
+      const result = await baseImplementation(path);
+      return path === '/teacher/submissions/7' ? { ...result, fileName: 'trabajo.pdf' } : result;
+    });
+    let clickedAnchor: HTMLAnchorElement | undefined;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clickedAnchor = this;
+    });
+    try {
+      const wrapper = mount(TeacherSubmissionsView, {
+        global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+      });
+      await flushPromises();
+      await wrapper.get('.submission-list button').trigger('click');
+      await flushPromises();
+      await wrapper.findAll('button').find((button) => button.text().includes('Descargar trabajo.pdf'))!.trigger('click');
+      await flushPromises();
+      expect(apiMock).toHaveBeenCalledWith('/teacher/submissions/7/file-download');
+      expect(apiBlobMock).not.toHaveBeenCalled();
+      expect(click).toHaveBeenCalledOnce();
+      const anchor = clickedAnchor!;
+      expect(anchor.href).toBe('https://storage.example/trabajo.pdf?read-only');
+      expect(anchor.referrerPolicy).toBe('no-referrer');
+      wrapper.unmount();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
   it('muestra al docente el resumen de prompts persistido', async () => {
     const wrapper = mount(TeacherSubmissionsView, {
       global: {

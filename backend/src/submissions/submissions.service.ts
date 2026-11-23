@@ -7,6 +7,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { DataSource, In, Not, Repository } from 'typeorm';
 import { ActivitiesService } from '../activities/activities.service';
 import { AiConversationsService } from '../ai-conversations/ai-conversations.service';
@@ -25,6 +26,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 import { DocumentRepositoryService } from './document-repository.service';
 import { ensureSubmissionCanBeEdited } from './submission-edit-policy';
+import { MAX_SUBMISSION_FILE_SIZE, PrepareSubmissionUploadDto } from './prepare-submission-upload.dto';
 
 export type UploadedAcademicFile = {
   originalname: string;
@@ -33,7 +35,14 @@ export type UploadedAcademicFile = {
   buffer: Buffer;
 };
 
-const MAX_SUBMISSION_FILE_SIZE = 10 * 1024 * 1024;
+type UploadReceipt = {
+  purpose: string;
+  studentId: number;
+  activityId: number;
+  key: string;
+  fileName: string;
+  fileSize: number;
+};
 
 @Injectable()
 export class SubmissionsService {
@@ -50,7 +59,43 @@ export class SubmissionsService {
     @Optional() private readonly documentRepository?: DocumentRepositoryService,
     @Optional() private readonly aiConversations?: AiConversationsService,
     @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional() private readonly uploadTokens?: JwtService,
   ) {}
+
+  async prepareUpload(student: User, activityId: number, input: PrepareSubmissionUploadDto) {
+    await this.activitiesService.getForStudent(student.id, activityId);
+    const submission = await this.submissions.findOne({
+      where: { student: { id: student.id }, activity: { id: activityId } },
+    });
+    ensureSubmissionCanBeEdited(submission);
+    const upload = await this.documentRepository?.prepareUpload(
+      input.fileName, `submissions/${student.id}/${activityId}`,
+    );
+    if (!upload) return { mode: 'multipart' as const };
+    if (!this.uploadTokens) throw new BadRequestException('La carga directa no está disponible');
+    const uploadToken = await this.uploadTokens.signAsync({
+      purpose: 'submission-upload', studentId: student.id, activityId,
+      key: upload.key, fileName: input.fileName, fileSize: input.fileSize,
+    }, { expiresIn: '15m', audience: 'submission-upload' });
+    return { mode: 'direct' as const, uploadUrl: upload.uploadUrl, uploadToken };
+  }
+
+  private async verifyUploadToken(token: string, studentId: number, activityId: number) {
+    let receipt: UploadReceipt;
+    try {
+      if (!this.uploadTokens) throw new Error('Unavailable');
+      receipt = await this.uploadTokens.verifyAsync<UploadReceipt>(token, { audience: 'submission-upload' });
+      if (receipt.purpose !== 'submission-upload' || receipt.studentId !== studentId ||
+        receipt.activityId !== activityId || typeof receipt.key !== 'string' ||
+        typeof receipt.fileName !== 'string' || !receipt.fileName.toLowerCase().endsWith('.pdf') ||
+        !Number.isInteger(receipt.fileSize) || receipt.fileSize < 5 || receipt.fileSize > MAX_SUBMISSION_FILE_SIZE) {
+        throw new Error('Invalid scope');
+      }
+    } catch {
+      throw new BadRequestException('La autorización del PDF no es válida o venció; selecciona el archivo e inténtalo de nuevo');
+    }
+    return receipt;
+  }
 
   async getStatus(studentId: number, activityId: number) {
     const activity = await this.activitiesService.getForStudent(studentId, activityId);
@@ -128,7 +173,13 @@ export class SubmissionsService {
     if (!promptSummary) {
       throw new BadRequestException('El resumen de prompts es obligatorio');
     }
-    if (!file && !existingSubmission?.fileName) {
+    if (file && input.uploadToken) {
+      throw new BadRequestException('Envía un único archivo para la entrega');
+    }
+    const uploadedReceipt = input.uploadToken
+      ? await this.verifyUploadToken(input.uploadToken, student.id, activityId)
+      : null;
+    if (!file && !uploadedReceipt && !existingSubmission?.fileName) {
       throw new BadRequestException('Debe adjuntar la tarea en un archivo PDF');
     }
     if (
@@ -146,7 +197,11 @@ export class SubmissionsService {
       throw new BadRequestException('El archivo de la entrega debe ser un PDF');
     }
 
-    const storedDocument = file && this.documentRepository
+    const storedDocument = uploadedReceipt && this.documentRepository
+      ? await this.documentRepository.verifyUpload(
+          uploadedReceipt.key, `submissions/${student.id}/${activityId}`, uploadedReceipt.fileSize,
+        )
+      : file && this.documentRepository
       ? await this.documentRepository.save(
           {
             name: file.originalname,
@@ -156,6 +211,10 @@ export class SubmissionsService {
           `submissions/${student.id}/${activityId}`,
         )
       : null;
+
+    if (uploadedReceipt && !storedDocument) {
+      throw new BadRequestException('No fue posible validar el archivo subido');
+    }
 
     let transactionSubmission: Submission | null = null;
     await this.dataSource.transaction(async (manager) => {
@@ -206,12 +265,12 @@ export class SubmissionsService {
       submission.feedback = '';
       submission.notificationSentAt = null;
       submission.submittedAt = new Date();
-      if (file) {
-        submission.fileName = file.originalname;
-        submission.fileMimeType = file.mimetype;
+      if (file || uploadedReceipt) {
+        submission.fileName = uploadedReceipt?.fileName ?? file!.originalname;
+        submission.fileMimeType = uploadedReceipt ? 'application/pdf' : file!.mimetype;
         submission.fileStorageKey = storedDocument?.key ?? '';
-        submission.fileSize = storedDocument?.size ?? file.size;
-        submission.fileBase64 = storedDocument ? null : file.buffer.toString('base64');
+        submission.fileSize = storedDocument?.size ?? file!.size;
+        submission.fileBase64 = storedDocument ? null : file!.buffer.toString('base64');
       }
       transactionSubmission = await submissionRepository.save(submission);
       await valuationRepository.delete({ submission: { id: transactionSubmission.id } });
@@ -413,6 +472,17 @@ export class SubmissionsService {
     const averageLevel = (levels as number[]).reduce((sum, level) => sum + level, 0) /
       expectedCount;
     return Math.round((((averageLevel - 1) / 3) * 100) * 100) / 100;
+  }
+
+  async getFileDownloadForTeacher(teacherId: number, submissionId: number) {
+    const submission = await this.submissions.findOne({ where: { id: submissionId } });
+    if (!submission) throw new NotFoundException('La entrega no existe');
+    await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    if (!submission.fileName) throw new NotFoundException('La entrega no contiene un archivo');
+    const url = submission.fileStorageKey && this.documentRepository
+      ? await this.documentRepository.downloadUrl(submission.fileStorageKey, submission.fileName)
+      : null;
+    return { url };
   }
 
   async getFileForTeacher(teacherId: number, submissionId: number) {

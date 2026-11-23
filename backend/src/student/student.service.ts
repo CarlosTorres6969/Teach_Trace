@@ -17,6 +17,7 @@ import { User } from '../entities/user.entity';
 import { LogbooksService } from '../logbooks/logbooks.service';
 import { SubmissionsService, UploadedAcademicFile } from '../submissions/submissions.service';
 import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
+import { PrepareSubmissionUploadDto } from '../submissions/prepare-submission-upload.dto';
 import { UpdateLogbookDto } from '../logbooks/update-logbook.dto';
 import { UpdateAiDeclarationDto } from '../ai-declarations/update-ai-declaration.dto';
 
@@ -135,6 +136,10 @@ export class StudentService {
     file?: UploadedAcademicFile,
   ) {
     return this.submissionsService.submit(student, activityId, input, file);
+  }
+
+  prepareSubmissionUpload(student: User, activityId: number, input: PrepareSubmissionUploadDto) {
+    return this.submissionsService.prepareUpload(student, activityId, input);
   }
 
   // ─── Helpers privados ────────────────────────────────────────────────────────

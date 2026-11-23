@@ -31,6 +31,7 @@ import { Valuation } from './entities/valuation.entity';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { PushSubscriptionEntity } from './entities/push-subscription.entity';
 import { NotificationPreferencesService } from './notification-preferences/notification-preferences.service';
+import { DocumentRepositoryService } from './submissions/document-repository.service';
 
 jest.setTimeout(180000);
 
@@ -2732,6 +2733,63 @@ describe('TeachTrace API (integración)', () => {
       where: { student: { id: student.user.id }, activity: { id: activityId } },
     });
     expect(declaration.purpose).toBe('');
+  });
+
+  it('HU-19: registra un PDF directo de 10 MB enviando solo metadatos a la API', async () => {
+    const documents = app.get(DocumentRepositoryService);
+    const key = `azure:submissions/${student.user.id}/${activityId}/directo.pdf`;
+    const prepare = jest.spyOn(documents, 'prepareUpload').mockResolvedValue({ key, uploadUrl: 'https://storage.example/directo.pdf?sas' });
+    const verify = jest.spyOn(documents, 'verifyUpload').mockResolvedValue({ key, size: 10 * 1024 * 1024 });
+    const download = jest.spyOn(documents, 'downloadUrl').mockResolvedValue('https://storage.example/directo.pdf?read-only');
+    const endpoint = `/api/student/activities/${activityId}/submission-upload`;
+    try {
+      const unauthorized = await request(endpoint, { method: 'POST' });
+      expect(unauthorized.response.status).toBe(401);
+      const teacherUpload = await request(endpoint, {
+        method: 'POST', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: 'directo.pdf', fileSize: 10 * 1024 * 1024 }),
+      });
+      expect(teacherUpload.response.status).toBe(403);
+      const tooLarge = await request(endpoint, {
+        method: 'POST', headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: 'directo.pdf', fileSize: 10 * 1024 * 1024 + 1 }),
+      });
+      expect(tooLarge.response.status).toBe(400);
+      expect(prepare).not.toHaveBeenCalled();
+      const authorization = await request(endpoint, {
+        method: 'POST', headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: 'directo.pdf', fileSize: 10 * 1024 * 1024 }),
+      });
+      expect(authorization.response.status).toBe(201);
+      expect(authorization.body).toMatchObject({ mode: 'direct', uploadToken: expect.any(String) });
+      const submitted = await request(`/api/student/activities/${activityId}/submission`, {
+        method: 'PUT', headers: { ...sessionHeaders(student.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productText: '', productUrl: '', toolName: 'ChatGPT', usageLevel: 1,
+          purpose: '', promptSummary: 'Resumen de prompts',
+          uploadToken: (authorization.body as { uploadToken: string }).uploadToken,
+        }),
+      });
+      expect(submitted.response.status).toBe(200);
+      expect(submitted.body).toMatchObject({ status: 'submitted', fileName: 'directo.pdf' });
+      const stored = await dataSource.getRepository(Submission).findOneOrFail({
+        where: { student: { id: student.user.id }, activity: { id: activityId } },
+      });
+      expect(stored.fileStorageKey).toBe(key);
+      expect(stored.fileSize).toBe(10 * 1024 * 1024);
+      expect(verify).toHaveBeenCalledWith(key, `submissions/${student.user.id}/${activityId}`, 10 * 1024 * 1024);
+      const downloadPath = `/api/teacher/submissions/${stored.id}/file-download`;
+      const deniedDownload = await request(downloadPath, { headers: sessionHeaders(student.sessionCookie) });
+      expect(deniedDownload.response.status).toBe(403);
+      expect(download).not.toHaveBeenCalled();
+      const allowedDownload = await request(downloadPath, { headers: sessionHeaders(teacher.sessionCookie) });
+      expect(allowedDownload.response.status).toBe(200);
+      expect(allowedDownload.body).toEqual({ url: 'https://storage.example/directo.pdf?read-only' });
+    } finally {
+      prepare.mockRestore();
+      verify.mockRestore();
+      download.mockRestore();
+    }
   });
 
   it('HU-19: acepta archivo de exactamente 10 MB', async () => {

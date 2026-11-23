@@ -37,14 +37,15 @@ export class Notification {
   @Column({ type: 'integer', nullable: true })
   activityId: number | null;
 
-  /** Referencias históricas conservadas para no perder datos al sincronizar SQLite. */
-  @Column({ type: 'integer', nullable: true })
+  /** Solo compatibilidad con SQLite antiguo: estas referencias no existen en
+   * producción ni participan en lecturas, inserciones o actualizaciones. */
+  @Column({ type: 'integer', nullable: true, select: false, insert: false, update: false })
   conversationId: number | null;
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ type: 'integer', nullable: true, select: false, insert: false, update: false })
   forumThreadId: number | null;
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ type: 'integer', nullable: true, select: false, insert: false, update: false })
   classId: number | null;
 
   @CreateDateColumn()

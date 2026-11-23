@@ -32,4 +32,9 @@ export class SubmitEvidenceDto extends UpdateAiDeclarationDto {
   @IsUrl({ require_protocol: true })
   @MaxLength(500)
   productUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  uploadToken?: string;
 }

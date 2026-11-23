@@ -4,13 +4,15 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+import { BlobSASPermissions, BlobServiceClient, ContainerClient, SASProtocol } from '@azure/storage-blob';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { isAbsolute, join, normalize, relative, resolve } from 'path';
+import { MAX_SUBMISSION_FILE_SIZE } from './prepare-submission-upload.dto';
 
 export type DocumentToStore = {
   name: string;
@@ -100,6 +102,61 @@ export class DocumentRepositoryService implements OnModuleInit {
     await mkdir(join(target, '..'), { recursive: true });
     await writeFile(target, document.content);
     return { key: `local:${key}`, size: document.content.length };
+  }
+
+  async prepareUpload(name: string, scope: string) {
+    if (!this.azureContainer) return null;
+    const key = this.createObjectKey(name, scope);
+    const expiresOn = new Date(Date.now() + 10 * 60 * 1000);
+    const uploadUrl = await this.azureContainer.getBlockBlobClient(key).generateSasUrl({
+      permissions: BlobSASPermissions.parse('c'),
+      protocol: SASProtocol.Https,
+      expiresOn,
+    });
+    return { key: `azure:${key}`, uploadUrl };
+  }
+
+  async downloadUrl(storageKey: string, name: string) {
+    const reference = this.parseStorageKey(storageKey);
+    if (reference.provider !== 'azure' || !this.azureContainer) return null;
+    return this.azureContainer.getBlockBlobClient(reference.key).generateSasUrl({
+      permissions: BlobSASPermissions.parse('r'),
+      protocol: SASProtocol.Https,
+      expiresOn: new Date(Date.now() + 5 * 60 * 1000),
+      contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    });
+  }
+
+  async verifyUpload(storageKey: string, scope: string, expectedSize: number) {
+    const reference = this.parseStorageKey(storageKey);
+    if (!this.azureContainer || reference.provider !== 'azure' || !reference.key.startsWith(`${scope}/`)) {
+      throw new BadRequestException('La referencia del archivo no pertenece a esta entrega');
+    }
+    try {
+      const blob = this.azureContainer.getBlockBlobClient(reference.key);
+      const properties = await blob.getProperties();
+      const size = properties.contentLength ?? 0;
+      if (size > MAX_SUBMISSION_FILE_SIZE) {
+        throw new PayloadTooLargeException('El archivo de la entrega no puede superar 10 MB');
+      }
+      if (size < 5 || size !== expectedSize || properties.contentType !== 'application/pdf') {
+        throw new BadRequestException('El archivo subido no coincide con el PDF seleccionado');
+      }
+      const signature = await blob.downloadToBuffer(0, 5, {
+        conditions: { ifMatch: properties.etag },
+      });
+      if (signature.toString('ascii') !== '%PDF-') {
+        throw new BadRequestException('El archivo de la entrega debe ser un PDF');
+      }
+      return { key: storageKey, size };
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof PayloadTooLargeException) throw error;
+      if (this.isAzureNotFound(error)) {
+        throw new BadRequestException('El PDF aún no se ha subido; selecciona el archivo e inténtalo de nuevo');
+      }
+      this.logAzureError('No fue posible validar el PDF subido', error);
+      throw new ServiceUnavailableException('No fue posible validar el archivo de la entrega');
+    }
   }
 
   async read(storageKey: string) {

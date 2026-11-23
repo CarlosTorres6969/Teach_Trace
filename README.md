@@ -90,6 +90,24 @@ y el rol docente; el contenedor no se publica. Si no se configura Azure, el prov
 `filesystem` utiliza `DOCUMENT_REPOSITORY_PATH`. Las referencias locales creadas anteriormente
 siguen siendo compatibles después de activar Azure.
 
+Con Azure, el navegador sube los PDF de hasta 10 MB directamente al almacenamiento para evitar
+el límite de tamaño de las funciones de Vercel. La API autoriza un único archivo durante diez
+minutos, sin permisos de lectura, borrado ni sobrescritura. Antes de registrar la entrega valida
+la autorización del estudiante, el tamaño y la firma PDF; las descargas siguen siendo privadas.
+El docente autorizado recibe una URL de lectura por cinco minutos para descargar desde Azure
+sin pasar el PDF por Vercel. Los archivos locales o históricos en base de datos usan la API.
+
+Habilite CORS para el frontend antes de desplegar esta carga directa:
+
+```bash
+npm run storage:cors -w backend              # revisar la regla propuesta
+npm run storage:cors -w backend -- --apply  # agregarla conservando las reglas existentes
+```
+
+El script permite el frontend de producción y los orígenes de `FRONTEND_ORIGIN`. Despliegue
+primero el backend y luego el frontend. No se requieren migraciones ni cambios en las entregas
+existentes. Con almacenamiento local se conserva la carga multipart.
+
 En PostgreSQL se mantiene `DATABASE_SYNCHRONIZE=false`; las migraciones registradas se ejecutan al
 iniciar el backend para agregar cambios pendientes sin recrear las tablas ni borrar información.
 

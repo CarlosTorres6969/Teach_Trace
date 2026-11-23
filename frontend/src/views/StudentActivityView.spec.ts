@@ -23,6 +23,9 @@ describe('StudentActivityView - nivel declarado de IA', () => {
     routeLeaveGuards.length = 0;
     apiMock.mockReset();
     apiMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path.endsWith('/submission-upload')) {
+        return Promise.resolve({ mode: 'multipart' });
+      }
       if (path.endsWith('/logbook')) {
         if (options?.method === 'PUT') {
           return Promise.resolve(JSON.parse(String(options.body)));

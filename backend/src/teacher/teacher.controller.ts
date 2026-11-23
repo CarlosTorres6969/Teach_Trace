@@ -185,6 +185,14 @@ export class TeacherController {
     return this.teacherService.getSubmission(user.id, submissionId);
   }
 
+  @Get('submissions/:submissionId/file-download')
+  getFileDownload(
+    @CurrentUser() user: User,
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+  ) {
+    return this.submissionsService.getFileDownloadForTeacher(user.id, submissionId);
+  }
+
   @Get('submissions/:submissionId/file')
   async downloadSubmissionFile(
     @CurrentUser() user: User,

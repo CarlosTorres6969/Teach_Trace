@@ -1,6 +1,7 @@
 import { EvaluationStatus, SubmissionStatus } from '../entities/submission.entity';
 import { UserRole } from '../entities/user.entity';
 import { SubmissionsService } from './submissions.service';
+import { JwtService } from '@nestjs/jwt';
 
 describe('SubmissionsService', () => {
   it('rechaza el reenvio de una entrega evaluada sin borrar su evaluacion', async () => {
@@ -35,7 +36,7 @@ describe('SubmissionsService', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
-  it('guarda producto y declaración de IA dentro de la misma transacción', async () => {
+  it.each([false, true])('guarda producto y declaración de IA atómicamente (carga directa: %s)', async (direct) => {
     const student = { id: 2, role: UserRole.STUDENT };
     const activity = { id: 4, title: 'Actividad', academicClass: { id: 1 } };
     const storedSubmission = {
@@ -97,6 +98,14 @@ describe('SubmissionsService', () => {
       }),
       attachToSubmission: jest.fn(),
     };
+    const uploadTokens = new JwtService({ secret: 'clave-solo-para-pruebas-de-carga' });
+    const documentRepository = {
+      verifyUpload: jest.fn().mockResolvedValue({ key: 'azure:submissions/2/4/archivo.pdf', size: 10 * 1024 * 1024 }),
+    };
+    const uploadToken = direct ? uploadTokens.sign({
+      purpose: 'submission-upload', studentId: 2, activityId: 4,
+      key: 'azure:submissions/2/4/archivo.pdf', fileName: 'evidencia.pdf', fileSize: 10 * 1024 * 1024,
+    }, { audience: 'submission-upload', expiresIn: '15m' }) : undefined;
     const service = new SubmissionsService(
       submissions as never,
       logbooks as never,
@@ -105,8 +114,10 @@ describe('SubmissionsService', () => {
       dataSource as never,
       activitiesService as never,
       {} as never,
-      undefined,
+      direct ? documentRepository as never : undefined,
       aiConversations as never,
+      undefined,
+      uploadTokens,
     );
 
     const result = await service.submit(student as never, 4, {
@@ -116,7 +127,8 @@ describe('SubmissionsService', () => {
       usageLevel: 2,
       purpose: 'Contrastar ideas',
       promptSummary: 'Consulta de contraste',
-    }, {
+      uploadToken,
+    }, direct ? undefined : {
       originalname: 'evidencia.pdf',
       mimetype: 'application/pdf',
       size: 8,
@@ -135,6 +147,12 @@ describe('SubmissionsService', () => {
     expect(valuationRepository.delete).toHaveBeenCalledWith({ submission: { id: 8 } });
     expect(activitiesService.setManualEvaluationRequired).toHaveBeenCalledWith(activity, false);
     expect(result.status).toBe(SubmissionStatus.SUBMITTED);
+    if (direct) {
+      expect(submissionRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+        fileName: 'evidencia.pdf', fileMimeType: 'application/pdf',
+        fileStorageKey: 'azure:submissions/2/4/archivo.pdf', fileSize: 10 * 1024 * 1024, fileBase64: null,
+      }));
+    }
   });
 
   it('calcula la sugerencia porcentual IA y la decisión docente con la escala académica', async () => {
