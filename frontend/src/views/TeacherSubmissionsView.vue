@@ -90,6 +90,7 @@ type SubmissionDetail = SubmissionSummary & {
   aiPromptAssessment: PromptAssessment | null;
   aiSuggestedGradePercentage: number | null;
   teacherGradePercentage: number | null;
+  publishedGradePercentage?: number | null;
   aiAnalyzedAt: string | null;
   valuations: ValuationItem[];
   aiConversation: null | { messages: ConversationMessage[] };
@@ -144,6 +145,13 @@ const editingValues = ref<Record<number, { teacherValue: number; teacherComment:
 const savingValuation = ref<Record<number, boolean>>({});
 const editingPublishedGrade = ref(false);
 const valuationSavePending = computed(() => Object.values(savingValuation.value).some(Boolean));
+const publishedGradeDraft = ref<number | string>('');
+const savingPublishedGrade = ref(false);
+const validPublishedGrade = computed(() => {
+  const value = publishedGradeDraft.value;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 &&
+    Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
+});
 const closingEvaluation = ref(false);
 const savingFeedback = ref(false);
 const feedbackDraft = ref('');
@@ -237,6 +245,7 @@ async function openSubmission(id: number, preserveMessage = false) {
         : null,
     };
     feedbackDraft.value = detail.feedback ?? '';
+    publishedGradeDraft.value = detail.teacherGradePercentage ?? '';
     editingPublishedGrade.value = false;
     resetValuationDrafts();
   } catch (cause) {
@@ -354,9 +363,10 @@ async function saveValuation(valuationId: number) {
         teacherComment: updated.teacherComment ?? '',
       };
     }
-    selected.value.teacherGradePercentage = percentageFromConfirmedValuations(
+    selected.value.teacherGradePercentage = selected.value.publishedGradePercentage ?? percentageFromConfirmedValuations(
       selected.value.valuations,
     );
+    if (!savingPublishedGrade.value) publishedGradeDraft.value = selected.value.teacherGradePercentage ?? '';
     showValuationMessage(selected.value.status === 'evaluated'
       ? `Nota publicada actualizada. Criterio "${updated.criterion}" guardado.`
       : `Criterio "${updated.criterion}" guardado.`);
@@ -383,6 +393,29 @@ function percentageFromConfirmedValuations(valuations: ValuationItem[]): number 
   const averageLevel = (levels as number[]).reduce((sum, level) => sum + level, 0) /
     levels.length;
   return Math.round((((averageLevel - 1) / 3) * 100) * 100) / 100;
+}
+
+async function savePublishedGrade() {
+  const submission = selected.value;
+  if (!submission || submission.status !== 'evaluated' || !validPublishedGrade.value || savingPublishedGrade.value || valuationSavePending.value) return;
+  const gradePercentage = publishedGradeDraft.value as number;
+  savingPublishedGrade.value = true;
+  error.value = '';
+  try {
+    const updated = await api<{ submissionId: number; gradePercentage: number }>(
+      `/teacher/submissions/${submission.id}/published-grade`,
+      { method: 'PUT', body: JSON.stringify({ gradePercentage }) },
+    );
+    if (selected.value?.id !== submission.id) return;
+    selected.value.teacherGradePercentage = updated.gradePercentage;
+    selected.value.publishedGradePercentage = updated.gradePercentage;
+    publishedGradeDraft.value = updated.gradePercentage;
+    showValuationMessage('Nota publicada actualizada.');
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la nota';
+  } finally {
+    savingPublishedGrade.value = false;
+  }
 }
 
 async function closeEvaluation() {
@@ -667,7 +700,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-if="selected.aiAnalyzedAt" class="grade-suggestion">
+        <section v-if="selected.aiAnalyzedAt || selected.status === 'evaluated'" class="grade-suggestion">
           <div>
             <span class="eyebrow">Referencia para el docente</span>
             <h3>Sugerencia porcentual de la IA</h3>
@@ -683,7 +716,16 @@ onBeforeUnmount(() => {
             </article>
             <article>
               <span>Decisión docente confirmada</span>
-              <strong>
+              <form v-if="selected.status === 'evaluated'" class="published-grade-form" @submit.prevent="savePublishedGrade">
+                <label>
+                  Nota publicada (0–100)
+                  <input v-model.number="publishedGradeDraft" type="number" min="0" max="100" step="0.01" required :disabled="savingPublishedGrade || valuationSavePending" />
+                </label>
+                <button class="button secondary" :disabled="savingPublishedGrade || valuationSavePending || !validPublishedGrade || publishedGradeDraft === selected.teacherGradePercentage">
+                  {{ savingPublishedGrade ? 'Guardando…' : 'Guardar nota' }}
+                </button>
+              </form>
+              <strong v-else>
                 {{ selected.teacherGradePercentage === null
                   ? 'Pendiente'
                   : `${selected.teacherGradePercentage}%` }}

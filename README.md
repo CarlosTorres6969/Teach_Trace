@@ -79,11 +79,12 @@ Desde **Mis clases → Gestionar clase → Configurar actividad**, el docente pr
 cambiar el nombre de una actividad y guardar su nueva fecha por separado. Estas operaciones
 conservan las entregas, las evaluaciones, la rúbrica y el estado de publicación.
 
-En **Ver entregas**, el docente propietario puede seleccionar una entrega calificada y pulsar
-**Editar nota publicada** para corregir los niveles y comentarios de la rúbrica. Cada criterio
-se aplica al guardar su corrección y actualiza la nota visible para el estudiante. La evaluación
-permanece publicada y la evidencia del estudiante sigue bloqueada. **Terminar edición** descarta
-únicamente los cambios que no se hayan guardado.
+En **Ver entregas**, la tarjeta **Decisión docente confirmada** permite al docente propietario
+escribir una nota de 0 a 100 (hasta dos decimales) y pulsar **Guardar nota**. Puede editarla y
+guardarla de nuevo después de publicada. Esa nota prevalece sobre el cálculo de la rúbrica y
+se refleja en los resultados, las actividades y los cálculos del estudiante. La rúbrica, la
+sugerencia de IA y la evidencia se conservan. La evaluación permanece publicada y la entrega
+del estudiante sigue bloqueada.
 
 La sección **Contexto privado para la IA** permite adjuntar, reemplazar, descargar o retirar un
 PDF o Word (`.docx`) de hasta 10 MB con la definición de la tarea. El documento debe contener

@@ -3315,6 +3315,11 @@ describe('TeachTrace API (integración)', () => {
 
   it('permite al docente corregir una nota publicada y la actualiza para el estudiante sin reabrir la entrega', async () => {
     const { newActivityId, submId } = await createEvaluatedSubmission();
+    const beforePublication = await request(`/api/teacher/submissions/${submId}/published-grade`, {
+      method: 'PUT', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gradePercentage: 90 }),
+    });
+    expect(beforePublication.response.status).toBe(400);
     const rubric = await request('/api/teacher/rubrics', {
       method: 'POST', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Rúbrica para corregir nota publicada', criteria: buildCriteria() }),
@@ -3360,7 +3365,36 @@ describe('TeachTrace API (integración)', () => {
     for (const invalid of [{ teacherValue: 0 }, { teacherValue: 5 }, { teacherValue: 2.5 }, { teacherValue: 4, status: 'submitted' }]) {
       expect((await save(invalid)).response.status).toBe(400);
     }
-    expect(await dataSource.getRepository(Submission).findOneByOrFail({ id: submId })).toEqual(before);
+    const gradeEndpoint = `/api/teacher/submissions/${submId}/published-grade`;
+    const setGrade = (body: unknown, cookie = teacher.sessionCookie) => request(gradeEndpoint, {
+      method: 'PUT', headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const criteriaBefore = await dataSource.getRepository(Valuation).find({ where: { submission: { id: submId } } });
+    for (const gradePercentage of [0, 100, 90.48, 83.25]) {
+      const changed = await setGrade({ gradePercentage });
+      expect(changed.response.status).toBe(200);
+      expect(changed.body).toEqual({ submissionId: submId, gradePercentage });
+      const published = await request(`/api/student/activities/${newActivityId}/results`, { headers: sessionHeaders(student.sessionCookie) });
+      expect(published.body).toMatchObject({ gradePercentage, status: 'evaluated' });
+      const ownDetail = await request(`/api/teacher/submissions/${submId}`, { headers: sessionHeaders(teacher.sessionCookie) });
+      expect(ownDetail.body).toMatchObject({ teacherGradePercentage: gradePercentage });
+    }
+    for (const invalid of [{ gradePercentage: -1 }, { gradePercentage: 101 }, { gradePercentage: 90.481 }, { gradePercentage: '90' }, { gradePercentage: null }, {}, { gradePercentage: 75, status: 'submitted' }]) {
+      expect((await setGrade(invalid)).response.status).toBe(400);
+    }
+    expect((await setGrade({ gradePercentage: 10 }, student.sessionCookie)).response.status).toBe(403);
+    expect((await setGrade({ gradePercentage: 10 }, readSessionCookie(otherLogin.response))).response.status).toBe(404);
+    const revisedActivities = await request('/api/student/activities?filter=all', { headers: sessionHeaders(student.sessionCookie) });
+    expect((revisedActivities.body as Array<{ id: number; finalScore: number }>).find((item) => item.id === newActivityId)?.finalScore).toBeCloseTo(1 + 83.25 * 3 / 100);
+    const projection = await request(`/api/student/classes/${classId}/projection`, { headers: sessionHeaders(student.sessionCookie) });
+    expect((projection.body as { activities: Array<{ id: number; percentage: number }> }).activities.find((item) => item.id === newActivityId)?.percentage).toBe(83.25);
+    const chart = await request(`/api/student/performance-chart?classId=${classId}`, { headers: sessionHeaders(student.sessionCookie) });
+    const chartData = chart.body as { activities: Array<{ id: number }>; myGrades: number[] };
+    expect(chartData.myGrades[chartData.activities.findIndex((item) => item.id === newActivityId)]).toBe(83.25);
+    const criteriaAfter = await dataSource.getRepository(Valuation).find({ where: { submission: { id: submId } } });
+    const values = (rows: Valuation[]) => rows.map(({ id, teacherValue, teacherComment, aiValue, aiExplanation, confirmed, updatedAt }) => ({ id, teacherValue, teacherComment, aiValue, aiExplanation, confirmed, updatedAt }));
+    expect(values(criteriaAfter)).toEqual(values(criteriaBefore));
+    expect(await dataSource.getRepository(Submission).findOneByOrFail({ id: submId })).toEqual({ ...before, publishedGradePercentage: 83.25 });
     expect(await dataSource.getRepository(Notification).count({ where: { user: { id: student.user.id }, activityId: newActivityId, type: NotificationType.GRADE_PUBLISHED } })).toBe(notifications);
     expect((await request(`/api/student/activities/${newActivityId}/submission`, { method: 'PUT', headers: sessionHeaders(student.sessionCookie), body: buildSubmitForm() })).response.status).toBe(409);
   });

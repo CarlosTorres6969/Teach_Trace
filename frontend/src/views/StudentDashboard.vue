@@ -130,7 +130,8 @@ function formatDueDate(value: string) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
-function formatScore(value: number | null) {
+function formatScore(value: number | null, percentage?: number | null) {
+  if (typeof percentage === 'number') return `${percentage}%`;
   return value === null ? 'Sin promedio' : `${value.toFixed(2)} / 4.00`;
 }
 
@@ -272,7 +273,7 @@ onMounted(() => loadActivities());
             <p class="muted"><strong>Fecha límite:</strong> {{ formatDueDate(activity.dueDate) }}</p>
             <div class="activity-score">
               <span class="eyebrow">Nota publicada</span>
-              <strong>{{ formatScore(activity.finalScore) }}</strong>
+              <strong>{{ formatScore(activity.finalScore, activity.gradePercentage) }}</strong>
             </div>
             <div class="activity-card-actions">
               <RouterLink class="button secondary" :to="`/student/activities/${activity.id}`">

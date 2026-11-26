@@ -66,6 +66,7 @@ export type Activity = {
   submissionCount?: number;
   pendingEvaluationCount?: number;
   submissionStatus?: string;
+  gradePercentage?: number | null;
   rubric?: Rubric | null;
   createdAt?: string;
   isNew?: boolean;

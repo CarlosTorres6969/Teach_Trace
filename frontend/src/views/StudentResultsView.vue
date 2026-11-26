@@ -20,6 +20,7 @@ type ResultsResponse = {
   status: string;
   valuations: ValuationItem[];
   finalScore: number | null;
+  gradePercentage?: number | null;
   feedback: string;
 };
 
@@ -104,6 +105,11 @@ onMounted(load);
                 : 'Pendiente'
             }}
           </span>
+        </div>
+
+        <div v-if="typeof results.gradePercentage === 'number'" class="results-score">
+          <span class="eyebrow">Nota publicada</span>
+          <strong class="results-score-value">{{ results.gradePercentage }}%</strong>
         </div>
 
         <div v-if="results.finalScore !== null" class="results-score">

@@ -28,6 +28,7 @@ import { SubmissionStatus } from '../entities/submission.entity';
 import { AssociateRubricDto, CreateRubricDto } from '../rubrics/rubrics.dto';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { ConfirmValuationDto } from './confirm-valuation.dto';
+import { UpdatePublishedGradeDto } from './update-published-grade.dto';
 import { UpdateFeedbackDto } from './update-feedback.dto';
 import { TeacherService } from './teacher.service';
 import { TeacherValuationsService } from './teacher-valuations.service';
@@ -270,6 +271,15 @@ export class TeacherController {
       valuationId,
       dto,
     );
+  }
+
+  @Put('submissions/:submissionId/published-grade')
+  updatePublishedGrade(
+    @CurrentUser() user: User,
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+    @Body() input: UpdatePublishedGradeDto,
+  ) {
+    return this.teacherValuationsService.updatePublishedGrade(user.id, submissionId, input);
   }
 
   @Put('submissions/:submissionId/close')

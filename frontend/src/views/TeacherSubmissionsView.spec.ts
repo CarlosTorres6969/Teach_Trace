@@ -183,7 +183,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     });
     resolve({ ...valuation, teacherValue: 4, teacherComment: 'Corrección revisada' });
     await flushPromises();
-    expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    expect((wrapper.get('.published-grade-form input').element as HTMLInputElement).value).toBe('100');
     expect(wrapper.get('.valuation-save-toast').text()).toContain('Nota publicada actualizada');
     expect(wrapper.get('.valuation-panel-header [data-status="evaluated"]').text()).toBe('Publicada');
     expect(wrapper.find('.valuation-close-row').exists()).toBe(false);
@@ -203,7 +203,7 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     await wrapper.get('.published-grade-editor button').trigger('click');
     expect((wrapper.get('.valuation-editor select').element as HTMLSelectElement).value).toBe('3');
     expect((wrapper.get('.valuation-editor textarea').element as HTMLTextAreaElement).value).toBe('Comentario publicado');
-    expect(wrapper.text()).toContain('Decisión docente confirmada66.67%');
+    expect((wrapper.get('.published-grade-form input').element as HTMLInputElement).value).toBe('66.67');
     expect(apiMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
     wrapper.unmount();
   });
@@ -217,11 +217,11 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     await wrapper.get('.valuation-editor button').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('No fue posible guardar la corrección');
-    expect(wrapper.text()).toContain('Decisión docente confirmada66.67%');
+    expect((wrapper.get('.published-grade-form input').element as HTMLInputElement).value).toBe('66.67');
     expect(wrapper.get('.valuation-editor button').attributes('disabled')).toBeUndefined();
     await wrapper.get('.valuation-editor button').trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    expect((wrapper.get('.published-grade-form input').element as HTMLInputElement).value).toBe('100');
     wrapper.unmount();
   });
 
@@ -233,6 +233,56 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     await flushPromises();
     expect(wrapper.get('.published-grade-editor button').text()).toBe('Editar nota publicada');
     expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('edita directamente la nota 0 a 100 en la tarjeta confirmada y permite guardarla otra vez', async () => {
+    publishedGrade();
+    const base = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === '/teacher/submissions/7/published-grade') {
+        return { submissionId: 7, gradePercentage: JSON.parse(String(options?.body)).gradePercentage };
+      }
+      return base(path, options);
+    });
+    const wrapper = await openPublishedGrade();
+    const form = wrapper.get('.grade-comparison .published-grade-form');
+    expect(form.get('input').attributes()).toMatchObject({ type: 'number', min: '0', max: '100', step: '0.01' });
+    for (const grade of [90.48, 0, 100, 82.25]) {
+      await form.get('input').setValue(String(grade));
+      await form.trigger('submit');
+      await flushPromises();
+      expect(apiMock).toHaveBeenLastCalledWith('/teacher/submissions/7/published-grade', { method: 'PUT', body: JSON.stringify({ gradePercentage: grade }) });
+      expect((form.get('input').element as HTMLInputElement).value).toBe(String(grade));
+      expect(wrapper.get('.valuation-panel-header [data-status="evaluated"]').text()).toBe('Publicada');
+    }
+    await wrapper.get('.published-grade-editor button').trigger('click');
+    await wrapper.get('.valuation-editor select').setValue('4');
+    await wrapper.get('.valuation-editor button').trigger('click');
+    await flushPromises();
+    expect((form.get('input').element as HTMLInputElement).value).toBe('82.25');
+    wrapper.unmount();
+  });
+
+  it('rechaza notas fuera de rango y conserva el borrador si falla el guardado', async () => {
+    publishedGrade();
+    const wrapper = await openPublishedGrade();
+    const form = wrapper.get('.published-grade-form');
+    for (const invalid of ['', '-1', '101', '90.481']) {
+      await form.get('input').setValue(invalid);
+      expect(form.get('button').attributes('disabled')).toBeDefined();
+      const calls = apiMock.mock.calls.length;
+      await form.trigger('submit');
+      await flushPromises();
+      expect(apiMock.mock.calls).toHaveLength(calls);
+    }
+    await form.get('input').setValue('90.48');
+    apiMock.mockRejectedValueOnce(new Error('No se pudo guardar la nota'));
+    await form.trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain('No se pudo guardar la nota');
+    expect((form.get('input').element as HTMLInputElement).value).toBe('90.48');
+    expect(form.get('button').attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
 

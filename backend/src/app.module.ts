@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AddPublishedGradePercentage1795564800000 } from './database/migrations/1795564800000-add-published-grade-percentage';
 import { AddActivityTeacherContext1795392000000 } from './database/migrations/1795392000000-add-activity-teacher-context';
 import { AiEngineSettings } from './entities/ai-engine-settings.entity';
 import { AddAiEngineSettings1791158400000 } from './database/migrations/1791158400000-add-ai-engine-settings';
@@ -122,6 +123,7 @@ const entities = [
               AddAiStageInstructions1791244800000,
               AddAiApiKey1791331200000,
               AddActivityTeacherContext1795392000000,
+              AddPublishedGradePercentage1795564800000,
             ],
             migrationsRun: true,
             synchronize,

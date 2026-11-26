@@ -14,6 +14,7 @@ import {
 import { Valuation } from '../entities/valuation.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfirmValuationDto } from './confirm-valuation.dto';
+import { UpdatePublishedGradeDto } from './update-published-grade.dto';
 
 @Injectable()
 export class TeacherValuationsService {
@@ -55,6 +56,20 @@ export class TeacherValuationsService {
       teacherComment: valuation.teacherComment,
       confirmed: valuation.confirmed,
     };
+  }
+
+  async updatePublishedGrade(teacherId: number, submissionId: number, input: UpdatePublishedGradeDto) {
+    const submission = await this.loadSubmission(submissionId);
+    await this.activitiesService.ownedActivity(teacherId, submission.activity.id);
+    if (submission.status !== SubmissionStatus.EVALUATED) {
+      throw new BadRequestException('La evaluación debe estar publicada para corregir su nota');
+    }
+    const result = await this.submissions.update(
+      { id: submissionId, status: SubmissionStatus.EVALUATED },
+      { publishedGradePercentage: input.gradePercentage },
+    );
+    if (!result.affected) throw new BadRequestException('La evaluación ya no está publicada');
+    return { submissionId, gradePercentage: input.gradePercentage };
   }
 
   async closeEvaluationManually(teacherId: number, submissionId: number) {

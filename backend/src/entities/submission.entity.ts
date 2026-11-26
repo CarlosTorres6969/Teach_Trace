@@ -103,6 +103,9 @@ export class Submission {
   @Column({ type: 'text', default: '' })
   feedback: string;
 
+  @Column({ type: 'float', nullable: true })
+  publishedGradePercentage: number | null;
+
   /** @deprecated Campo histórico; la sugerencia porcentual se deriva de la rúbrica y no se persiste. */
   @Column({ type: 'float', nullable: true })
   aiPossibleGrade: number | null;

@@ -27,6 +27,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SubmitEvidenceDto } from './submit-evidence.dto';
 import { DocumentRepositoryService } from './document-repository.service';
 import { ensureSubmissionCanBeEdited } from './submission-edit-policy';
+import { explicitPublishedGrade } from './published-grade';
 import { MAX_SUBMISSION_FILE_SIZE, PrepareSubmissionUploadDto } from './prepare-submission-upload.dto';
 
 export type UploadedAcademicFile = {
@@ -265,6 +266,7 @@ export class SubmissionsService {
       submission.aiPromptAssessment = null;
       submission.aiAnalyzedAt = null;
       submission.feedback = '';
+      submission.publishedGradePercentage = null;
       submission.notificationSentAt = null;
       submission.submittedAt = new Date();
       if (file || uploadedReceipt) {
@@ -422,7 +424,8 @@ export class SubmissionsService {
             activity.rubric?.criteria.length ?? 0,
           )
         : null,
-      teacherGradePercentage: this.percentageFromLevels(
+      publishedGradePercentage: explicitPublishedGrade(submission),
+      teacherGradePercentage: explicitPublishedGrade(submission) ?? this.percentageFromLevels(
         valuations.map((valuation) => valuation.confirmed ? valuation.teacherValue : null),
         activity.rubric?.criteria.length ?? 0,
       ),

@@ -18,6 +18,7 @@ import { LogbooksService } from '../logbooks/logbooks.service';
 import { SubmissionsService, UploadedAcademicFile } from '../submissions/submissions.service';
 import { SubmitEvidenceDto } from '../submissions/submit-evidence.dto';
 import { PrepareSubmissionUploadDto } from '../submissions/prepare-submission-upload.dto';
+import { explicitPublishedGrade, publishedGradeAsLevel } from '../submissions/published-grade';
 import { UpdateLogbookDto } from '../logbooks/update-logbook.dto';
 import { UpdateAiDeclarationDto } from '../ai-declarations/update-ai-declaration.dto';
 
@@ -87,6 +88,7 @@ export class StudentService {
             : null,
           submissionStatus: submission?.status ?? SubmissionStatus.NOT_SUBMITTED,
           finalScore,
+          gradePercentage: finalScore === null ? null : (submission ? explicitPublishedGrade(submission) : null) ?? Math.round((finalScore - 1) / 3 * 10_000) / 100,
           createdAt: activity.createdAt,
           isNew: this.isUnviewedWithinDays(activity, studentId, 3),
           logbookStatus: progress.logbookStatus,
@@ -155,6 +157,8 @@ export class StudentService {
     });
     // Solo contar notas de entregas completamente evaluadas
     if (!submission || submission.status !== SubmissionStatus.EVALUATED) return null;
+    const explicitLevel = publishedGradeAsLevel(submission);
+    if (explicitLevel !== null) return explicitLevel;
 
     const valuationList = await this.valuations.find({
       where: { submission: { id: submission.id } },
@@ -308,7 +312,7 @@ export class StudentService {
           weight: activity.weight ?? 1.0,
           status: submission?.status ?? 'not_submitted',
           finalScore,
-          percentage: finalScore !== null ? toPercent(finalScore) : null,
+          percentage: submission ? explicitPublishedGrade(submission) ?? (finalScore !== null ? toPercent(finalScore) : null) : null,
         };
       }),
     );
@@ -417,6 +421,8 @@ export class StudentService {
     // Helper: nota publicada de una submission (solo EVALUATED + confirmed)
     const publishedScore = (sub: (typeof allSubmissions)[0]): number | null => {
       if (sub.status !== SubmissionStatus.EVALUATED) return null;
+      const explicitLevel = publishedGradeAsLevel(sub);
+      if (explicitLevel !== null) return explicitLevel;
       const vals = valsBySubmission.get(sub.id);
       if (!vals?.length) return null;
       return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -446,13 +452,13 @@ export class StudentService {
         submittedAt: mySub?.submittedAt?.toISOString() ?? null,
       });
       const myScore = mySub ? publishedScore(mySub) : null;
-      myGrades.push(myScore !== null ? toPercent(myScore) : null);
+      myGrades.push(mySub ? explicitPublishedGrade(mySub) ?? (myScore !== null ? toPercent(myScore) : null) : null);
 
       // Promedio de clase — solo submissions EVALUATED de compañeros
       const classScores: number[] = [];
       for (const sub of actSubs) {
         const score = publishedScore(sub);
-        if (score !== null) classScores.push(toPercent(score));
+        if (score !== null) classScores.push(explicitPublishedGrade(sub) ?? toPercent(score));
       }
       classAverage.push(
         classScores.length > 0
@@ -554,6 +560,9 @@ export class StudentService {
         confirmed: v.confirmed,
       })),
       finalScore,
+      gradePercentage: isEvaluated && submission
+        ? explicitPublishedGrade(submission) ?? (finalScore === null ? null : Math.round((finalScore - 1) / 3 * 10_000) / 100)
+        : null,
       // La retroalimentación —incluida cualquier sugerencia IA— se publica
       // únicamente después de la confirmación explícita del docente.
       feedback: isEvaluated ? submission?.feedback ?? '' : '',
