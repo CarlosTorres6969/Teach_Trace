@@ -11,7 +11,7 @@ import {
   SaveIcon,
   SparklesIcon,
 } from '@lucide/vue';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, apiBlob } from '../api';
 import PageLoader from '../components/PageLoader.vue';
@@ -142,12 +142,30 @@ const detailLoading = ref(false);
 // Estado de edición de valoraciones
 const editingValues = ref<Record<number, { teacherValue: number; teacherComment: string }>>({});
 const savingValuation = ref<Record<number, boolean>>({});
+const editingPublishedGrade = ref(false);
+const valuationSavePending = computed(() => Object.values(savingValuation.value).some(Boolean));
 const closingEvaluation = ref(false);
 const savingFeedback = ref(false);
 const feedbackDraft = ref('');
 const startingEvaluation = ref(false);
 const startingAiEvaluation = ref(false);
 let valuationMessageTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resetValuationDrafts() {
+  editingValues.value = {};
+  for (const valuation of selected.value?.valuations ?? []) {
+    editingValues.value[valuation.id] = {
+      teacherValue: valuation.teacherValue ?? 3,
+      teacherComment: valuation.teacherComment ?? '',
+    };
+  }
+}
+
+function togglePublishedGradeEditing() {
+  if (selected.value?.status !== 'evaluated' || valuationSavePending.value) return;
+  resetValuationDrafts();
+  editingPublishedGrade.value = !editingPublishedGrade.value;
+}
 
 function showValuationMessage(messageText: string) {
   valuationMessage.value = messageText;
@@ -219,14 +237,8 @@ async function openSubmission(id: number, preserveMessage = false) {
         : null,
     };
     feedbackDraft.value = detail.feedback ?? '';
-    // Inicializar valores de edición con los ya confirmados (o vacíos)
-    editingValues.value = {};
-    for (const v of selected.value.valuations) {
-      editingValues.value[v.id] = {
-        teacherValue: v.teacherValue ?? 3,
-        teacherComment: v.teacherComment ?? '',
-      };
-    }
+    editingPublishedGrade.value = false;
+    resetValuationDrafts();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo abrir la entrega';
   } finally {
@@ -315,7 +327,8 @@ async function downloadConversation() {
 }
 
 async function saveValuation(valuationId: number) {
-  if (!selected.value) return;
+  if (!selected.value || savingValuation.value[valuationId]) return;
+  if (selected.value.status === 'evaluated' && !editingPublishedGrade.value) return;
   const submissionId = selected.value.id;
   savingValuation.value[valuationId] = true;
   error.value = '';
@@ -344,7 +357,9 @@ async function saveValuation(valuationId: number) {
     selected.value.teacherGradePercentage = percentageFromConfirmedValuations(
       selected.value.valuations,
     );
-    showValuationMessage(`Criterio "${updated.criterion}" guardado.`);
+    showValuationMessage(selected.value.status === 'evaluated'
+      ? `Nota publicada actualizada. Criterio "${updated.criterion}" guardado.`
+      : `Criterio "${updated.criterion}" guardado.`);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo guardar la valoración';
   } finally {
@@ -702,6 +717,22 @@ onBeforeUnmount(() => {
             >Publicada</span>
           </div>
 
+          <div v-if="selected.status === 'evaluated'" class="published-grade-editor">
+            <button
+              class="button secondary"
+              type="button"
+              :aria-pressed="editingPublishedGrade"
+              :disabled="valuationSavePending"
+              @click="togglePublishedGradeEditing"
+            >
+              {{ editingPublishedGrade ? 'Terminar edición' : 'Editar nota publicada' }}
+            </button>
+            <p v-if="editingPublishedGrade" class="muted" role="status">
+              Corrige los niveles de la rúbrica y guarda cada criterio para actualizar la nota del estudiante.
+              La evaluación permanece publicada. Al terminar se descartan los cambios que no hayas guardado.
+            </p>
+          </div>
+
           <div class="valuation-grid">
             <div
               v-for="val in selected.valuations"
@@ -728,7 +759,7 @@ onBeforeUnmount(() => {
                   Nivel docente
                   <select
                     v-model.number="editingValues[val.id].teacherValue"
-                    :disabled="selected.status === 'evaluated'"
+                    :disabled="(selected.status === 'evaluated' && !editingPublishedGrade) || savingValuation[val.id]"
                   >
                     <option v-for="n in [1, 2, 3, 4]" :key="n" :value="n">
                       {{ LEVEL_LABELS[n] }}
@@ -741,14 +772,14 @@ onBeforeUnmount(() => {
                     v-model="editingValues[val.id].teacherComment"
                     rows="2"
                     maxlength="1000"
-                    :disabled="selected.status === 'evaluated'"
+                    :disabled="(selected.status === 'evaluated' && !editingPublishedGrade) || savingValuation[val.id]"
                     placeholder="Opcional — explica el nivel asignado"
                   />
                 </label>
               </div>
 
               <button
-                v-if="selected.status !== 'evaluated'"
+                v-if="selected.status !== 'evaluated' || editingPublishedGrade"
                 class="button secondary"
                 type="button"
                 :disabled="savingValuation[val.id]"
@@ -756,7 +787,7 @@ onBeforeUnmount(() => {
               >
                 <LoaderCircleIcon v-if="savingValuation[val.id]" class="ui-icon icon-spin" aria-hidden="true" />
                 <CircleCheckIcon v-else class="ui-icon" aria-hidden="true" />
-                {{ savingValuation[val.id] ? 'Guardando…' : val.confirmed ? 'Actualizar criterio' : 'Confirmar criterio' }}
+                {{ savingValuation[val.id] ? 'Guardando…' : selected.status === 'evaluated' ? 'Guardar corrección' : val.confirmed ? 'Actualizar criterio' : 'Confirmar criterio' }}
               </button>
             </div>
           </div>

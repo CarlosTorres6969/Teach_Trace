@@ -3313,6 +3313,58 @@ describe('TeachTrace API (integración)', () => {
     return { newActivityId, submId, activityTitle: `Actividad HU-34 ${Date.now()}` };
   }
 
+  it('permite al docente corregir una nota publicada y la actualiza para el estudiante sin reabrir la entrega', async () => {
+    const { newActivityId, submId } = await createEvaluatedSubmission();
+    const rubric = await request('/api/teacher/rubrics', {
+      method: 'POST', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Rúbrica para corregir nota publicada', criteria: buildCriteria() }),
+    });
+    expect(rubric.response.status).toBe(201);
+    expect((await request(`/api/teacher/activities/${newActivityId}/rubric`, {
+      method: 'PUT', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rubricId: (rubric.body as { id: number }).id }),
+    })).response.status).toBe(200);
+    expect((await request(`/api/teacher/activities/${newActivityId}/evaluation`, { method: 'POST', headers: sessionHeaders(teacher.sessionCookie) })).response.status).toBe(201);
+    const detail = await request(`/api/teacher/submissions/${submId}`, { headers: sessionHeaders(teacher.sessionCookie) });
+    const valuations = (detail.body as { valuations: Array<{ id: number }> }).valuations;
+    expect(valuations.length).toBeGreaterThan(0);
+    for (const valuation of valuations) {
+      expect((await request(`/api/teacher/submissions/${submId}/valuations/${valuation.id}`, {
+        method: 'PUT', headers: { ...sessionHeaders(teacher.sessionCookie), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacherValue: 3, teacherComment: 'Valoración publicada' }),
+      })).response.status).toBe(200);
+    }
+    expect((await request(`/api/teacher/submissions/${submId}/close`, { method: 'PUT', headers: sessionHeaders(teacher.sessionCookie) })).response.status).toBe(200);
+    const before = await dataSource.getRepository(Submission).findOneByOrFail({ id: submId });
+    const notifications = await dataSource.getRepository(Notification).count({ where: { user: { id: student.user.id }, activityId: newActivityId, type: NotificationType.GRADE_PUBLISHED } });
+    const endpoint = `/api/teacher/submissions/${submId}/valuations/${valuations[0].id}`;
+    const save = (body: unknown, cookie = teacher.sessionCookie) => request(endpoint, {
+      method: 'PUT', headers: { ...sessionHeaders(cookie), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect((await save({ teacherValue: 4, teacherComment: 'Corrección docente posterior a publicación' })).response.status).toBe(200);
+    const expectedLevel = 3 + 1 / valuations.length;
+    const results = await request(`/api/student/activities/${newActivityId}/results`, { headers: sessionHeaders(student.sessionCookie) });
+    expect(results.response.status).toBe(200);
+    expect((results.body as { finalScore: number }).finalScore).toBeCloseTo(expectedLevel);
+    expect(results.body).toMatchObject({ status: 'evaluated', valuations: expect.arrayContaining([expect.objectContaining({ id: valuations[0].id, teacherValue: 4, confirmed: true, teacherComment: 'Corrección docente posterior a publicación' })]) });
+    const teacherDetail = await request(`/api/teacher/submissions/${submId}`, { headers: sessionHeaders(teacher.sessionCookie) });
+    expect(teacherDetail.body).toMatchObject({ status: 'evaluated', teacherGradePercentage: Math.round(((expectedLevel - 1) / 3) * 10_000) / 100 });
+    const activityList = await request('/api/student/activities?filter=all', { headers: sessionHeaders(student.sessionCookie) });
+    expect((activityList.body as Array<{ id: number; finalScore: number }>).find((item) => item.id === newActivityId)?.finalScore).toBeCloseTo(expectedLevel);
+    expect((await save({ teacherValue: 1 }, student.sessionCookie)).response.status).toBe(403);
+    const users = dataSource.getRepository(User);
+    const otherEmail = 'otro.docente.correccion@unah.edu.hn';
+    await users.save(users.create({ email: otherEmail, name: 'Otro docente', passwordHash: await app.get(AuthService).hashPassword('OtroDocente123!'), role: UserRole.TEACHER, active: true }));
+    const otherLogin = await request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: otherEmail, password: 'OtroDocente123!' }) });
+    expect((await save({ teacherValue: 1 }, readSessionCookie(otherLogin.response))).response.status).toBe(404);
+    for (const invalid of [{ teacherValue: 0 }, { teacherValue: 5 }, { teacherValue: 2.5 }, { teacherValue: 4, status: 'submitted' }]) {
+      expect((await save(invalid)).response.status).toBe(400);
+    }
+    expect(await dataSource.getRepository(Submission).findOneByOrFail({ id: submId })).toEqual(before);
+    expect(await dataSource.getRepository(Notification).count({ where: { user: { id: student.user.id }, activityId: newActivityId, type: NotificationType.GRADE_PUBLISHED } })).toBe(notifications);
+    expect((await request(`/api/student/activities/${newActivityId}/submission`, { method: 'PUT', headers: sessionHeaders(student.sessionCookie), body: buildSubmitForm() })).response.status).toBe(409);
+  });
+
   it('bloquea toda modificacion del estudiante despues de publicar la evaluacion', async () => {
     const { newActivityId, submId } = await createEvaluatedSubmission();
     const feedback = 'Retroalimentacion publicada e inmutable';

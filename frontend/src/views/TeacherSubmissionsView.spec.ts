@@ -131,6 +131,111 @@ describe('TeacherSubmissionsView - resumen de prompts', () => {
     });
   });
 
+  function publishedGrade() {
+    const base = apiMock.getMockImplementation()!;
+    const valuation = {
+      id: 21, criterion: 'Argumentación', dimension: 'Análisis',
+      aiValue: 2, aiExplanation: 'Sugerencia original de IA.',
+      teacherValue: 3, teacherComment: 'Comentario publicado', confirmed: true,
+    };
+    apiMock.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === '/teacher/submissions/7/valuations/21' && options?.method === 'PUT') {
+        Object.assign(valuation, JSON.parse(String(options.body)));
+        return { ...valuation };
+      }
+      const result = await base(path, options);
+      return path === '/teacher/submissions/7'
+        ? { ...result, status: 'evaluated', evaluationStatus: 'validated', teacherGradePercentage: 66.67, feedback: 'Retroalimentación publicada', valuations: [{ ...valuation }] }
+        : result;
+    });
+    return valuation;
+  }
+
+  async function openPublishedGrade() {
+    const wrapper = mount(TeacherSubmissionsView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    await wrapper.get('.submission-list button').trigger('click');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('corrige la nota publicada y mantiene la evaluación publicada', async () => {
+    const valuation = publishedGrade();
+    const wrapper = await openPublishedGrade();
+    const controls = wrapper.get('.published-grade-editor');
+    expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.valuation-editor button').exists()).toBe(false);
+    await controls.get('button').trigger('click');
+    expect(controls.text()).toContain('guarda cada criterio');
+    expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeUndefined();
+    await wrapper.get('.valuation-editor select').setValue('4');
+    await wrapper.get('.valuation-editor textarea').setValue('Corrección revisada');
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise((done) => { resolve = done; });
+    apiMock.mockImplementationOnce(() => pending);
+    await wrapper.get('.valuation-editor button').trigger('click');
+    expect(controls.get('button').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeDefined();
+    expect(apiMock).toHaveBeenLastCalledWith('/teacher/submissions/7/valuations/21', {
+      method: 'PUT', body: JSON.stringify({ teacherValue: 4, teacherComment: 'Corrección revisada' }),
+    });
+    resolve({ ...valuation, teacherValue: 4, teacherComment: 'Corrección revisada' });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    expect(wrapper.get('.valuation-save-toast').text()).toContain('Nota publicada actualizada');
+    expect(wrapper.get('.valuation-panel-header [data-status="evaluated"]').text()).toBe('Publicada');
+    expect(wrapper.find('.valuation-close-row').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Sugerencia original de IA.');
+    await controls.get('button').trigger('click');
+    expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeDefined();
+    expect((wrapper.get('.valuation-editor select').element as HTMLSelectElement).value).toBe('4');
+    wrapper.unmount();
+  });
+
+  it('descarta únicamente los cambios de nota que no se hayan guardado', async () => {
+    publishedGrade();
+    const wrapper = await openPublishedGrade();
+    await wrapper.get('.published-grade-editor button').trigger('click');
+    await wrapper.get('.valuation-editor select').setValue('4');
+    await wrapper.get('.valuation-editor textarea').setValue('Borrador sin guardar');
+    await wrapper.get('.published-grade-editor button').trigger('click');
+    expect((wrapper.get('.valuation-editor select').element as HTMLSelectElement).value).toBe('3');
+    expect((wrapper.get('.valuation-editor textarea').element as HTMLTextAreaElement).value).toBe('Comentario publicado');
+    expect(wrapper.text()).toContain('Decisión docente confirmada66.67%');
+    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('conserva la nota publicada si falla el guardado y permite reintentar', async () => {
+    publishedGrade();
+    const wrapper = await openPublishedGrade();
+    await wrapper.get('.published-grade-editor button').trigger('click');
+    await wrapper.get('.valuation-editor select').setValue('4');
+    apiMock.mockRejectedValueOnce(new Error('No fue posible guardar la corrección'));
+    await wrapper.get('.valuation-editor button').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('No fue posible guardar la corrección');
+    expect(wrapper.text()).toContain('Decisión docente confirmada66.67%');
+    expect(wrapper.get('.valuation-editor button').attributes('disabled')).toBeUndefined();
+    await wrapper.get('.valuation-editor button').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Decisión docente confirmada100%');
+    wrapper.unmount();
+  });
+
+  it('vuelve a bloquear los campos al abrir otra vez una entrega publicada', async () => {
+    publishedGrade();
+    const wrapper = await openPublishedGrade();
+    await wrapper.get('.published-grade-editor button').trigger('click');
+    await wrapper.get('.submission-list button').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.published-grade-editor button').text()).toBe('Editar nota publicada');
+    expect(wrapper.get('.valuation-editor select').attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
   it('descarga desde Azure sin pasar el PDF grande por la API', async () => {
     const baseImplementation = apiMock.getMockImplementation()!;
     apiMock.mockImplementation(async (path: string) => {
