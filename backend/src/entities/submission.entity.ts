@@ -44,6 +44,14 @@ export type PromptAssessment = {
     verification: number | null;
     criticalThinking: number | null;
   };
+  /** Optional for compatibility with assessments saved before dimension rationales were added. */
+  dimensionExplanations?: {
+    relevance: string;
+    clarity: string;
+    refinement: string;
+    verification: string;
+    criticalThinking: string;
+  };
   prompts: Array<{
     sequence: number;
     content: string;

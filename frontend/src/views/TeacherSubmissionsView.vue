@@ -66,6 +66,7 @@ type PromptAssessment = {
   scorePercentage: number | null;
   summary: string;
   dimensions: Record<PromptDimension, number | null>;
+  dimensionExplanations?: Partial<Record<PromptDimension, string>>;
   prompts: Array<{
     sequence: number;
     content: string;
@@ -214,6 +215,13 @@ async function openSubmission(id: number, preserveMessage = false) {
             verification: detail.aiPromptAssessment.dimensions?.verification ?? null,
             criticalThinking: detail.aiPromptAssessment.dimensions?.criticalThinking ?? null,
           },
+          dimensionExplanations: {
+            relevance: detail.aiPromptAssessment.dimensionExplanations?.relevance || 'Este análisis anterior no guardó una justificación por dimensión. Vuelve a analizar la entrega para generarla.',
+            clarity: detail.aiPromptAssessment.dimensionExplanations?.clarity || 'Este análisis anterior no guardó una justificación por dimensión. Vuelve a analizar la entrega para generarla.',
+            refinement: detail.aiPromptAssessment.dimensionExplanations?.refinement || 'Este análisis anterior no guardó una justificación por dimensión. Vuelve a analizar la entrega para generarla.',
+            verification: detail.aiPromptAssessment.dimensionExplanations?.verification || 'Este análisis anterior no guardó una justificación por dimensión. Vuelve a analizar la entrega para generarla.',
+            criticalThinking: detail.aiPromptAssessment.dimensionExplanations?.criticalThinking || 'Este análisis anterior no guardó una justificación por dimensión. Vuelve a analizar la entrega para generarla.',
+          },
           prompts: Array.isArray(detail.aiPromptAssessment.prompts)
             ? [...detail.aiPromptAssessment.prompts]
                 .sort((left, right) => left.sequence - right.sequence)
@@ -333,6 +341,10 @@ async function downloadConversation() {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'No se pudo exportar la conversación';
   }
+}
+
+function promptDimensionWidth(score: number | null): string {
+  return score === null ? '0%' : `${(score / 4) * 100}%`;
 }
 
 async function saveValuation(valuationId: number) {
@@ -561,24 +573,38 @@ onBeforeUnmount(() => {
           Descargar {{ selected.fileName }}
         </button>
 
-        <section v-if="selected.aiConversation?.messages.length" class="conversation-review">
-          <div class="valuation-panel-header">
-            <div>
-              <h3>Conversación registrada</h3>
-              <p class="muted">Mensajes ordenados cronológicamente según la evidencia guardada.</p>
+        <details v-if="selected.aiConversation?.messages.length" class="conversation-review conversation-accordion">
+          <summary class="conversation-accordion-summary">
+            <span>
+              <strong>Conversación registrada · {{ selected.aiConversation.messages.length }} mensajes</strong>
+              <small>Mostrar u ocultar la evidencia conversacional</small>
+            </span>
+            <span class="conversation-accordion-indicator" aria-hidden="true">+</span>
+          </summary>
+          <div class="conversation-accordion-content">
+            <div class="valuation-panel-header">
+              <div>
+                <h3>Conversación registrada</h3>
+                <p class="muted">Mensajes ordenados cronológicamente según la evidencia guardada.</p>
+              </div>
+              <button class="button secondary" type="button" @click="downloadConversation">
+                <FileDownIcon class="ui-icon" aria-hidden="true" />
+                Exportar TXT
+              </button>
             </div>
-            <button class="button secondary" type="button" @click="downloadConversation">
-              <FileDownIcon class="ui-icon" aria-hidden="true" />
-              Exportar TXT
-            </button>
+            <ol class="conversation-transcript">
+              <li
+                v-for="item in selected.aiConversation.messages"
+                :key="item.id"
+                :data-role="item.role"
+                :data-conversation-sequence="item.sequence"
+              >
+                <strong>Mensaje {{ item.sequence + 1 }} · {{ item.role === 'student' ? 'Estudiante' : 'IA' }}</strong>
+                <p>{{ item.content }}</p>
+              </li>
+            </ol>
           </div>
-          <ol class="conversation-transcript">
-            <li v-for="item in selected.aiConversation.messages" :key="item.id">
-              <strong>{{ item.role === 'student' ? 'Estudiante' : 'IA' }}</strong>
-              <p>{{ item.content }}</p>
-            </li>
-          </ol>
-        </section>
+        </details>
 
         <section v-if="selected.aiPromptAssessment" class="prompt-assessment-review">
           <div class="prompt-assessment-heading">
@@ -593,16 +619,44 @@ onBeforeUnmount(() => {
             </strong>
           </div>
           <p>{{ selected.aiPromptAssessment.summary }}</p>
-          <div class="prompt-dimension-grid">
-            <article v-for="dimension in PROMPT_DIMENSION_LABELS" :key="dimension.key">
-              <span>{{ dimension.label }}</span>
-              <strong>
-                {{ selected.aiPromptAssessment.dimensions[dimension.key] === null
-                  ? 'No determinable'
-                  : `${selected.aiPromptAssessment.dimensions[dimension.key]}/4` }}
-              </strong>
-            </article>
-          </div>
+          <section class="prompt-dimension-chart" aria-label="Gráfico de notas y justificaciones por dimensión">
+            <div class="prompt-dimension-chart-heading">
+              <div>
+                <h4>Valoración por dimensiones</h4>
+                <p class="muted">Cada barra representa la nota de una dimensión; debajo se explica la evidencia que la sustenta.</p>
+              </div>
+              <span>Escala 1–4</span>
+            </div>
+            <ol class="prompt-dimension-list">
+              <li v-for="dimension in PROMPT_DIMENSION_LABELS" :key="dimension.key" class="prompt-dimension-item">
+                <div class="prompt-dimension-heading">
+                  <strong>{{ dimension.label }}</strong>
+                  <span>
+                    {{ selected.aiPromptAssessment.dimensions[dimension.key] === null
+                      ? 'No determinable'
+                      : `${selected.aiPromptAssessment.dimensions[dimension.key]}/4` }}
+                  </span>
+                </div>
+                <div
+                  class="prompt-dimension-track"
+                  role="progressbar"
+                  :aria-label="`Nota de ${dimension.label}`"
+                  aria-valuemin="0"
+                  aria-valuemax="4"
+                  :aria-valuenow="selected.aiPromptAssessment.dimensions[dimension.key] ?? undefined"
+                  :aria-valuetext="selected.aiPromptAssessment.dimensions[dimension.key] === null
+                    ? 'No determinable'
+                    : `${selected.aiPromptAssessment.dimensions[dimension.key]} de 4`"
+                >
+                  <span :style="{ width: promptDimensionWidth(selected.aiPromptAssessment.dimensions[dimension.key]) }" />
+                </div>
+                <p class="prompt-dimension-explanation">
+                  {{ selected.aiPromptAssessment.dimensionExplanations?.[dimension.key]
+                    || 'No se guardó una justificación para esta dimensión.' }}
+                </p>
+              </li>
+            </ol>
+          </section>
           <ol class="ordered-prompt-list">
             <li
               v-for="(prompt, index) in selected.aiPromptAssessment.prompts"
@@ -613,7 +667,7 @@ onBeforeUnmount(() => {
                 <strong>{{ prompt.score === null ? 'No determinable' : `${prompt.score}/4` }}</strong>
               </div>
               <blockquote>{{ prompt.content }}</blockquote>
-              <p>{{ prompt.explanation }}</p>
+              <p><strong>Por qué:</strong> {{ prompt.explanation }}</p>
             </li>
           </ol>
           <p class="muted">
@@ -692,8 +746,12 @@ onBeforeUnmount(() => {
                 <strong>{{ assessment.learningOutcome }}</strong>
                 <span>{{ assessment.score === null ? 'No determinable' : `${assessment.score}/100` }}</span>
               </div>
-              <p>{{ assessment.explanation }}</p>
+              <div class="learning-outcome-rationale">
+                <strong>Por qué la IA asignó esta nota</strong>
+                <p>{{ assessment.explanation }}</p>
+              </div>
               <ul v-if="assessment.evidence.length">
+                <li class="learning-outcome-evidence-label">Evidencia considerada</li>
                 <li v-for="item in assessment.evidence" :key="item">{{ item }}</li>
               </ul>
             </article>
